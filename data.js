@@ -1302,6 +1302,188 @@ const KNOWLEDGE = {
         "example": "// Java 11 HttpClient 异步请求\nHttpClient client = HttpClient.newBuilder()\n    .version(HttpClient.Version.HTTP_2)\n    .connectTimeout(Duration.ofSeconds(10))\n    .build();\nHttpRequest request = HttpRequest.newBuilder()\n    .uri(URI.create(\"https://api.example.com/users\"))\n    .header(\"Content-Type\", \"application/json\")\n    .GET()\n    .build();\n// 异步\nclient.sendAsync(request, HttpResponse.BodyHandlers.ofString())\n    .thenApply(HttpResponse::body)\n    .thenAccept(System.out::println)\n    .exceptionally(e -> { e.printStackTrace(); return null; });\n// 同步\nHttpResponse<String> resp = client.send(request, HttpResponse.BodyHandlers.ofString());\n\n// Netty Echo Server\nEventLoopGroup boss = new NioEventLoopGroup(1);\nEventLoopGroup worker = new NioEventLoopGroup();\ntry {\n    ServerBootstrap b = new ServerBootstrap();\n    b.group(boss, worker)\n     .channel(NioServerSocketChannel.class)\n     .childHandler(new ChannelInitializer<SocketChannel>() {\n         @Override\n         protected void initChannel(SocketChannel ch) {\n             ch.pipeline()\n               .addLast(new StringDecoder())\n               .addLast(new StringEncoder())\n               .addLast(new ChannelInboundHandlerAdapter() {\n                   @Override\n                   public void channelRead(ChannelHandlerContext ctx, Object msg) {\n                       ctx.writeAndFlush(msg); // echo\n                   }\n               });\n         }\n     });\n    ChannelFuture f = b.bind(8080).sync();\n    f.channel().closeFuture().sync();\n} finally {\n    boss.shutdownGracefully();\n    worker.shutdownGracefully();\n}\n\n// RPC动态代理核心\npublic class RpcProxy {\n    public static <T> T create(Class<T> serviceInterface, String host, int port) {\n        return (T) Proxy.newProxyInstance(\n            serviceInterface.getClassLoader(),\n            new Class[]{serviceInterface},\n            (proxy, method, args) -> {\n                try (Socket socket = new Socket(host, port);\n                     ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());\n                     ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {\n                    out.writeUTF(serviceInterface.getName());\n                    out.writeUTF(method.getName());\n                    out.writeObject(method.getParameterTypes());\n                    out.writeObject(args);\n                    return in.readObject();\n                }\n            });\n    }\n}"
       }
     ]
+  },
+  "mysql": {
+    "name": "MySQL",
+    "icon": "🗄️",
+    "color": "#4479a1",
+    "topics": [
+      {
+        "id": "mysql-arch",
+        "title": "MySQL 架构与存储引擎",
+        "level": "基础",
+        "content": "MySQL 采用经典的分层架构，自上而下分为三层：\n\n**1. 连接层（Connectors / Connection Pool）**\n- 负责与客户端建立连接、认证授权、线程管理\n- 维护连接池，复用线程避免频繁创建销毁\n- 每个连接对应一个独立线程，通过 max_connections 控制最大连接数\n- 支持 SSL 加密通信、密码插件认证（caching_sha2_password 等）\n\n**2. SQL 层（MySQL Server）**\n- **查询缓存（Query Cache）**：MySQL 8.0 已移除（命中率低、写失效频繁）\n- **解析器（Parser）**：词法/语法分析，生成解析树，校验表名/列名\n- **预处理器（Preprocessor）**：语义检查，权限校验\n- **优化器（Optimizer）**：基于成本（CBO）选择执行计划，选择索引、决定 JOIN 顺序、子查询改写\n- **执行器（Executor）**：调用存储引擎接口，逐行返回结果\n\n**3. 存储引擎层（Storage Engine）**\n- 采用可插拔（Pluggable）架构，表级可选引擎\n- 负责数据的实际存储与读取，通过统一 API（handler 接口）与上层交互\n- 事务、锁、索引等特性由引擎层实现\n\n**InnoDB vs MyISAM 对比**\n| 特性 | InnoDB | MyISAM |\n|------|--------|--------|\n| 事务 | 支持 | 不支持 |\n| 锁粒度 | 行锁 | 表锁 |\n| 外键 | 支持 | 不支持 |\n| 崩溃恢复 | 支持（Redo Log） | 不支持 |\n| 聚簇索引 | 是 | 否（索引与数据分离） |\n| 全文索引 | 5.6+ 支持 | 支持 |\n| 适用场景 | OLTP、高并发读写 | 只读为主、统计报表 |\n\n**其他常见引擎**\n- **MEMORY**：数据存内存，表锁，重启丢失，适合临时表/缓存\n- **CSV**：以 CSV 文本存储，不支持索引，适合数据交换\n- **Archive**：高压缩比，只支持插入和查询，适合归档\n- **NDB（Cluster）**：分布式无共享集群引擎\n\nMySQL 5.5 起默认引擎为 InnoDB，MyISAM 已不推荐使用。",
+        "example": "-- 查看当前支持的存储引擎\nSHOW ENGINES;\n\n-- 查看某张表的引擎\nSHOW TABLE STATUS FROM testdb LIKE 'users'\\G\n\n-- 建表时指定引擎\nCREATE TABLE users (\n  id BIGINT PRIMARY KEY AUTO_INCREMENT,\n  name VARCHAR(50) NOT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n\n-- 修改表的存储引擎（大表会锁表重建，谨慎操作）\nALTER TABLE old_logs ENGINE=Archive;\n\n-- 查看默认引擎\nSHOW VARIABLES LIKE 'default_storage_engine';"
+      },
+      {
+        "id": "mysql-index",
+        "title": "索引深度解析",
+        "level": "进阶",
+        "content": "**为什么是 B+ 树？**\n- 哈希：O(1) 但不支持范围查询\n- 二叉搜索树/红黑树：树高随数据量增长，磁盘 IO 次数多\n- B 树：非叶节点也存数据，导致单页能容纳的键变少，树更高\n- B+ 树：非叶节点只存索引键，叶子节点存数据并形成双向链表，3-4 层即可支撑千万级数据，范围查询高效\n\n**聚簇索引 vs 非聚簇索引（二级索引）**\n- **聚簇索引（Clustered Index）**：叶子节点存储完整数据行，一张表只能有一个（通常是主键）。若没有主键，InnoDB 会选唯一非空索引，或生成隐藏的 6 字节 ROWID\n- **二级索引（Secondary Index）**：叶子节点存储索引键值 + 主键值，查询需要回表\n\n**联合索引与最左前缀原则**\n- 联合索引 (a,b,c) 在 B+ 树中按 a→b→c 排序\n- 能命中：(a)、(a,b)、(a,b,c)；不能命中：(b)、(b,c)、(c)\n- 范围查询（>、<、LIKE 前缀、BETWEEN）右侧列失效\n\n**覆盖索引（Covering Index）**\n- 查询所需字段全部包含在索引中，无需回表\n- EXPLAIN 中 Extra 显示 Using index\n\n**索引下推 ICP（Index Condition Pushdown）**\n- MySQL 5.6 引入，将 WHERE 条件部分下推到存储引擎层过滤\n- 减少回表次数，Extra 显示 Using index condition\n\n**回表（Table Lookup）**\n- 二级索引查到主键 → 再到聚簇索引查完整数据行\n- 是索引优化的重点优化对象\n\n**其他索引类型**\n- 唯一索引、全文索引（FULLTEXT）、空间索引（SPATIAL）\n- 前缀索引：对长字符串列只索引前 N 个字符\n",
+        "example": "-- 建表与建索引\nCREATE TABLE orders (\n  id BIGINT PRIMARY KEY AUTO_INCREMENT,\n  user_id BIGINT NOT NULL,\n  status TINYINT,\n  created_at DATETIME,\n  amount DECIMAL(10,2),\n  INDEX idx_user_status(user_id, status),\n  INDEX idx_created(created_at)\n) ENGINE=InnoDB;\n\n-- 最左前缀：能命中联合索引\nSELECT * FROM orders WHERE user_id=100 AND status=1;\n-- 仅能用 user_id 部分\nSELECT * FROM orders WHERE user_id=100 AND created_at>'2024-01-01';\n-- 覆盖索引（无需回表）\nSELECT user_id, status FROM orders WHERE user_id=100;\n\n-- 查看执行计划（关注 key、rows、Extra）\nEXPLAIN SELECT * FROM orders WHERE user_id=100 AND status>0;\n-- Extra: Using index condition 表示触发了 ICP\n\n-- 强制使用某个索引（仅调试用）\nSELECT * FROM orders FORCE INDEX(idx_user_status) WHERE user_id=100;"
+      },
+      {
+        "id": "mysql-tx",
+        "title": "事务与隔离级别",
+        "level": "进阶",
+        "content": "**ACID 特性**\n- **原子性（Atomicity）**：事务要么全部成功，要么全部回滚，由 Undo Log 实现\n- **一致性（Consistency）**：事务前后数据保持一致状态，由应用层 + 其他三者共同保证\n- **隔离性（Isolation）**：并发事务互不干扰，由锁 + MVCC 实现\n- **持久性（Durability）**：提交后永久保存，由 Redo Log 实现\n\n**四个隔离级别**\n| 隔离级别 | 脏读 | 不可重复读 | 幻读 |\n|---------|------|-----------|------|\n| READ UNCOMMITTED | 可能 | 可能 | 可能 |\n| READ COMMITTED（RC） | 不可能 | 可能 | 可能 |\n| REPEATABLE READ（RR） | 不可能 | 不可能 | InnoDB 不可能 |\n| SERIALIZABLE | 不可能 | 不可能 | 不可能 |\n\n- MySQL 默认隔离级别为 RR（可重复读）\n- RC：每次 SELECT 生成新 read view，可能读到新提交数据\n- RR：事务第一次 SELECT 时生成 read view，后续复用\n- InnoDB 在 RR 级别下通过临键锁（Next-Key Lock）解决幻读\n\n**MVCC 原理**\n- 每行隐藏字段：DB_TRX_ID（最近修改事务ID）、DB_ROLL_PTR（回滚指针指向 Undo Log）、DB_ROW_ID\n- Read View：包含活跃事务列表，判断版本可见性\n- 读操作走快照（快照读），写操作走当前读\n- 当前读：SELECT ... LOCK IN SHARE MODE、SELECT ... FOR UPDATE、UPDATE/DELETE\n\n**Redo Log 与 Undo Log**\n- **Redo Log（重做日志）**：物理日志，记录页修改，WAL 机制保证持久性，循环写入\n- **Undo Log（回滚日志）**：逻辑日志，记录反向操作，用于回滚和 MVCC\n- **Binlog**：逻辑日志，用于复制和数据恢复，事务提交后写入\n- 两阶段提交：Redo Log prepare → Binlog 写入 → Redo Log commit\n\n**间隙锁与临键锁**\n- 记录锁（Record Lock）：锁住索引记录\n- 间隙锁（Gap Lock）：锁住记录之间的间隙，防止插入\n- 临键锁（Next-Key Lock）：记录锁 + 间隙锁，左开右闭区间\n\n**死锁排查**\n- SHOW ENGINE INNODB STATUS 查看最近一次死锁\n- 开启 innodb_print_all_deadlocks 记录所有死锁到错误日志\n- 死锁检测：innodb_deadlock_detect（默认开启）",
+        "example": "-- 查看和设置隔离级别\nSELECT @@transaction_isolation;\nSET SESSION transaction_isolation = 'READ-COMMITTED';\nSET GLOBAL transaction_isolation = 'REPEATABLE-READ';\n\n-- 开启事务\nSTART TRANSACTION;\nUPDATE account SET balance = balance - 100 WHERE id = 1;\nUPDATE account SET balance = balance + 100 WHERE id = 2;\nCOMMIT;  -- 或 ROLLBACK;\n\n-- 当前读（加锁）\nSELECT * FROM orders WHERE id = 100 FOR UPDATE;\nSELECT * FROM orders WHERE id = 100 LOCK IN SHARE MODE;\n\n-- 查看最近死锁信息\nSHOW ENGINE INNODB STATUS\\G\n\n-- 查看当前正在执行的事务\nSELECT * FROM information_schema.INNODB_TRX;\n-- 查看锁等待\nSELECT * FROM performance_schema.data_locks;\nSELECT * FROM performance_schema.data_lock_waits;"
+      },
+      {
+        "id": "mysql-sql-optim",
+        "title": "SQL 优化实战",
+        "level": "高级",
+        "content": "**EXPLAIN 执行计划关键字段**\n- **id**：执行顺序，越大越先执行，相同则从上往下\n- **select_type**：SIMPLE/PRIMARY/SUBQUERY/DERIVED/UNION\n- **type**：访问类型，性能从好到差：system > const > eq_ref > ref > range > index > ALL\n- **possible_keys**：可能使用的索引\n- **key**：实际使用的索引\n- **key_len**：索引使用长度，判断联合索引用了几列\n- **rows**：预估扫描行数\n- **filtered**：过滤后剩余比例\n- **Extra**：Using index（覆盖索引）、Using index condition（ICP）、Using filesort（文件排序，需优化）、Using temporary（临时表，需优化）\n\n**慢查询排查**\n- 开启 slow_query_log，设置 long_query_time\n- 使用 mysqldumpslow 或 pt-query-digest 分析\n- 重点关注 rows_examined / rows_sent 比值高的查询\n\n**索引优化策略**\n- 避免索引失效：不在索引列做运算/函数/隐式类型转换\n- LIKE 左模糊失效：%keyword 不走索引\n- OR 两边列都需有索引，否则失效\n- != 、NOT IN 容易导致全表扫描\n- 范围查询右侧索引列失效\n- ORDER BY 字段尽量走索引，避免 filesort\n\n**JOIN 优化**\n- 驱动表选小表（小表驱动大表）\n- 被驱动表 JOIN 字段必须有索引\n- MySQL 8.0 引入 Hash Join 优化无索引的 JOIN\n- BKA（Batched Key Access）：批量访问被驱动表\n- Straight_JOIN 强制 JOIN 顺序\n\n**子查询优化**\n- 半连接（Semi Join）：IN 子查询优化\n- 物化子查询：避免多次执行\n- 子查询尽量改写为 JOIN\n\n**分页优化**\n- LIMIT 1000000, 10 极慢，改用游标分页或延迟关联\n",
+        "example": "-- 开启慢查询日志\nSET GLOBAL slow_query_log = ON;\nSET GLOBAL long_query_time = 1;\nSHOW VARIABLES LIKE 'slow_query_log_file';\n\n-- EXPLAIN 分析\nEXPLAIN SELECT u.name, o.amount\nFROM users u\nJOIN orders o ON u.id = o.user_id\nWHERE u.id = 100;\n\n-- 分页优化：延迟关联（先走覆盖索引取主键，再回表）\nSELECT a.* FROM orders a\nINNER JOIN (\n  SELECT id FROM orders ORDER BY created_at DESC LIMIT 1000000, 10\n) b ON a.id = b.id;\n\n-- 游标分页（推荐）\nSELECT * FROM orders\nWHERE id > #{last_id}\nORDER BY id ASC LIMIT 10;\n\n-- 用 pt-query-digest 分析慢日志\npt-query-digest /var/log/mysql/slow.log > report.txt\n\n-- 强制 JOIN 顺序\nSELECT * FROM t1 STRAIGHT_JOIN t2 ON t1.id = t2.tid;"
+      },
+      {
+        "id": "mysql-lock",
+        "title": "锁机制深度",
+        "level": "高级",
+        "content": "**锁粒度分类**\n- **表锁（Table Lock）**：锁整张表，并发低，MyISAM、MEMORY 默认\n- **行锁（Row Lock）**：锁单行/索引记录，并发高，InnoDB 支持\n- **页锁（Page Lock）**：锁数据页，介于表锁和行锁之间，BDB 引擎使用\n\n**读写锁**\n- **共享锁（S Lock / 读锁）**：SELECT ... LOCK IN SHARE MODE / SELECT ... FOR SHARE（8.0）\n- **排他锁（X Lock / 写锁）**：UPDATE/DELETE/INSERT/SELECT ... FOR UPDATE\n- S 与 S 兼容，S 与 X、X 与 X 互斥\n\n**意向锁（Intention Lock）**\n- 表级锁，用于快速判断表上是否有行锁\n- **IS（意向共享）**：事务打算给行加 S 锁前先加表 IS\n- **IX（意向排他）**：事务打算给行加 X 锁前先加表 IX\n- 意向锁之间互相兼容，与表级 S/X 锁互斥\n\n**InnoDB 行锁算法**\n- **记录锁（Record Lock）**：锁住唯一索引上的一条记录\n- **间隙锁（Gap Lock）**：锁住索引记录之间的间隙，防止插入，仅在 RR 级别\n- **临键锁（Next-Key Lock）**：记录锁 + 间隙锁，左开右闭 (a,b]，InnoDB RR 默认行锁算法\n- **插入意向锁（Insert Intention Lock）**：插入前申请的间隙锁特殊形式，互相兼容\n\n**死锁**\n- 两个事务互相等待对方释放锁\n- InnoDB 自动检测死锁并回滚代价较小的事务（Deadlock Detection）\n- innodb_deadlock_detect 高并发下可能消耗 CPU，可关闭改用 innodb_lock_wait_timeout\n- 死锁常见场景：事务内多表更新顺序不一致、唯一索引插入冲突\n\n**锁查看**\n- MySQL 8.0：performance_schema.data_locks、data_lock_waits\n- MySQL 5.7：information_schema.INNODB_LOCKS、INNODB_LOCK_WAITS\n",
+        "example": "-- 加排他锁（当前读，阻塞其他 X 锁）\nBEGIN;\nSELECT * FROM account WHERE id = 1 FOR UPDATE;\n-- 业务处理\nUPDATE account SET balance = balance - 100 WHERE id = 1;\nCOMMIT;\n\n-- 加共享锁\nBEGIN;\nSELECT * FROM account WHERE id = 1 LOCK IN SHARE MODE;\nCOMMIT;\n\n-- 查看锁（MySQL 8.0）\nSELECT * FROM performance_schema.data_locks;\nSELECT * FROM performance_schema.data_lock_waits;\n\n-- 查看锁等待超时\nSHOW VARIABLES LIKE 'innodb_lock_wait_timeout';\n\n-- 死锁信息\nSHOW ENGINE INNODB STATUS\\G\n\n-- 模拟死锁：两个事务反向更新\n-- 事务A: UPDATE t SET v=1 WHERE id=1; UPDATE t SET v=2 WHERE id=2;\n-- 事务B: UPDATE t SET v=2 WHERE id=2; UPDATE t SET v=1 WHERE id=1;\n-- 避免方法：统一加锁顺序"
+      },
+      {
+        "id": "mysql-replication",
+        "title": "主从复制与高可用",
+        "level": "高级",
+        "content": "**Binlog 格式**\n- **STATEMENT**：记录 SQL 语句，日志小，但 UUID()/NOW() 等不确定性函数可能导致主从不一致\n- **ROW**：记录每行数据的变更（前镜像+后镜像），最安全，日志较大，MySQL 5.7+ 默认\n- **MIXED**：混合模式，默认 STATEMENT，遇到不安全函数切换 ROW\n- 推荐使用 ROW + binlog_row_image=MINIMAL\n\n**复制原理**\n1. 主库执行事务，写入 Binlog\n2. 从库 IO 线程连接主库，请求 Binlog\n3. 主库 Dump 线程推送 Binlog 事件\n4. 从库 IO 线程写入 Relay Log（中继日志）\n5. 从库 SQL 线程读取 Relay Log，重放 SQL\n\n**复制类型**\n- **异步复制（Asynchronous）**：默认，主库不等待从库确认，可能丢数据\n- **半同步复制（Semi-Sync）**：主库等待至少一个从库确认收到 Binlog 才返回提交，rpl_semi_sync_source_wait_point 控制 AFTER_COMMIT/AFTER_SYNC\n- **组复制（MGR）**：基于 Paxos 变种，多主或单主，强一致\n\n**复制拓扑**\n- 一主一从、一主多从、级联复制、双主互备（需处理自增冲突）\n- 读写分离：写主库，读从库，注意主从延迟\n\n**主从延迟原因**\n- 从库单 SQL 线程重放慢（5.7 引入多线程复制 MTS，基于组提交或 WRITESET）\n- 大事务、DDL\n- 网络问题\n- 从库硬件差\n\n**高可用方案**\n- **MHA**：第三方工具，监控主库故障自动切换，选举最新从库为新主\n- **MGR（Group Replication）**：官方组复制，自动故障检测与切换\n- **Orchestrator**：GitHub 开源拓扑管理工具\n- **MySQL InnoDB Cluster**：基于 MGR + MySQL Router 的完整方案\n\n**GTID（全局事务ID）**\n- 格式 server_uuid:transaction_id，简化复制配置与故障切换\n- 强制主从一致性，避免重复执行",
+        "example": "-- 主库配置 my.cnf\n[mysqld]\nserver-id=1\nlog-bin=mysql-bin\nbinlog_format=ROW\ngtid_mode=ON\nenforce_gtid_consistency=ON\n\n-- 从库配置\n[mysqld]\nserver-id=2\nrelay-log=relay-bin\ngtid_mode=ON\nenforce_gtid_consistency=ON\n\n-- 在从库建立复制（GTID 方式）\nCHANGE REPLICATION SOURCE TO\n  SOURCE_HOST='192.168.1.10',\n  SOURCE_USER='repl',\n  SOURCE_PASSWORD='replpass',\n  SOURCE_AUTO_POSITION=1;\nSTART REPLICA;  -- 8.0 语法，等价于 START SLAVE\n\n-- 查看复制状态\nSHOW REPLICA STATUS\\G\n-- 关注：Slave_IO_Running、Slave_SQL_Running、Seconds_Behind_Master\n\n-- 跳过复制错误（谨慎）\nSTOP REPLICA;\nSET GLOBAL sql_replica_skip_counter = 1;\nSTART REPLICA;"
+      },
+      {
+        "id": "mysql-partition",
+        "title": "分库分表与分区",
+        "level": "高级",
+        "content": "**为什么要拆分？**\n- 单表数据量过大（千万/亿级）导致查询变慢\n- 单库写 QPS 瓶颈、连接数瓶颈\n- 单机存储容量限制\n\n**垂直拆分**\n- **垂直分库**：按业务拆分到不同库（用户库、订单库、商品库）\n- **垂直分表**：将宽表拆为多张窄表（热点字段与冷字段分离）\n- 优点：解耦、列减少；缺点：无法解决单表数据量大的问题、跨库 JOIN 困难\n\n**水平拆分**\n- **水平分表/分库**：按某字段（如 user_id）将数据分散到多个表/库\n- 分片策略：\n  - **Hash 分片**：user_id % N，分布均匀但扩容麻烦\n  - **Range 分片**：按时间/ID 范围，便于范围查询但易热点\n  - **一致性 Hash**：扩容时数据迁移少\n  - **分片映射表**：灵活但需额外查询\n\n**全局唯一 ID**\n- UUID：无序，B+ 树插入差\n- 雪花算法（Snowflake）：64 位 = 时间戳 + 机器ID + 序列号\n- 号段模式：数据库批量取 ID\n- Redis INCR\n\n**分区表（Partition）**\n- 单库内的数据物理分区，对应用透明\n- **RANGE 分区**：按范围，如按年月\n- **LIST 分区**：按枚举值\n- **HASH 分区**：取模\n- **KEY 分区**：MySQL 内部 Hash\n- 分区键必须是主键/唯一键的一部分\n- 适合清理历史数据（DROP PARTITON 比 DELETE 快）\n\n**ShardingSphere**\n- Apache 顶级项目，提供 Sharding-JDBC（客户端）/ Sharding-Proxy（代理）\n- 支持分库分表、读写分离、数据加密、分布式事务\n- 与业务解耦，SQL 透明路由\n\n**分库分表后的问题**\n- 跨库 JOIN：应用层组装、宽表冗余、ElasticSearch 辅助\n- 分布式事务：XA、Seata、TCC、最终一致（消息队列）\n- 跨库分页：复杂，需全局聚合",
+        "example": "-- 分区表示例：按月 RANGE 分区\nCREATE TABLE order_log (\n  id BIGINT AUTO_INCREMENT,\n  created_at DATETIME NOT NULL,\n  amount DECIMAL(10,2),\n  PRIMARY KEY (id, created_at)\n) ENGINE=InnoDB\nPARTITION BY RANGE (TO_DAYS(created_at)) (\n  PARTITION p202401 VALUES LESS THAN (TO_DAYS('2024-02-01')),\n  PARTITION p202402 VALUES LESS THAN (TO_DAYS('2024-03-01')),\n  PARTITION p202403 VALUES LESS THAN (TO_DAYS('2024-04-01')),\n  PARTITION pmax VALUES LESS THAN MAXVALUE\n);\n\n-- LIST 分区\nCREATE TABLE users (\n  id BIGINT,\n  region TINYINT,\n  PRIMARY KEY (id, region)\n) PARTITION BY LIST(region) (\n  PARTITION p_east VALUES IN (1,2,3),\n  PARTITION p_west VALUES IN (4,5,6)\n);\n\n-- HASH 分区\nCREATE TABLE t (id BIGINT PRIMARY KEY)\nPARTITION BY HASH(id) PARTITIONS 8;\n\n-- 删除分区（清理历史数据，瞬间完成）\nALTER TABLE order_log DROP PARTITION p202401;\n\n-- 查看分区\nSELECT TABLE_NAME, PARTITION_NAME, TABLE_ROWS\nFROM INFORMATION_SCHEMA.PARTITIONS\nWHERE TABLE_NAME='order_log';"
+      },
+      {
+        "id": "mysql-backup",
+        "title": "备份与恢复",
+        "level": "进阶",
+        "content": "**备份分类**\n- **逻辑备份**：导出 SQL 语句或数据文本，跨版本/跨平台，速度慢\n- **物理备份**：直接拷贝数据文件，速度快，依赖版本一致性\n- **全量备份 / 增量备份 / 差异备份**\n- **热备（在线）/ 温备（只读）/ 冷备（停机）**\n\n**mysqldump（逻辑备份）**\n- MySQL 自带，导出 SQL 脚本\n- --single-transaction：InnoDB 一致性快照，不锁表\n- --master-data=2：记录 binlog 位置，便于建立从库或 PITR\n- --routines / --triggers / --events：导出存储过程/触发器/事件\n- 适合中小型数据库\n\n**xtrabackup（物理备份，Percona）**\n- 热备份，不锁 InnoDB 表\n- 支持增量备份（基于 LSN）\n- 流式备份可压缩传输\n- 恢复速度快，适合大型数据库\n- 备份三步：备份 prepare 恢复\n\n**Binlog 增量恢复**\n- Binlog 记录所有写操作，可用于 PITR（Point-in-Time Recovery）\n- mysqlbinlog 工具解析并重放\n- 配合全量备份，可恢复到任意时间点\n\n**PITR 流程**\n1. 恢复最近一次全量备份\n2. 应用全量备份点之后的 Binlog\n3. 用 --stop-datetime / --stop-position 截止到故障点之前\n\n**其他备份建议**\n- 备份要定期演练恢复，否则等于没备份\n- 异地备份，防止机房故障\n- 关键系统主从 + 定期快照\n- LVM 快照也可用于物理备份\n",
+        "example": "-- mysqldump 全量备份（InnoDB 不锁表）\nmysqldump -uroot -p --single-transaction \\\n  --master-data=2 --routines --triggers \\\n  --events --databases testdb > backup.sql\n\n-- 恢复\nmysql -uroot -p testdb < backup.sql\n\n-- 只备份表结构\nmysqldump -uroot -p --no-data testdb > schema.sql\n\n-- 只备份数据\nmysqldump -uroot -p --no-create-info testdb > data.sql\n\n-- xtrabackup 全量备份\nxtrabackup --backup --target-dir=/backup/full -uroot -p\nxtrabackup --prepare --target-dir=/backup/full\nxtrabackup --copy-back --target-dir=/backup/full\n\n-- xtrabackup 增量备份\nxtrabackup --backup --target-dir=/backup/inc1 \\\n  --incremental-basedir=/backup/full -uroot -p\n\n-- PITR：基于 binlog 恢复到指定时间点\nmysqlbinlog --start-datetime='2024-03-01 00:00:00' \\\n  --stop-datetime='2024-03-01 12:00:00' \\\n  mysql-bin.000123 | mysql -uroot -p\n\n-- 查看 binlog 位置\nSHOW MASTER STATUS;\nSHOW BINLOG EVENTS IN 'mysql-bin.000123';"
+      },
+      {
+        "id": "mysql-perf",
+        "title": "性能调优",
+        "level": "高级",
+        "content": "**核心参数调优**\n- **innodb_buffer_pool_size**：最重要参数，缓存数据和索引，建议设为物理内存 60%-80%\n- **innodb_buffer_pool_instances**：多实例减少锁竞争，配合大 buffer pool 使用\n- **innodb_log_file_size**：Redo Log 大小，影响写性能和崩溃恢复时间\n- **innodb_flush_log_at_trx_commit**：1=每次提交刷盘（默认，最安全）；2=提交刷OS Cache；0=每秒刷盘\n- **sync_binlog**：1=每次提交刷盘 binlog；0=由 OS 决定\n- **innodb_io_capacity**：根据磁盘 IOPS 设置，SSD 设为 2000-10000\n- **innodb_flush_method**：O_DIRECT 绕过 OS 缓存，避免双缓存\n- **max_connections**：根据业务调整，配合连接池\n- **tmp_table_size / max_heap_table_size**：临时表大小\n- **sort_buffer_size / join_buffer_size**：会话级 buffer，不要设太大\n\n**连接池**\n- 应用层使用连接池（HikariCP、Druid）\n- 避免频繁建立/销毁连接\n- 合理设置最小/最大连接数、空闲超时\n- MySQL 端 wait_timeout 避免连接泄漏\n\n**慢查询日志**\n- long_query_time 控制阈值\n- log_queries_not_using_indexes 记录未用索引查询\n- pt-query-digest 分析聚合\n\n**performance_schema**\n- MySQL 内置性能监控，按事件采集\n- 常用表：events_statements_summary_by_digest（SQL 摘要统计）、file_summary_by_instance（IO 统计）\n- sys schema 提供易读视图，如 sys.statements_with_runtimes_in_95th_percentile\n\n**Optimizer Trace**\n- MySQL 5.6+ 提供优化器决策过程\n- SET optimizer_trace='enabled=on'; 执行查询；查询 information_schema.OPTIMIZER_TRACE\n- 用于分析为什么没选某个索引\n\n**其他调优**\n- 表结构合理设计，避免大字段\n- 适当冗余减少 JOIN\n- 冷热数据分离\n- 读写分离、分库分表\n- 缓存层（Redis）兜底热点数据\n",
+        "example": "-- 查看关键参数\nSHOW VARIABLES LIKE 'innodb_buffer_pool_size';\nSHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit';\nSHOW VARIABLES LIKE 'max_connections';\n\n-- 动态调整（重启失效）\nSET GLOBAL innodb_buffer_pool_size = 8589934592;  -- 8G\n\n-- 查看当前连接数\nSHOW STATUS LIKE 'Threads_connected';\nSHOW STATUS LIKE 'Max_used_connections';\n\n-- 开启慢查询日志\nSET GLOBAL slow_query_log = ON;\nSET GLOBAL long_query_time = 1;\nSET GLOBAL log_queries_not_using_indexes = ON;\n\n-- performance_schema：TOP SQL\nSELECT digest_text, count_star, avg_timer_wait/1000000000 AS avg_ms\nFROM performance_schema.events_statements_summary_by_digest\nORDER BY avg_timer_wait DESC LIMIT 10;\n\n-- sys schema：95% 慢查询\nSELECT * FROM sys.statements_with_runtimes_in_95th_percentile LIMIT 10;\n\n-- Optimizer Trace\nSET optimizer_trace='enabled=on';\nSELECT * FROM orders WHERE user_id=100;\nSELECT * FROM information_schema.OPTIMIZER_TRACE\\G"
+      },
+      {
+        "id": "mysql-design",
+        "title": "数据库设计",
+        "level": "进阶",
+        "content": "**范式与反范式**\n- **第一范式（1NF）**：字段原子性，不可再分\n- **第二范式（2NF）**：非主键字段完全依赖主键（消除部分依赖）\n- **第三范式（3NF）**：非主键字段直接依赖主键（消除传递依赖）\n- **BCNF**：主键字段不依赖其他候选键\n- 范式优点：减少冗余、避免异常；缺点：JOIN 多、查询慢\n- **反范式**：为了查询性能适当冗余字段，以空间换时间\n- 实践中常在 3NF 基础上对热点查询做适度反范式\n\n**主键设计**\n- 推荐自增 BIGINT（顺序插入，B+ 树友好）\n- UUID 无序导致页分裂频繁，不推荐做聚簇索引主键\n- 雪花算法：分布式环境下生成有序 ID\n- 避免业务字段做主键（如手机号、身份证号可能变更）\n- 联合主键慎用，会增大二级索引体积\n\n**字段类型选择**\n- 整数：TINYINT(1)/SMALLINT/INT/BIGINT，按需选择\n- 字符串：定长 CHAR / 变长 VARCHAR，VARCHAR 节省空间\n- 时间：DATETIME（8字节，范围广）/ TIMESTAMP（4字节，2038问题）/ DATE\n- 金额：DECIMAL(10,2)，禁用 FLOAT/DOUBLE（精度丢失）\n- 大文本：TEXT/BLOB 避免与业务字段同表\n- 布尔：TINYINT(1) 或 BOOLEAN\n- 枚举：TINYINT + 应用层映射，避免 VARCHAR\n\n**字符集与排序规则**\n- 推荐 utf8mb4（支持 emoji 和完整 Unicode）\n- utf8 实际是 utf8mb3，最多 3 字节，存不下 emoji\n- 排序规则：utf8mb4_general_ci（不区分大小写）/ utf8mb4_bin（区分大小写二进制）\n- 8.0 默认 utf8mb4_0900_ai_ci\n\n**软删除 vs 硬删除**\n- 软删除：加 deleted_at 字段，可恢复，但查询需带条件、索引膨胀\n- 硬删除：直接 DELETE，数据丢失但表更干净\n- 折中：软删除 + 定期归档清理\n- 注意：软删除字段要建索引，唯一约束需结合 deleted_at 调整\n",
+        "example": "-- 规范建表示例\nCREATE TABLE `user` (\n  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',\n  `username` VARCHAR(50) NOT NULL COMMENT '用户名',\n  `phone` VARCHAR(20) NOT NULL COMMENT '手机号',\n  `balance` DECIMAL(12,2) NOT NULL DEFAULT 0.00 COMMENT '余额',\n  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态 1正常 0禁用',\n  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  `deleted_at` DATETIME DEFAULT NULL COMMENT '软删除时间',\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_username` (`username`),\n  UNIQUE KEY `uk_phone` (`phone`),\n  KEY `idx_created` (`created_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';\n\n-- 软删除查询\nSELECT * FROM `user` WHERE username='tom' AND deleted_at IS NULL;\n\n-- 雪花 ID 建表（不使用 AUTO_INCREMENT）\nCREATE TABLE `order` (\n  `id` BIGINT UNSIGNED NOT NULL COMMENT '雪花ID',\n  PRIMARY KEY (`id`)\n) ENGINE=InnoDB;\n\n-- 修改表字符集\nALTER TABLE `user` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+      },
+      {
+        "id": "mysql-innodb",
+        "title": "InnoDB 存储引擎深度",
+        "level": "高级",
+        "content": "**页（Page）结构**\n- InnoDB 以页为最小存储单位，默认 16KB（innodb_page_size 可调）\n- 页类型：数据页、Undo 页、系统页、事务数据页等\n- 数据页结构：File Header（38B）+ Page Header（56B）+ Infimum/Supremum（虚拟最小/最大记录）+ User Records（用户记录）+ Free Space（空闲）+ Page Directory（页目录槽）+ File Trailer（8B，校验）\n- 每行记录通过记录头中的 next_record 组成单向链表\n- Page Directory 用二分查找定位记录（槽 slot）\n\n**B+ 树页结构**\n- 非叶节点存索引键 + 子页指针\n- 叶子节点存数据行，并双向链表连接\n- 16KB 页假设 1 行 1KB，叶子页约 16 行；非叶页假设每条索引 12B，约 1170 个指针\n- 3 层 B+ 树可存：1170 * 1170 * 16 ≈ 2190 万行\n\n**Buffer Pool**\n- 缓存数据页和索引页的核心内存区域\n- 基于 LRU 变种：young 区（热数据，5/8）+ old 区（冷数据，3/8）\n- 新读入的页先放 old 区头部，停留超过 innodb_old_blocks_time（默认 1s）才晋升 young\n- 防止全表扫描冲刷热点\n- 支持脏页刷盘（后台线程）\n\n**Change Buffer**\n- 针对二级索引的写优化：先缓存修改，等页读到内存再合并（merge）\n- 减少 IO，适合写多读少场景\n- 仅对二级索引生效（聚簇索引必须立即读页）\n- MySQL 8.0 可配置 change_buffering = all/inserts/changes等\n\n**Adaptive Hash Index（AHI）\n- InnoDB 自动监控热点查询，对索引页建立内存 Hash 索引\n- 等值查询从 B+ 树 O(log N) 降为 O(1)\n- 高并发下可能因锁竞争成为瓶颈，可关闭 innodb_adaptive_hash_index\n\n**Doublewrite Buffer**\n- 写盘前先写共享表空间的 doublewrite 区（2MB，顺序写）\n- 防止页撕裂（partial page write）导致无法恢复\n- 恢复时若发现页损坏，从 doublewrite 区恢复完整页\n- 可关闭但风险高\n\n**WAL（Write-Ahead Logging）**\n- 先写 Redo Log（顺序写，fsync）再写数据页（随机写）\n- 事务提交只需保证 Redo Log 落盘\n- 利用顺序写远快于随机写，提升性能\n- 配合 Checkpoint 机制刷脏页，循环使用 redo log 文件\n",
+        "example": "-- 查看 InnoDB 状态\nSHOW ENGINE INNODB STATUS\\G\n\n-- 查看 Buffer Pool 状态\nSELECT * FROM information_schema.INNODB_BUFFER_POOL_STATS\\G\n-- 关注：pages_total、pages_data、pages_dirty、pages_free\n\n-- 查看 Change Buffer 状态\nSHOW ENGINE INNODB STATUS\\G\n-- INSERT BUFFER AND ADAPTIVE HASH INDEX 段落\n\n-- 关键参数查看\nSHOW VARIABLES LIKE 'innodb_buffer_pool_size';\nSHOW VARIABLES LIKE 'innodb_page_size';\nSHOW VARIABLES LIKE 'innodb_old_blocks_time';\nSHOW VARIABLES LIKE 'innodb_adaptive_hash_index';\nSHOW VARIABLES LIKE 'innodb_doublewrite';\nSHOW VARIABLES LIKE 'innodb_flush_log_at_trx_commit';\n\n-- 查看 Buffer Pool LRU 命中率\nSHOW STATUS LIKE 'Innodb_buffer_pool_read_requests';\nSHOW STATUS LIKE 'Innodb_buffer_pool_reads';\n-- 命中率 = 1 - reads/read_requests\n\n-- 查看某张表占用的页数\nSELECT table_name, data_length/page_size AS data_pages\nFROM information_schema.tables t,\n     (SELECT variable_value+0 AS page_size\n      FROM information_schema.global_variables\n      WHERE variable_name='innodb_page_size') p\nWHERE table_schema='testdb' AND table_name='orders';"
+      },
+      {
+        "id": "mysql-cluster",
+        "title": "MySQL 集群方案",
+        "level": "高级",
+        "content": "**MGR（MySQL Group Replication）**\n- 官方组复制方案，基于 Paxos 变种（XCom）实现共识\n- 提供最终一致 / 高可用 / 强一致（单主模式）\n- 自动故障检测：成员间心跳，超时自动剔除\n- 自动选主：单主模式下选举新的 Primary\n- 要求每张表必须有主键、所有节点相同字符集、binlog_format=ROW\n- 支持 9 节点上限\n- 事务认证（Certification）：基于 WRITESET 检测冲突，多主模式下冲突事务回滚\n\n**MySQL InnoDB Cluster**\n- 官方完整高可用方案 = MGR + MySQL Router + MySQL Shell\n- MySQL Router：应用层路由，读写分离，自动感知拓扑变化\n- MySQL Shell：管理工具，dba.createCluster() 等高级 API\n- 故障自动切换，应用通过 Router 透明连接\n\n**Galera / PXC（Percona XtraDB Cluster）**\n- 第三方多主同步复制方案，基于 Galera 库\n- 真正的多主写，同步复制（基于认证）\n- 所有节点最终一致，写性能取决于最慢节点\n- PXC 是 Percona 基于 Galera + XtraDB 的发行版\n- 与 MGR 区别：Galera 历史更久，MGR 是官方方案\n\n**MySQL Router**\n- 轻量级路由中间件，配合 InnoDB Cluster 使用\n- 对应用透明，提供读写分离端口\n- 自动感知集群拓扑和 Primary 切换\n- 类似 HAProxy 但具备 MySQL 协议感知能力\n\n**分布式事务 XA**\n- MySQL 原生支持 XA 事务（XA START/XA END/XA PREPARE/XA COMMIT）\n- 跨多个 MySQL 实例的两阶段提交\n- 性能较差（同步阻塞），慎用\n- 替代方案：Seata（AT/TCC/SAGA）、消息队列最终一致\n- MySQL 8.0 修复了 XA 的多个 bug，提升可用性\n\n**选型建议**\n- 强一致 + 官方支持：MySQL InnoDB Cluster（MGR）\n- 多主写 + 强一致：Galera/PXC\n- 一主多从 + 读写分离：异步/半同步复制 + 代理中间件\n- 跨地域多活：需结合业务做单元化、消息队列同步\n",
+        "example": "-- MGR 单主模式配置（每个节点不同 server-id 和 uuid）\n[mysqld]\nserver-id=1\ngtid_mode=ON\nenforce_gtid_consistency=ON\nbinlog_format=ROW\nbinlog_row_image=FULL\nlog_slave_updates=ON\nmaster_info_repository=TABLE\nrelay_log_info_repository=TABLE\ntransaction_write_set_extraction=XXHASH64\nloose-group_replication_group_name='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'\nloose-group_replication_start_on_boot=OFF\nloose-group_replication_local_address='node1:33061'\nloose-group_replication_group_seeds='node1:33061,node2:33061,node3:33061'\nloose-group_replication_bootstrap_group=OFF\n\n-- 通过 MySQL Shell 建立集群\n-- \\$ mysqlsh\nmysql-js> dba.checkInstanceConfiguration('root@node1:3306')\nmysql-js> dba.configureInstance('root@node1:3306')\nmysql-js> var cluster = dba.createCluster('myCluster', {memberHost: 'node1'})\nmysql-js> cluster.addInstance('root@node2:3306')\nmysql-js> cluster.addInstance('root@node3:3306')\nmysql-js> cluster.status()\n\n-- XA 事务示例\nXA START 'xid_001';\nUPDATE account SET balance = balance - 100 WHERE id = 1;\nXA END 'xid_001';\nXA PREPARE 'xid_001';\n-- 在另一个资源上同样 PREPARE 后\nXA COMMIT 'xid_001';\n-- 回滚：XA ROLLBACK 'xid_001';"
+      }
+    ]
+  },
+  "sql": {
+    "name": "SQL",
+    "icon": "📊",
+    "color": "#e38c00",
+    "topics": [
+      {
+        "id": "sql-basic",
+        "title": "SQL 基础语法",
+        "level": "基础",
+        "content": "## SQL 语句分类\n\nSQL 语句按功能分为五大类：\n\n### 1. DDL（数据定义语言）\n用于定义或修改数据库结构：\n- `CREATE` - 创建数据库、表、索引、视图等对象\n- `ALTER` - 修改已有对象的结构\n- `DROP` - 删除对象\n- `TRUNCATE` - 清空表数据（保留结构）\n\n### 2. DML（数据操作语言）\n用于操作表中的数据：\n- `INSERT` - 插入数据\n- `UPDATE` - 更新数据\n- `DELETE` - 删除数据\n\n### 3. DQL（数据查询语言）\n- `SELECT` - 查询数据\n\n### 4. DCL（数据控制语言）\n- `GRANT` - 授予权限\n- `REVOKE` - 撤销权限\n\n### 5. TCL（事务控制语言）\n- `COMMIT` - 提交事务\n- `ROLLBACK` - 回滚事务\n- `SAVEPOINT` - 设置保存点\n- `SET TRANSACTION` - 设置事务特性\n\n## SELECT 语句执行顺序\n\nSQL 的逻辑执行顺序与书写顺序不同：\n```\nFROM → ON → JOIN → WHERE → GROUP BY → HAVING → SELECT → DISTINCT → ORDER BY → LIMIT\n```\n\n## 基本查询语法\n\n```sql\nSELECT column1, column2, ...\nFROM table_name\nWHERE condition\nGROUP BY column\nHAVING group_condition\nORDER BY column ASC|DESC\nLIMIT count OFFSET start;\n```\n\n### WHERE 子句\n用于过滤行，常用运算符：\n- `=` `!=` `<>` `>` `<` `>=` `<=`\n- `BETWEEN ... AND ...`\n- `IN (...)` `NOT IN (...)`\n- `LIKE`（`%` 任意字符，`_` 单个字符）\n- `IS NULL` `IS NOT NULL`\n- `AND` `OR` `NOT`\n\n### GROUP BY 与 HAVING\n- `GROUP BY` 按列分组，常与聚合函数配合\n- `HAVING` 对分组后的结果过滤（WHERE 是分组前过滤）\n\n### ORDER BY\n- `ASC` 升序（默认），`DESC` 降序\n- 可按多列排序，按书写顺序优先\n\n### LIMIT 与分页\n- `LIMIT n` - 返回前 n 条\n- `LIMIT n OFFSET m` - 跳过 m 条后返回 n 条\n- MySQL: `LIMIT m, n`\n\n## DISTINCT 去重\n\n`SELECT DISTINCT column` 用于返回唯一不同的值，作用于所有选定列的组合。\n\n## 列别名\n\n使用 `AS` 关键字给列或表起别名：\n```sql\nSELECT name AS 姓名, salary * 12 AS 年薪\nFROM employees;\n```\n\n`AS` 可省略：`SELECT name 姓名`。别名中有特殊字符或空格时需用引号包裹。",
+        "example": "-- 基本查询：选择指定列并起别名\nSELECT name AS 姓名, age AS 年龄, salary AS 薪资\nFROM employees\nWHERE age >= 18 AND salary > 5000\nORDER BY salary DESC\nLIMIT 10;\n\n-- 去重查询：查询所有不同的部门\nSELECT DISTINCT department\nFROM employees;\n\n-- 分组聚合：统计每个部门的平均薪资\nSELECT department, COUNT(*) AS 人数, AVG(salary) AS 平均薪资\nFROM employees\nWHERE status = 'active'\nGROUP BY department\nHAVING AVG(salary) > 8000\nORDER BY 平均薪资 DESC;\n\n-- 模糊查询与范围查询\nSELECT * FROM products\nWHERE name LIKE '苹果%'\n  AND price BETWEEN 100 AND 500\n  AND category IN ('手机', '平板', '电脑');\n\n-- 分页查询：第3页，每页20条\nSELECT id, title, create_time\nFROM articles\nORDER BY create_time DESC\nLIMIT 20 OFFSET 40;"
+      },
+      {
+        "id": "sql-join",
+        "title": "JOIN 查询深度",
+        "level": "进阶",
+        "content": "## JOIN 类型详解\n\nJOIN 用于根据两表或多表之间的关联条件组合行。\n\n### 1. INNER JOIN（内连接）\n只返回两表中满足连接条件的行。若左表或右表无匹配，则对应行不出现在结果中。\n\n### 2. LEFT JOIN（左连接 / LEFT OUTER JOIN）\n返回左表所有行，右表无匹配时右表字段为 NULL。\n\n### 3. RIGHT JOIN（右连接 / RIGHT OUTER JOIN）\n返回右表所有行，左表无匹配时左表字段为 NULL。\n\n### 4. FULL JOIN（全连接 / FULL OUTER JOIN）\n返回左右两表所有行，无匹配的一侧以 NULL 填充。\n- MySQL 不直接支持 FULL JOIN，可用 `LEFT JOIN UNION RIGHT JOIN` 模拟。\n\n### 5. CROSS JOIN（交叉连接 / 笛卡尔积）\n返回两表的笛卡尔积，结果行数 = 左表行数 × 右表行数。无连接条件。\n\n### 6. 自连接（Self Join）\n表自己与自己连接，常用于层级关系（如员工-经理、分类-父分类）。\n\n### 7. 自然连接（NATURAL JOIN）\n自动按两表中所有同名列做等值连接。不推荐使用，因隐式行为容易出错。\n\n## USING vs ON\n\n- `ON`：指定任意连接条件，灵活，列名可不同：`ON a.dept_id = b.id`\n- `USING`：当两表连接列同名时使用：`USING (dept_id)`，结果中该列只出现一次。\n\n## 多表连接\n\n可连续使用多个 JOIN，按从左到右顺序处理：\n```sql\nSELECT *\nFROM A\nJOIN B ON A.id = B.a_id\nJOIN C ON B.id = C.b_id;\n```\n\n## JOIN 性能要点\n- 连接列应建立索引\n- 避免在 ON 条件中使用函数\n- 小表驱动大表\n- 注意连接类型对结果行数的影响",
+        "example": "-- 内连接：查询有部门的员工\nSELECT e.name, e.salary, d.department_name\nFROM employees e\nINNER JOIN departments d ON e.dept_id = d.id;\n\n-- 左连接：查询所有员工（含无部门）\nSELECT e.name, d.department_name\nFROM employees e\nLEFT JOIN departments d ON e.dept_id = d.id;\n\n-- 右连接：查询所有部门（含无员工）\nSELECT e.name, d.department_name\nFROM employees e\nRIGHT JOIN departments d ON e.dept_id = d.id;\n\n-- 自连接：查询员工及其经理\nSELECT e.name AS 员工, m.name AS 经理\nFROM employees e\nLEFT JOIN employees m ON e.manager_id = m.id;\n\n-- USING 用法（两表都有 dept_id 列）\nSELECT e.name, d.department_name\nFROM employees e\nJOIN departments d USING (dept_id);\n\n-- 多表连接：员工-部门-公司\nSELECT e.name, d.department_name, c.company_name\nFROM employees e\nJOIN departments d ON e.dept_id = d.id\nJOIN companies c ON d.company_id = c.id;\n\n-- 交叉连接：生成所有员工与项目的组合\nSELECT e.name, p.project_name\nFROM employees e\nCROSS JOIN projects p;"
+      },
+      {
+        "id": "sql-subquery",
+        "title": "子查询与 CTE",
+        "level": "进阶",
+        "content": "## 子查询分类\n\n子查询是嵌套在其他 SQL 语句中的查询，按返回结果分类：\n\n### 1. 标量子查询（Scalar Subquery）\n返回单个值（一行一列），可用于 WHERE、SELECT、HAVING 子句。\n```sql\nSELECT * FROM employees\nWHERE salary > (SELECT AVG(salary) FROM employees);\n```\n\n### 2. 列子查询（Column Subquery）\n返回一列多行，常配合 IN / NOT IN / ANY / ALL 使用。\n\n### 3. 行子查询（Row Subquery）\n返回一行多列，可用于行比较。\n```sql\nSELECT * FROM employees\nWHERE (dept_id, salary) = (SELECT dept_id, MAX(salary) FROM employees WHERE dept_id = 10);\n```\n\n### 4. 表子查询（Table Subquery / 派生表）\n返回多行多列，常用于 FROM 子句中作为临时表。\n```sql\nSELECT t.dept_id, t.avg_sal FROM\n(SELECT dept_id, AVG(salary) AS avg_sal FROM employees GROUP BY dept_id) t\nWHERE t.avg_sal > 8000;\n```\n\n## 相关子查询与非相关子查询\n- **非相关子查询**：不依赖外层查询，可独立执行一次。\n- **相关子查询**：依赖外层查询的值，外层每行都执行一次（效率较低）。\n\n## EXISTS / IN / ANY / ALL\n\n- `EXISTS`：判断子查询是否返回行，返回布尔值，常用于相关子查询。\n- `NOT EXISTS`：判断子查询是否不返回行。\n- `IN`：等价于 `= ANY`。\n- `ANY`：与子查询中任意一个值比较成立即为真。\n- `ALL`：与子查询中所有值比较均成立才为真。\n\n```sql\n-- 查询有下属的员工\nSELECT * FROM employees e1\nWHERE EXISTS (SELECT 1 FROM employees e2 WHERE e2.manager_id = e1.id);\n```\n\n## 公用表表达式（CTE / Common Table Expression）\n\n使用 `WITH` 定义临时结果集，可被主查询多次引用，提升可读性：\n```sql\nWITH dept_avg AS (\n  SELECT dept_id, AVG(salary) AS avg_sal\n  FROM employees\n  GROUP BY dept_id\n)\nSELECT e.name, e.salary, da.avg_sal\nFROM employees e\nJOIN dept_avg da ON e.dept_id = da.dept_id\nWHERE e.salary > da.avg_sal;\n```\n\n## 递归 CTE\n\n用于处理树形或层级数据，必须包含基础部分（anchor）和递归部分：\n```sql\nWITH RECURSIVE org_tree AS (\n  -- 基础查询：根节点\n  SELECT id, name, manager_id, 1 AS level\n  FROM employees WHERE manager_id IS NULL\n  UNION ALL\n  -- 递归部分\n  SELECT e.id, e.name, e.manager_id, ot.level + 1\n  FROM employees e\n  JOIN org_tree ot ON e.manager_id = ot.id\n)\nSELECT * FROM org_tree ORDER BY level;\n```\n\nCTE 优势：可读性好、可多次引用、支持递归、性能通常优于派生表。",
+        "example": "-- 标量子查询：查询高于平均薪资的员工\nSELECT name, salary\nFROM employees\nWHERE salary > (SELECT AVG(salary) FROM employees);\n\n-- 列子查询 + IN\nSELECT name FROM employees\nWHERE dept_id IN (SELECT id FROM departments WHERE location = '北京');\n\n-- 相关子查询 + EXISTS\nSELECT e.name FROM employees e\nWHERE EXISTS (\n  SELECT 1 FROM orders o WHERE o.employee_id = e.id\n);\n\n-- ANY / ALL\nSELECT name, salary FROM employees\nWHERE salary > ALL (SELECT salary FROM employees WHERE dept_id = 10);\n\n-- 派生表\nSELECT t.dept_id, t.avg_sal\nFROM (SELECT dept_id, AVG(salary) AS avg_sal FROM employees GROUP BY dept_id) t\nWHERE t.avg_sal > 8000;\n\n-- CTE：查询薪资高于部门平均的员工\nWITH dept_avg AS (\n  SELECT dept_id, AVG(salary) AS avg_sal\n  FROM employees GROUP BY dept_id\n)\nSELECT e.name, e.salary, da.avg_sal\nFROM employees e\nJOIN dept_avg da ON e.dept_id = da.dept_id\nWHERE e.salary > da.avg_sal;\n\n-- 递归 CTE：组织架构树\nWITH RECURSIVE org_tree AS (\n  SELECT id, name, manager_id, 1 AS lvl\n  FROM employees WHERE manager_id IS NULL\n  UNION ALL\n  SELECT e.id, e.name, e.manager_id, ot.lvl + 1\n  FROM employees e\n  JOIN org_tree ot ON e.manager_id = ot.id\n)\nSELECT id, name, lvl FROM org_tree ORDER BY lvl;"
+      },
+      {
+        "id": "sql-window",
+        "title": "窗口函数",
+        "level": "高级",
+        "content": "## 窗口函数概述\n\n窗口函数（Window Function / 分析函数）对一组行（窗口）进行计算，返回每行的结果，不合并行。语法：\n\n```sql\n函数名() OVER (\n  [PARTITION BY 列名]\n  [ORDER BY 列名]\n  [frame_clause]\n)\n```\n\n## 排序类窗口函数\n\n### ROW_NUMBER()\n为窗口内每行分配唯一连续序号（1,2,3...），无重复。\n\n### RANK()\n按排序值排名，相同值并列，会跳号（1,1,3）。\n\n### DENSE_RANK()\n按排序值排名，相同值并列，不跳号（1,1,2）。\n\n### NTILE(n)\n将窗口内行均匀分为 n 组，返回组号 1~n。\n\n## 偏移类窗口函数\n\n### LEAD(expr, offset, default)\n取当前行之后第 offset 行的值（默认 offset=1，default=NULL）。\n\n### LAG(expr, offset, default)\n取当前行之前第 offset 行的值。\n\n### FIRST_VALUE(expr) / LAST_VALUE(expr)\n取窗口内第一行 / 最后一行的值。\n- 注意：`LAST_VALUE` 默认 frame 为「至当前行」，常需显式指定 `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`。\n\n## 聚合类窗口函数\n\n`SUM / AVG / COUNT / MIN / MAX` 配合 OVER 实现累计、移动平均等：\n```sql\n-- 累计求和\nSUM(amount) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\n```\n\n## PARTITION BY 与 ORDER BY\n\n- `PARTITION BY`：将数据分区，窗口函数在每个分区内独立计算。\n- `ORDER BY`：定义窗口内排序，影响 RANK / LEAD 等函数结果及默认 frame。\n\n## Frame 子句\n\n定义窗口边界：\n```\nROWS BETWEEN {UNBOUNDED PRECEDING | n PRECEDING | CURRENT ROW} \n         AND {CURRENT ROW | n FOLLOWING | UNBOUNDED FOLLOWING}\nRANGE BETWEEN ... AND ...\n```\n- `ROWS`：按物理行计数\n- `RANGE`：按逻辑值范围\n\n常见用法：\n- 累计：`ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`\n- 移动平均：`ROWS BETWEEN 2 PRECEDING AND CURRENT ROW`\n- 全部：`ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`\n\n## 窗口函数执行时机\n\n窗口函数在 WHERE / GROUP BY / HAVING 之后、ORDER BY / LIMIT 之前执行。不能直接在 WHERE 中使用窗口函数，需用子查询包裹。",
+        "example": "-- ROW_NUMBER：为每个员工按薪资降序编号\nSELECT name, dept_id, salary,\n  ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY salary DESC) AS rn\nFROM employees;\n\n-- RANK vs DENSE_RANK\nSELECT name, salary,\n  RANK() OVER (ORDER BY salary DESC) AS rank_val,\n  DENSE_RANK() OVER (ORDER BY salary DESC) AS dense_rank_val\nFROM employees;\n\n-- 取每个部门薪资前 3 名\nSELECT * FROM (\n  SELECT name, dept_id, salary,\n    ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY salary DESC) AS rn\n  FROM employees\n) t WHERE rn <= 3;\n\n-- NTILE：将员工按薪资分成 4 档\nSELECT name, salary,\n  NTILE(4) OVER (ORDER BY salary DESC) AS quartile\nFROM employees;\n\n-- LAG / LEAD：计算环比增长\nSELECT month, sales,\n  LAG(sales, 1, 0) OVER (ORDER BY month) AS prev_month,\n  sales - LAG(sales, 1, 0) OVER (ORDER BY month) AS growth\nFROM monthly_sales;\n\n-- 累计求和\nSELECT date, amount,\n  SUM(amount) OVER (ORDER BY date \n    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_total\nFROM daily_sales;\n\n-- 移动平均（3 天）\nSELECT date, price,\n  AVG(price) OVER (ORDER BY date \n    ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS moving_avg\nFROM stock_prices;\n\n-- FIRST_VALUE / LAST_VALUE\nSELECT name, dept_id, salary,\n  FIRST_VALUE(name) OVER (PARTITION BY dept_id ORDER BY salary DESC) AS highest_paid,\n  LAST_VALUE(name) OVER (PARTITION BY dept_id \n    ORDER BY salary DESC \n    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS lowest_paid\nFROM employees;"
+      },
+      {
+        "id": "sql-aggregate",
+        "title": "聚合与分组",
+        "level": "基础",
+        "content": "## 聚合函数\n\n聚合函数对一组值计算返回单个值：\n\n| 函数 | 说明 |\n|------|------|\n| `COUNT(*)` | 统计行数（含 NULL）|\n| `COUNT(expr)` | 统计非 NULL 值数量 |\n| `COUNT(DISTINCT expr)` | 统计不同值数量 |\n| `SUM(expr)` | 求和（忽略 NULL）|\n| `AVG(expr)` | 平均值（忽略 NULL）|\n| `MIN(expr)` | 最小值 |\n| `MAX(expr)` | 最大值 |\n\n### 注意事项\n- 聚合函数自动忽略 NULL（除 `COUNT(*)`）\n- `AVG` 是忽略 NULL 后的平均，不是按总行数平均\n- 字符串、日期也可使用 `MIN / MAX`\n- `SUM / AVG` 只适用于数值\n\n## GROUP BY 分组\n\n按一列或多列分组，每组计算聚合：\n```sql\nSELECT dept_id, COUNT(*) AS cnt, AVG(salary) AS avg_sal\nFROM employees\nGROUP BY dept_id;\n```\n\n### 分组规则\n- SELECT 中非聚合列必须出现在 GROUP BY 中（ONLY_FULL_GROUP_BY 模式）\n- 可按多列分组：`GROUP BY dept_id, job_title`\n- NULL 值被视为单独一组\n\n## HAVING vs WHERE\n\n| | WHERE | HAVING |\n|---|------|--------|\n| 作用阶段 | 分组前 | 分组后 |\n| 过滤对象 | 行 | 分组 |\n| 可否用聚合 | 否 | 是 |\n| 可否用列别名 | 否（部分DB）| 是（部分DB）|\n\n```sql\nSELECT dept_id, AVG(salary) AS avg_sal\nFROM employees\nWHERE status = 'active'        -- 先过滤行\nGROUP BY dept_id\nHAVING AVG(salary) > 8000;      -- 再过滤分组\n```\n\n## GROUPING SETS / ROLLUP / CUBE\n\n用于一次查询产生多级汇总：\n\n### GROUPING SETS\n指定多个分组的组合：\n```sql\nSELECT dept_id, job_title, SUM(salary)\nFROM employees\nGROUP BY GROUPING SETS ((dept_id, job_title), (dept_id), ());\n```\n\n### ROLLUP\n按层级汇总（从细到粗）：\n```sql\nGROUP BY ROLLUP (dept_id, job_title)\n-- 等价于 GROUPING SETS ((dept_id, job_title), (dept_id), ())\n```\n\n### CUBE\n产生所有维度的组合：\n```sql\nGROUP BY CUBE (dept_id, job_title)\n-- 等价于 GROUPING SETS ((dept_id, job_title), (dept_id), (job_title), ())\n```\n\n### GROUPING() 函数\n判断某列是否在当前汇总行被聚合（用于区分 NULL 是数据还是汇总），返回 1 表示该列被聚合。",
+        "example": "-- 基本聚合\nSELECT COUNT(*) AS 总人数,\n       AVG(salary) AS 平均薪资,\n       MIN(salary) AS 最低薪资,\n       MAX(salary) AS 最高薪资,\n       SUM(salary) AS 薪资总额\nFROM employees;\n\n-- COUNT 区别\nSELECT COUNT(*) AS 全部行数,\n       COUNT(bonus) AS 有奖金人数,\n       COUNT(DISTINCT dept_id) AS 部门数\nFROM employees;\n\n-- 单列分组\nSELECT dept_id, COUNT(*) AS 人数, AVG(salary) AS 平均薪资\nFROM employees\nGROUP BY dept_id;\n\n-- 多列分组\nSELECT dept_id, job_title, COUNT(*) AS 人数\nFROM employees\nGROUP BY dept_id, job_title;\n\n-- WHERE + HAVING 组合\nSELECT dept_id, AVG(salary) AS avg_sal\nFROM employees\nWHERE status = 'active'\nGROUP BY dept_id\nHAVING AVG(salary) > 8000 AND COUNT(*) >= 5\nORDER BY avg_sal DESC;\n\n-- ROLLUP：部门 + 职位层级汇总\nSELECT dept_id, job_title, SUM(salary) AS total\nFROM employees\nGROUP BY ROLLUP (dept_id, job_title);\n\n-- CUBE：所有维度组合\nSELECT dept_id, job_title, SUM(salary) AS total\nFROM employees\nGROUP BY CUBE (dept_id, job_title);\n\n-- GROUPING SETS：自定义分组\nSELECT dept_id, job_title, SUM(salary) AS total\nFROM employees\nGROUP BY GROUPING SETS ((dept_id, job_title), (dept_id), ());"
+      },
+      {
+        "id": "sql-set-op",
+        "title": "集合运算",
+        "level": "进阶",
+        "content": "## 集合运算符\n\n集合运算将多个 SELECT 结果合并为一个结果集。要求：列数相同、列顺序对应、数据类型兼容。\n\n### UNION\n合并两个结果集并去重，自动排序。\n```sql\nSELECT name FROM employees UNION SELECT name FROM customers;\n```\n\n### UNION ALL\n合并两个结果集，保留重复行，不排序。\n- 性能优于 UNION（无需去重）\n- 当确定无重复或需要保留重复时使用\n\n### INTERSECT\n返回两个结果集的交集（同时存在的行），自动去重。\n- MySQL 8.0+ 才支持\n\n### EXCEPT / MINUS\n返回第一个结果集中有、第二个结果集中没有的行（差集）。\n- MySQL: 不直接支持（可用 LEFT JOIN 或 NOT IN 模拟）\n- Oracle: 使用 `MINUS`\n- PostgreSQL / SQL Server: 使用 `EXCEPT`\n\n## 性能差异\n\n| 运算符 | 是否去重 | 是否排序 | 性能 |\n|--------|---------|---------|------|\n| UNION | 是 | 是 | 较慢 |\n| UNION ALL | 否 | 否 | 最快 |\n| INTERSECT | 是 | 是 | 较慢 |\n| EXCEPT | 是 | 是 | 较慢 |\n\n## 应用场景\n\n- **UNION ALL**：合并多个相似结构表的数据（如分月统计合并）\n- **UNION**：合并去重，如合并多个客户来源\n- **INTERSECT**：找两表共有的行\n- **EXCEPT**：找只在 A 不在 B 的行（如未下单的客户）\n\n## 注意事项\n\n1. 最终结果列名以第一个 SELECT 为准\n2. ORDER BY 只能放在最后一个 SELECT 之后\n3. 集合运算的优先级相同，按从左到右执行（可用括号改变）\n4. NULL 在去重时被视为相同值\n\n## 与 JOIN 的区别\n- JOIN 是横向扩展（增加列），基于关联条件\n- 集合运算是纵向扩展（增加行），基于列结构相同",
+        "example": "-- UNION ALL：合并两月销售（保留重复，性能好）\nSELECT '2024-01' AS month, product, amount FROM sales_202401\nUNION ALL\nSELECT '2024-02' AS month, product, amount FROM sales_202402;\n\n-- UNION：合并去重，所有员工和客户名字\nSELECT name, 'employee' AS type FROM employees\nUNION\nSELECT name, 'customer' AS type FROM customers;\n\n-- INTERSECT：既是员工又是客户的人\nSELECT name FROM employees\nINTERSECT\nSELECT name FROM customers;\n\n-- EXCEPT：从未下单的客户\nSELECT id, name FROM customers\nEXCEPT\nSELECT customer_id, customer_name FROM orders;\n\n-- 模拟 EXCEPT（MySQL 不支持）\nSELECT c.id, c.name FROM customers c\nLEFT JOIN orders o ON c.id = o.customer_id\nWHERE o.id IS NULL;\n\n-- 组合使用 + ORDER BY（放最后）\nSELECT name, salary FROM employees WHERE dept_id = 1\nUNION ALL\nSELECT name, salary FROM employees WHERE dept_id = 2\nORDER BY salary DESC;"
+      },
+      {
+        "id": "sql-functions",
+        "title": "内置函数大全",
+        "level": "基础",
+        "content": "## 字符串函数\n\n| 函数 | 说明 |\n|------|------|\n| `LENGTH(s)` / `CHAR_LENGTH(s)` | 字符串长度（字节 / 字符）|\n| `CONCAT(s1, s2, ...)` | 拼接字符串 |\n| `CONCAT_WS(sep, s1, s2, ...)` | 用分隔符拼接，自动跳过 NULL |\n| `UPPER(s)` / `LOWER(s)` | 转大写 / 小写 |\n| `SUBSTRING(s, pos, len)` / `SUBSTR` | 截取子串（pos 从 1 开始）|\n| `TRIM(s)` / `LTRIM` / `RTRIM` | 去空格 |\n| `REPLACE(s, from, to)` | 替换 |\n| `REVERSE(s)` | 反转 |\n| `LEFT(s, n)` / `RIGHT(s, n)` | 取左 / 右 n 字符 |\n| `INSTR(s, sub)` / `LOCATE(sub, s)` | 查找子串位置 |\n| `LPAD(s, len, pad)` / `RPAD` | 左 / 右填充到指定长度 |\n| `REPEAT(s, n)` | 重复 n 次 |\n\n## 数值函数\n\n| 函数 | 说明 |\n|------|------|\n| `ROUND(x, d)` | 四舍五入到 d 位小数 |\n| `TRUNCATE(x, d)` | 截断到 d 位小数（不四舍五入）|\n| `CEIL(x)` / `CEILING(x)` | 向上取整 |\n| `FLOOR(x)` | 向下取整 |\n| `ABS(x)` | 绝对值 |\n| `MOD(a, b)` / `a % b` | 取模 |\n| `POWER(a, b)` / `POW` | a 的 b 次方 |\n| `SQRT(x)` | 平方根 |\n| `RAND()` | 0~1 随机数 |\n| `GREATEST(a, b, ...)` / `LEAST` | 取最大 / 最小值 |\n| `SIGN(x)` | 符号（-1/0/1）|\n\n## 日期时间函数\n\n| 函数 | 说明 |\n|------|------|\n| `NOW()` / `SYSDATE()` | 当前日期时间 |\n| `CURDATE()` / `CURRENT_DATE` | 当前日期 |\n| `CURTIME()` / `CURRENT_TIME` | 当前时间 |\n| `YEAR(d)` / `MONTH(d)` / `DAY(d)` | 取年 / 月 / 日 |\n| `DATE_FORMAT(d, fmt)` | 格式化日期（`%Y-%m-%d`）|\n| `STR_TO_DATE(s, fmt)` | 字符串转日期 |\n| `DATE_ADD(d, INTERVAL n UNIT)` | 日期加 |\n| `DATE_SUB(d, INTERVAL n UNIT)` | 日期减 |\n| `DATEDIFF(d1, d2)` | 两日期相差天数 |\n| `TIMESTAMPDIFF(unit, d1, d2)` | 日期时间差（指定单位）|\n| `UNIX_TIMESTAMP(d)` | 转 Unix 时间戳 |\n| `FROM_UNIXTIME(ts)` | 时间戳转日期 |\n\n## 条件函数\n\n### CASE WHEN\n```sql\nCASE WHEN condition1 THEN result1\n     WHEN condition2 THEN result2\n     ELSE result_default\nEND\n```\n也支持简单形式：`CASE expr WHEN val1 THEN r1 ... END`\n\n### IFNULL / COALESCE / NULLIF\n- `IFNULL(expr1, expr2)`：expr1 为 NULL 则返回 expr2（MySQL）\n- `COALESCE(expr1, expr2, ...)`：返回第一个非 NULL 值（标准 SQL）\n- `NULLIF(expr1, expr2)`：若两值相等返回 NULL，否则返回 expr1\n- `IF(cond, a, b)`：条件为真返回 a 否则 b（MySQL）\n\n## JSON 函数（MySQL 5.7+）\n\n| 函数 | 说明 |\n|------|------|\n| `JSON_EXTRACT(j, path)` / `j->'$.key'` | 提取 JSON 值 |\n| `JSON_UNQUOTE(j)` / `j->>'$.key'` | 提取并去引号 |\n| `JSON_OBJECT(k, v, ...)` | 构造 JSON 对象 |\n| `JSON_ARRAY(v, ...)` | 构造 JSON 数组 |\n| `JSON_CONTAINS(j, val)` | 是否包含某值 |\n| `JSON_KEYS(j)` | 取所有 key |\n| `JSON_SET(j, path, val)` | 修改 JSON |\n| `JSON_INSERT` / `JSON_REPLACE` | 插入 / 替换 |",
+        "example": "-- 字符串函数\nSELECT UPPER(name) AS 大写名,\n       CONCAT(first_name, ' ', last_name) AS 全名,\n       CONCAT_WS('-', dept, position) AS info,\n       SUBSTRING(phone, 1, 3) AS 区号,\n       LENGTH(name) AS 名字长度,\n       LPAD(id, 6, '0') AS 编号\nFROM employees;\n\n-- 数值函数\nSELECT ROUND(salary, 2) AS 薪资,\n       CEIL(salary / 1000) AS 千档,\n       FLOOR(salary / 1000) AS 千档下,\n       MOD(id, 2) AS 奇偶,\n       ABS(bonus - 1000) AS 偏差\nFROM employees;\n\n-- 日期函数\nSELECT name,\n       YEAR(hire_date) AS 入职年,\n       MONTH(hire_date) AS 入职月,\n       DATE_FORMAT(hire_date, '%Y年%m月%d日') AS 中文日期,\n       DATEDIFF(CURDATE(), hire_date) AS 入职天数,\n       TIMESTAMPDIFF(YEAR, hire_date, CURDATE()) AS 工龄\nFROM employees;\n\n-- 日期加减\nSELECT DATE_ADD(CURDATE(), INTERVAL 30 DAY) AS 30天后,\n       DATE_SUB(NOW(), INTERVAL 1 HOUR) AS 1小时前;\n\n-- CASE WHEN\nSELECT name, salary,\n  CASE WHEN salary >= 20000 THEN '高薪'\n       WHEN salary >= 10000 THEN '中薪'\n       ELSE '低薪'\n  END AS 薪资等级\nFROM employees;\n\n-- COALESCE / NULLIF / IFNULL\nSELECT name,\n  COALESCE(bonus, commission, 0) AS 实际奖金,\n  IFNULL(bonus, 0) AS 奖金或零,\n  NULLIF(dept_id, 0) AS 部门\nFROM employees;\n\n-- JSON 函数\nSELECT name,\n  info->'$.age' AS 年龄,\n  info->>'$.address.city' AS 城市,\n  JSON_EXTRACT(info, '$.tags[0]') AS 首标签\nFROM users WHERE JSON_CONTAINS(info, '18', '$.age');"
+      },
+      {
+        "id": "sql-advanced",
+        "title": "高级 SQL 技巧",
+        "level": "高级",
+        "content": "## CASE 表达式\n\n### 简单 CASE\n```sql\nCASE gender WHEN 'M' THEN '男' WHEN 'F' THEN '女' ELSE '未知' END\n```\n\n### 搜索 CASE\n```sql\nCASE WHEN score >= 90 THEN 'A'\n     WHEN score >= 80 THEN 'B'\n     ELSE 'C' END\n```\n\nCASE 可用于 SELECT、WHERE、ORDER BY、GROUP BY、UPDATE 等场景。\n\n### CASE 聚合技巧\n用 CASE 实现行转列统计：\n```sql\nSELECT dept_id,\n  SUM(CASE WHEN gender = 'M' THEN 1 ELSE 0 END) AS 男,\n  SUM(CASE WHEN gender = 'F' THEN 1 ELSE 0 END) AS 女\nFROM employees GROUP BY dept_id;\n```\n\n## 行转列（PIVOT）\n\n将行数据转为列：\n```sql\n-- 用条件聚合实现（通用方法）\nSELECT dept_id,\n  MAX(CASE WHEN job_title = '经理' THEN salary END) AS 经理薪资,\n  MAX(CASE WHEN job_title = '员工' THEN salary END) AS 员工薪资\nFROM employees GROUP BY dept_id;\n```\n\nSQL Server / Oracle 专用 `PIVOT`：\n```sql\nSELECT * FROM (SELECT dept_id, job_title, salary FROM employees)\nPIVOT (MAX(salary) FOR job_title IN ('经理', '员工'));\n```\n\n## 列转行（UNPIVOT）\n\n将列转为多行：\n```sql\n-- UNION ALL 实现\nSELECT id, 'Q1' AS quarter, q1_sales AS sales FROM sales UNION ALL\nSELECT id, 'Q2', q2_sales FROM sales UNION ALL\nSELECT id, 'Q3', q3_sales FROM sales;\n```\n\nSQL Server / Oracle 专用 `UNPIVOT`：\n```sql\nSELECT id, quarter, sales FROM sales\nUNPIVOT (sales FOR quarter IN (q1_sales, q2_sales, q3_sales));\n```\n\n## MERGE / UPSERT\n\n存在则更新，不存在则插入：\n\n### MySQL：ON DUPLICATE KEY UPDATE\n```sql\nINSERT INTO users (id, name, login_time)\nVALUES (1, 'Tom', NOW())\nON DUPLICATE KEY UPDATE login_time = NOW();\n```\n\n### MySQL：REPLACE INTO\n删除旧行再插入新行（注意会丢失自增 ID、触发器影响）。\n\n### PostgreSQL：INSERT ... ON CONFLICT\n```sql\nINSERT INTO users (id, name) VALUES (1, 'Tom')\nON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;\n```\n\n### 标准 SQL：MERGE INTO\n```sql\nMERGE INTO target t USING source s ON t.id = s.id\nWHEN MATCHED THEN UPDATE SET t.name = s.name\nWHEN NOT MATCHED THEN INSERT (id, name) VALUES (s.id, s.name);\n```\n\n## 批量插入\n\n```sql\nINSERT INTO employees (name, dept_id, salary) VALUES\n  ('Alice', 1, 8000),\n  ('Bob', 2, 9000),\n  ('Carol', 1, 8500);\n```\n\n配合 `INSERT INTO ... SELECT` 可从其他表导入：\n```sql\nINSERT INTO archive SELECT * FROM employees WHERE status = 'deleted';\n```\n\n## RETURNING 子句\n\nINSERT / UPDATE / DELETE 后返回受影响的行（PostgreSQL / Oracle）：\n```sql\nINSERT INTO users (name) VALUES ('Tom') RETURNING id;\nDELETE FROM users WHERE active = 0 RETURNING id, name;\n```\nMySQL 无 RETURNING，可用 `LAST_INSERT_ID()` 取自增 ID。",
+        "example": "-- CASE 简单形式\nSELECT name,\n  CASE gender WHEN 'M' THEN '男' WHEN 'F' THEN '女' ELSE '未知' END AS 性别\nFROM employees;\n\n-- CASE 搜索形式 + 分级\nSELECT name, salary,\n  CASE WHEN salary >= 20000 THEN 'A'\n       WHEN salary >= 10000 THEN 'B'\n       ELSE 'C' END AS 等级\nFROM employees;\n\n-- CASE 实现行转列\nSELECT dept_id,\n  SUM(CASE WHEN gender = 'M' THEN 1 ELSE 0 END) AS 男员工数,\n  SUM(CASE WHEN gender = 'F' THEN 1 ELSE 0 END) AS 女员工数\nFROM employees GROUP BY dept_id;\n\n-- PIVOT（条件聚合实现）\nSELECT dept_id,\n  MAX(CASE WHEN job_title = '经理' THEN salary END) AS 经理薪资,\n  MAX(CASE WHEN job_title = '员工' THEN salary END) AS 员工薪资\nFROM employees GROUP BY dept_id;\n\n-- UNPIVOT（UNION ALL 实现）\nSELECT id, 'Q1' AS quarter, q1_sales AS sales FROM sales UNION ALL\nSELECT id, 'Q2', q2_sales FROM sales UNION ALL\nSELECT id, 'Q3', q3_sales FROM sales;\n\n-- MySQL UPSERT\nINSERT INTO users (id, name, login_time) VALUES (1, 'Tom', NOW())\nON DUPLICATE KEY UPDATE login_time = NOW();\n\n-- PostgreSQL UPSERT\nINSERT INTO users (id, name) VALUES (1, 'Tom')\nON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;\n\n-- 标准 MERGE\nMERGE INTO employees t USING new_employees s ON t.id = s.id\nWHEN MATCHED THEN UPDATE SET t.salary = s.salary\nWHEN NOT MATCHED THEN INSERT (id, name, salary) VALUES (s.id, s.name, s.salary);\n\n-- 批量插入\nINSERT INTO employees (name, dept_id, salary) VALUES\n  ('Alice', 1, 8000),\n  ('Bob', 2, 9000),\n  ('Carol', 1, 8500);\n\n-- RETURNING（PostgreSQL）\nINSERT INTO users (name) VALUES ('Tom') RETURNING id;\nDELETE FROM users WHERE active = 0 RETURNING id, name;"
+      },
+      {
+        "id": "sql-optimization",
+        "title": "SQL 性能优化",
+        "level": "高级",
+        "content": "## 执行计划\n\n使用 `EXPLAIN` 查看查询执行计划：\n```sql\nEXPLAIN SELECT * FROM employees WHERE dept_id = 1;\nEXPLAIN ANALYZE SELECT ...;  -- 实际执行并显示耗时（PG / MySQL 8.0+）\n```\n\n### 关键字段（MySQL）\n- `type`：访问类型，性能从好到差：\n  `system > const > eq_ref > ref > range > index > ALL`\n  - `const`：主键 / 唯一索引等值查询，最快\n  - `eq_ref`：JOIN 时使用主键或唯一索引\n  - `ref`：非唯一索引等值查询\n  - `range`：索引范围扫描\n  - `index`：扫描整个索引树\n  - `ALL`：全表扫描，最慢\n- `key`：实际使用的索引\n- `rows`：预估扫描行数\n- `Extra`：额外信息\n  - `Using index`：覆盖索引，不回表\n  - `Using where`：用 WHERE 过滤\n  - `Using temporary`：使用临时表（需优化）\n  - `Using filesort`：使用文件排序（需优化）\n\n## 索引使用\n\n### B+Tree 索引适用场景\n- 等值查询：`WHERE col = 1`\n- 范围查询：`WHERE col BETWEEN 1 AND 10`\n- 最左前缀：联合索引 `(a, b, c)` 可用于 `a`、`a,b`、`a,b,c`\n- 排序：`ORDER BY` 与索引顺序一致\n- JOIN：连接列建索引\n\n### 索引失效场景\n- `LIKE '%abc'`（前导通配符）\n- 对索引列使用函数或运算：`WHERE YEAR(date) = 2024`\n- 隐式类型转换：字符串列用数字查\n- `OR` 两边不全有索引\n- `!=` `<>` `NOT IN`（通常不走索引）\n- 联合索引未遵循最左前缀\n\n### 覆盖索引\n查询列都在索引中，无需回表：\n```sql\n-- 假设有索引 (dept_id, name)\nSELECT dept_id, name FROM employees WHERE dept_id = 1;\n```\n\n## 避免 / 优化全表扫描\n- WHERE 条件列建索引\n- 避免 SELECT *，只查需要的列\n- 大表分页用延迟关联\n- 避免在索引列上运算\n\n## LIMIT 与分页优化\n\n### 深度分页问题\n```sql\n-- 慢：OFFSET 大时需扫描跳过的行\nSELECT * FROM orders ORDER BY id LIMIT 100000, 10;\n```\n\n### 优化方案\n\n**1. 延迟关联（覆盖索引）**\n```sql\nSELECT * FROM orders o\nJOIN (SELECT id FROM orders ORDER BY id LIMIT 100000, 10) t ON o.id = t.id;\n```\n\n**2. 游标分页（记住上一页最后 ID）**\n```sql\nSELECT * FROM orders WHERE id > #{last_id} ORDER BY id LIMIT 10;\n```\n\n**3. WHERE 条件替代 OFFSET**\n```sql\nSELECT * FROM orders WHERE id > 100000 ORDER BY id LIMIT 10;\n```\n\n## JOIN 优化\n- 连接列建索引并类型一致\n- 小表驱动大表（小表在外层）\n- 控制 JOIN 数量，避免过多表\n- `STRAIGHT_JOIN`（MySQL）强制 JOIN 顺序\n- 避免在 ON 中用函数\n\n## 其他优化技巧\n- `COUNT(*)` 优于 `COUNT(列)`（前者有优化）\n- 大批量更新分批进行避免锁表\n- 用 `EXISTS` 替代 `IN` 处理大子查询\n- 用 `UNION ALL` 替代 `UNION`（避免去重排序）\n- 事务尽量短小，避免长事务\n- 合理使用预编译语句\n- 定期 ANALYZE TABLE 更新统计信息",
+        "example": "-- 查看执行计划\nEXPLAIN SELECT * FROM employees WHERE dept_id = 1;\n\n-- 实际执行分析（PostgreSQL / MySQL 8.0+）\nEXPLAIN ANALYZE\nSELECT e.name, d.department_name FROM employees e\nJOIN departments d ON e.dept_id = d.id WHERE e.salary > 8000;\n\n-- 创建合适的索引\nCREATE INDEX idx_dept ON employees(dept_id);\nCREATE INDEX idx_dept_salary ON employees(dept_id, salary);\nCREATE INDEX idx_name_cover ON employees(dept_id, name);\n\n-- 覆盖索引：查询列都在索引中\nSELECT dept_id, name FROM employees WHERE dept_id = 1;\n\n-- 深度分页：原始写法（慢）\nSELECT * FROM orders ORDER BY id LIMIT 100000, 10;\n\n-- 深度分页：延迟关联优化\nSELECT o.* FROM orders o\nJOIN (SELECT id FROM orders ORDER BY id LIMIT 100000, 10) t ON o.id = t.id;\n\n-- 深度分页：游标分页（记住上一页最后ID）\nSELECT * FROM orders WHERE id > 100000 ORDER BY id LIMIT 10;\n\n-- EXISTS 替代 IN（子查询大时更快）\nSELECT * FROM customers c\nWHERE EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id);\n\n-- 避免索引失效：改写函数条件\n-- 慢：SELECT * FROM orders WHERE YEAR(create_time) = 2024;\n-- 快：\nSELECT * FROM orders\nWHERE create_time >= '2024-01-01' AND create_time < '2025-01-01';\n\n-- UNION ALL 替代 UNION（无需去重时）\nSELECT name FROM employees WHERE dept_id = 1\nUNION ALL\nSELECT name FROM employees WHERE dept_id = 2;"
+      },
+      {
+        "id": "sql-constraints",
+        "title": "约束与数据完整性",
+        "level": "基础",
+        "content": "## 约束类型\n\n约束用于保证数据的完整性、一致性和正确性。\n\n### 1. NOT NULL（非空）\n列不能为 NULL。\n```sql\nname VARCHAR(50) NOT NULL\n```\n\n### 2. DEFAULT（默认值）\n未指定值时使用默认值。\n```sql\nstatus VARCHAR(20) DEFAULT 'active'\ncreate_time DATETIME DEFAULT CURRENT_TIMESTAMP\n```\n\n### 3. UNIQUE（唯一）\n列值（或组合）唯一，允许 NULL（多个 NULL 在多数 DB 中被视为不同）。\n```sql\nemail VARCHAR(100) UNIQUE\n```\n\n### 4. PRIMARY KEY（主键）\n- 唯一标识每行\n- 等价于 `NOT NULL + UNIQUE`\n- 每表只能有一个主键（可由多列组成复合主键）\n- 自动创建聚簇索引（多数 DB）\n```sql\nid INT PRIMARY KEY\n-- 或\nCONSTRAINT pk_emp PRIMARY KEY (dept_id, emp_no)\n```\n\n### 5. FOREIGN KEY（外键）\n建立两表关联，保证参照完整性。\n```sql\nCONSTRAINT fk_dept FOREIGN KEY (dept_id)\n  REFERENCES departments(id)\n  ON DELETE CASCADE\n  ON UPDATE CASCADE\n```\n\n### 6. CHECK（检查）\n限制列值必须满足条件。\n```sql\nsalary DECIMAL(10,2) CHECK (salary > 0),\nage INT CHECK (age >= 0 AND age <= 150)\n```\n\n## 级联操作（ON DELETE / ON UPDATE）\n\n外键引用行被删除 / 更新时，本表行的处理方式：\n\n| 选项 | 说明 |\n|------|------|\n| `CASCADE` | 同步删除 / 更新引用行 |\n| `SET NULL` | 将外键列设为 NULL（要求该列允许 NULL）|\n| `SET DEFAULT` | 设为默认值（少数 DB 支持）|\n| `RESTRICT` | 拒绝操作（立即检查）|\n| `NO ACTION` | 拒绝操作（默认，延迟检查）|\n\n## 约束的添加与删除\n\n```sql\n-- 建表时定义\nCREATE TABLE orders (\n  id INT PRIMARY KEY,\n  customer_id INT,\n  amount DECIMAL(10,2) CHECK (amount > 0),\n  CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers(id)\n);\n\n-- 建表后添加\nALTER TABLE employees ADD CONSTRAINT chk_age CHECK (age >= 18);\nALTER TABLE employees ADD UNIQUE (email);\n\n-- 删除约束\nALTER TABLE employees DROP CONSTRAINT chk_age;\nALTER TABLE employees DROP INDEX email;  -- MySQL 删除 UNIQUE\n```\n\n## 数据完整性分类\n\n- **实体完整性**：主键唯一非空\n- **参照完整性**：外键引用必须存在（或为 NULL）\n- **域完整性**：列值符合类型、范围、默认值\n- **用户自定义完整性**：业务规则（CHECK、触发器）\n\n## 约束 vs 索引\n- 主键、唯一约束会自动创建索引\n- 约束保证数据正确，索引加速查询\n- 外键不自动创建索引（建议手动建）",
+        "example": "-- 建表：综合使用各类约束\nCREATE TABLE employees (\n  id INT PRIMARY KEY AUTO_INCREMENT,\n  emp_no VARCHAR(20) NOT NULL UNIQUE,\n  name VARCHAR(50) NOT NULL,\n  email VARCHAR(100) UNIQUE,\n  age INT CHECK (age >= 18 AND age <= 65),\n  salary DECIMAL(10,2) DEFAULT 0 CHECK (salary >= 0),\n  dept_id INT NOT NULL,\n  status VARCHAR(20) DEFAULT 'active',\n  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,\n  CONSTRAINT fk_emp_dept FOREIGN KEY (dept_id)\n    REFERENCES departments(id)\n    ON DELETE RESTRICT\n    ON UPDATE CASCADE\n);\n\n-- 复合主键\nCREATE TABLE course_selection (\n  student_id INT,\n  course_id INT,\n  score DECIMAL(5,2),\n  PRIMARY KEY (student_id, course_id),\n  CHECK (score BETWEEN 0 AND 100)\n);\n\n-- 建表后添加约束\nALTER TABLE employees ADD CONSTRAINT chk_salary_range\n  CHECK (salary BETWEEN 3000 AND 50000);\nALTER TABLE employees ADD UNIQUE INDEX idx_email (email);\n\n-- 删除约束\nALTER TABLE employees DROP CONSTRAINT chk_salary_range;\nALTER TABLE employees DROP FOREIGN KEY fk_emp_dept;\n\n-- 级联删除示例\nDELETE FROM departments WHERE id = 5;\n-- 若使用 ON DELETE CASCADE，employees 中 dept_id=5 的行会被同步删除\n-- 若使用 ON DELETE RESTRICT，因有引用会被拒绝删除"
+      },
+      {
+        "id": "sql-views",
+        "title": "视图与存储过程",
+        "level": "进阶",
+        "content": "## 视图（VIEW）\n\n视图是基于 SQL 查询的虚拟表，不存储数据，只存储定义。\n\n### 创建视图\n```sql\nCREATE VIEW v_high_salary AS\nSELECT id, name, salary FROM employees WHERE salary > 10000;\n\n-- 使用\nSELECT * FROM v_high_salary WHERE salary > 15000;\n```\n\n### 视图类型\n- **简单视图**：基于单表，无聚合 / DISTINCT / GROUP BY\n- **复杂视图**：含多表 JOIN、聚合、子查询\n\n### 可更新视图\n满足以下条件可对视图执行 INSERT / UPDATE / DELETE（操作映射到底层表）：\n- 基于单表\n- 不含聚合函数、GROUP BY、DISTINCT、HAVING\n- 不含 JOIN、UNION\n- SELECT 列无计算表达式\n- 包含底层表所有 NOT NULL 列\n\n### WITH CHECK OPTION\n保证通过视图修改的数据仍满足视图条件：\n```sql\nCREATE VIEW v_active AS\nSELECT * FROM employees WHERE status = 'active'\nWITH CHECK OPTION;\n-- INSERT status='inactive' 会失败\n```\n\n### 视图优点\n- 简化复杂查询\n- 提供数据安全性（隐藏敏感列）\n- 提供数据独立性\n- 重用 SQL 逻辑\n\n### 视图缺点\n- 性能：复杂视图每次查询都重新执行\n- 嵌套视图难维护\n- 不能建索引（普通视图）；物化视图可建索引但占空间\n\n## 存储过程（Stored Procedure）\n\n预编译并存储在数据库中的 SQL 语句集合，可被反复调用。\n\n### MySQL 示例\n```sql\nDELIMITER //\nCREATE PROCEDURE get_emp_by_dept(IN p_dept_id INT)\nBEGIN\n  SELECT * FROM employees WHERE dept_id = p_dept_id;\nEND //\nDELIMITER ;\n\nCALL get_emp_by_dept(1);\n```\n\n### 存储过程优点\n- 预编译，执行效率高\n- 减少网络流量\n- 封装业务逻辑，安全\n- 支持流程控制（IF、LOOP、游标）\n\n### 缺点\n- 难调试、难移植\n- 业务逻辑分散在数据库\n- 增加数据库服务器负载\n\n## 自定义函数（UDF）\n\n类似存储过程，但必须返回一个值，可用于 SELECT：\n```sql\nCREATE FUNCTION get_dept_name(p_id INT) RETURNS VARCHAR(50)\nBEGIN\n  DECLARE v_name VARCHAR(50);\n  SELECT department_name INTO v_name FROM departments WHERE id = p_id;\n  RETURN v_name;\nEND;\n\nSELECT name, get_dept_name(dept_id) FROM employees;\n```\n\n函数与存储过程区别：\n- 函数必须有返回值，过程可无\n- 函数可在 SELECT 中使用，过程需用 CALL\n- 函数不能执行事务，过程可以\n\n## 触发器（Trigger）\n\n在 INSERT / UPDATE / DELETE 前后自动执行的特殊存储过程。\n```sql\nCREATE TRIGGER trg_audit\nAFTER INSERT ON employees\nFOR EACH ROW\nBEGIN\n  INSERT INTO audit_log(table_name, action, row_id, op_time)\n  VALUES ('employees', 'INSERT', NEW.id, NOW());\nEND;\n```\n\n### 触发时机与事件\n- 时机：`BEFORE` / `AFTER`\n- 事件：`INSERT` / `UPDATE` / `DELETE`\n- 级别：行级（`FOR EACH ROW`）/ 语句级\n- 关键字：`NEW`（新值）、`OLD`（旧值）\n\n### 应用场景\n- 审计日志\n- 数据同步（如冗余字段更新）\n- 复杂约束校验\n- 级联更新非外键关系\n\n### 触发器缺点\n- 隐藏副作用，难调试\n- 性能影响（每行都触发）\n- 不可回滚递归触发",
+        "example": "-- 创建视图\nCREATE VIEW v_high_salary AS\nSELECT id, name, salary, dept_id\nFROM employees WHERE salary > 10000;\n\n-- 查询视图\nSELECT * FROM v_high_salary WHERE dept_id = 1;\n\n-- 可更新视图（简单视图）\nUPDATE v_high_salary SET salary = salary * 1.1 WHERE id = 100;\n\n-- WITH CHECK OPTION\nCREATE VIEW v_active AS\nSELECT * FROM employees WHERE status = 'active'\nWITH CHECK OPTION;\n-- INSERT INTO v_active(..., status) VALUES(..., 'inactive') 会失败\n\n-- 删除视图\nDROP VIEW IF EXISTS v_high_salary;\n\n-- 存储过程（MySQL）\nDELIMITER //\nCREATE PROCEDURE transfer_salary(\n  IN from_id INT, IN to_id INT, IN amount DECIMAL(10,2))\nBEGIN\n  DECLARE EXIT HANDLER FOR SQLEXCEPTION\n  BEGIN\n    ROLLBACK;\n    RESIGNAL;\n  END;\n  START TRANSACTION;\n  UPDATE accounts SET balance = balance - amount WHERE id = from_id;\n  UPDATE accounts SET balance = balance + amount WHERE id = to_id;\n  COMMIT;\nEND //\nDELIMITER ;\n\nCALL transfer_salary(1, 2, 500.00);\n\n-- 自定义函数\nCREATE FUNCTION calc_bonus(p_salary DECIMAL(10,2)) RETURNS DECIMAL(10,2)\nDETERMINISTIC\nBEGIN\n  RETURN p_salary * 0.1;\nEND;\n\nSELECT name, salary, calc_bonus(salary) AS bonus FROM employees;\n\n-- 触发器：审计日志\nCREATE TRIGGER trg_emp_audit\nAFTER UPDATE ON employees\nFOR EACH ROW\nBEGIN\n  INSERT INTO audit_log(table_name, action, row_id, old_val, new_val, op_time)\n  VALUES ('employees', 'UPDATE', OLD.id, OLD.salary, NEW.salary, NOW());\nEND;"
+      },
+      {
+        "id": "sql-security",
+        "title": "SQL 安全",
+        "level": "高级",
+        "content": "## SQL 注入原理\n\nSQL 注入是攻击者通过在输入中插入 SQL 片段，篡改原查询语义，从而执行未授权操作的攻击。\n\n### 注入示例\n```sql\n-- 原查询（拼接 SQL，危险）\nSELECT * FROM users WHERE name = '\" + userName + \"' AND password = '\" + pwd + \"'\";\n```\n\n若 `userName` 输入 `' OR '1'='1`，则查询变为：\n```sql\nSELECT * FROM users WHERE name = '' OR '1'='1' AND password = 'xxx';\n```\n`'1'='1'` 恒真，返回所有用户，绕过认证。\n\n### 注入类型\n- **联合查询注入（UNION）**：用 UNION 拼接恶意查询获取数据\n- **布尔盲注**：通过返回真假差异逐字符猜数据\n- **时间盲注**：用 `SLEEP()` / `BENCHMARK()` 延时判断\n- **堆叠查询**：用 `;` 拼接执行多语句\n- **二阶注入**：恶意数据先存入，再被其他查询使用\n\n## SQL 注入防范\n\n### 1. 参数化查询 / 预编译语句（最有效）\n将 SQL 结构与数据分离，数据不会被解析为 SQL：\n```java\n// Java JDBC\nPreparedStatement ps = conn.prepareStatement(\n  \"SELECT * FROM users WHERE name = ? AND password = ?\");\nps.setString(1, userName);\nps.setString(2, pwd);\n```\n```python\n# Python\ncursor.execute(\"SELECT * FROM users WHERE name=%s\", (userName,))\n```\n\n### 2. ORM 框架\n使用 ORM（如 Hibernate、MyBatis 用 `#{}`）自动参数化。\n注意 MyBatis 中 `${}` 是字符串拼接，有注入风险，`#{}` 是参数化。\n\n### 3. 输入校验\n- 白名单校验（如只允许字母数字）\n- 长度限制\n- 转义特殊字符（如 `'` → `''`）\n\n### 4. 最小权限原则\n应用账户只授予必要权限，禁止 DBA 权限。\n\n### 5. 禁用危险功能\n- 关闭多语句执行\n- 限制 `LOAD_FILE()`、`INTO OUTFILE` 等\n- 关闭 `xp_cmdshell`（SQL Server）\n\n### 6. WAF 与审计\n- 部署 Web 应用防火墙\n- 开启 SQL 审计日志\n- 定期扫描漏洞\n\n## 权限管理（GRANT / REVOKE）\n\n### 授予权限\n```sql\n-- 授予 SELECT 权限\nGRANT SELECT ON database.table TO 'user'@'host';\n\n-- 授予所有权限\nGRANT ALL PRIVILEGES ON database.* TO 'user'@'host' WITH GRANT OPTION;\n\n-- 授予列级权限\nGRANT SELECT (name, dept_id), UPDATE (salary) ON employees TO 'user'@'host';\n\n-- 创建用户并授权\nCREATE USER 'app_user'@'%' IDENTIFIED BY 'StrongPass!';\nGRANT SELECT, INSERT, UPDATE ON mydb.* TO 'app_user'@'%';\nFLUSH PRIVILEGES;\n```\n\n### 撤销权限\n```sql\nREVOKE INSERT, UPDATE ON mydb.* FROM 'app_user'@'%';\nREVOKE ALL PRIVILEGES ON mydb.* FROM 'app_user'@'%';\n```\n\n### 查看权限\n```sql\nSHOW GRANTS FOR 'app_user'@'%';\nSHOW GRANTS;  -- 当前用户\n```\n\n## 数据脱敏\n\n对敏感数据（身份证、手机号、邮箱）进行遮蔽处理：\n```sql\n-- 手机号脱敏\nSELECT CONCAT(LEFT(phone, 3), '****', RIGHT(phone, 4)) AS phone\nFROM users;\n\n-- 邮箱脱敏\nSELECT CONCAT(LEFT(email, 2), '****', SUBSTRING_INDEX(email, '@', -1)) AS email\nFROM users;\n\n-- 身份证脱敏\nSELECT CONCAT(LEFT(id_card, 6), '********', RIGHT(id_card, 4)) AS id_card\nFROM users;\n```\n\n### 脱敏方式\n- **静态脱敏**：导出时替换为脱敏值\n- **动态脱敏**：查询时实时遮蔽（视图、策略）\n- **不可逆脱敏**：哈希后存储\n- **可逆脱敏**：加密存储，授权解密\n\n## 审计日志\n\n### MySQL 企业审计\n- 企业版审计插件\n- MariaDB Audit Plugin（社区可用）\n- 通用查询日志（记录所有 SQL，性能影响大）\n- 慢查询日志\n\n### 自定义审计\n使用触发器或应用层记录关键操作：\n```sql\nCREATE TABLE audit_log (\n  id BIGINT PRIMARY KEY AUTO_INCREMENT,\n  table_name VARCHAR(50),\n  action VARCHAR(20),\n  operator VARCHAR(50),\n  op_time DATETIME DEFAULT CURRENT_TIMESTAMP,\n  detail TEXT\n);\n```\n\n### 审计要点\n- 记录：何人、何时、何操作、何对象、新旧值\n- 日志独立存储，防篡改\n- 定期审查异常操作",
+        "example": "-- SQL 注入示例（危险！）\n-- 字符串拼接：SELECT * FROM users WHERE name = '\" + input + \"'\n-- 输入 ' OR '1'='1 后：\nSELECT * FROM users WHERE name = '' OR '1'='1';\n\n-- 参数化查询（安全）\n-- Java: PreparedStatement.setString(1, userName)\n-- Python: cursor.execute(\"SELECT * FROM users WHERE name=%s\", (userName,))\n-- 应用层使用占位符，数据与 SQL 结构分离\n\n-- 最小权限：创建只读用户\nCREATE USER 'reader'@'%' IDENTIFIED BY 'StrongPass!2024';\nGRANT SELECT ON mydb.* TO 'reader'@'%';\nFLUSH PRIVILEGES;\n\n-- 创建可写业务用户（限制表）\nCREATE USER 'app_user'@'%' IDENTIFIED BY 'AppPass!2024';\nGRANT SELECT, INSERT, UPDATE ON mydb.orders TO 'app_user'@'%';\nGRANT SELECT, INSERT, UPDATE ON mydb.order_items TO 'app_user'@'%';\nFLUSH PRIVILEGES;\n\n-- 撤销权限\nREVOKE INSERT ON mydb.orders FROM 'app_user'@'%';\n\n-- 查看权限\nSHOW GRANTS FOR 'app_user'@'%';\n\n-- 数据脱敏：手机号\nSELECT id, CONCAT(LEFT(phone, 3), '****', RIGHT(phone, 4)) AS phone\nFROM users;\n\n-- 数据脱敏：邮箱\nSELECT id,\n  CONCAT(LEFT(email, 2), '****', SUBSTRING_INDEX(email, '@', -1)) AS email\nFROM users;\n\n-- 审计表 + 触发器\nCREATE TABLE audit_log (\n  id BIGINT PRIMARY KEY AUTO_INCREMENT,\n  table_name VARCHAR(50),\n  action VARCHAR(20),\n  operator VARCHAR(50),\n  op_time DATETIME DEFAULT CURRENT_TIMESTAMP,\n  detail TEXT\n);\n\nCREATE TRIGGER trg_user_audit\nAFTER UPDATE ON users\nFOR EACH ROW\nBEGIN\n  INSERT INTO audit_log(table_name, action, detail)\n  VALUES ('users', 'UPDATE',\n    CONCAT('id=', OLD.id, ' old_pwd=', OLD.password IS NOT NULL));\nEND;\n\n-- 哈希存储密码（应用层处理，DB 存哈希）\n-- 应用：hash = bcrypt(password); INSERT INTO users(password_hash) VALUES(hash)\nSELECT id, username FROM users WHERE id = 1;  -- 永远不查密码明文"
+      }
+    ]
   }
 };
 
@@ -16492,6 +16674,1186 @@ const QUESTIONS = {
       ],
       "answer": 1,
       "explain": "ChannelPipeline是双向链表。入站事件（如channelRead）由head向后传递到tail；出站事件（如write）由tail向前传递到head最终写出。InboundHandler按添加顺序正向处理，OutboundHandler按添加顺序逆向处理。"
+    }
+  ],
+  "mysql": [
+    {
+      "q": "MySQL 的默认存储引擎是？",
+      "level": "基础",
+      "options": [
+        "MyISAM",
+        "InnoDB",
+        "MEMORY",
+        "CSV"
+      ],
+      "answer": 1,
+      "explain": "MySQL 5.5 起默认存储引擎为 InnoDB，支持事务、行锁、外键和崩溃恢复。"
+    },
+    {
+      "q": "以下哪个存储引擎不支持事务？",
+      "level": "基础",
+      "options": [
+        "InnoDB",
+        "MyISAM",
+        "NDB",
+        "None"
+      ],
+      "answer": 1,
+      "explain": "MyISAM 不支持事务、行锁和外键，适合只读或读多写少的场景。"
+    },
+    {
+      "q": "MySQL 架构自上而下分为哪三层？",
+      "level": "基础",
+      "options": [
+        "连接层/缓存层/存储层",
+        "客户端层/服务层/引擎层",
+        "连接层/SQL层/存储引擎层",
+        "应用层/逻辑层/物理层"
+      ],
+      "answer": 2,
+      "explain": "MySQL 采用连接层、SQL层（解析/优化/执行）、存储引擎层（可插拔）三层架构。"
+    },
+    {
+      "q": "关于 InnoDB 与 MyISAM 的区别，下列说法错误的是？",
+      "level": "基础",
+      "options": [
+        "InnoDB 支持事务，MyISAM 不支持",
+        "InnoDB 支持行锁，MyISAM 只支持表锁",
+        "InnoDB 使用聚簇索引，MyISAM 使用非聚簇索引",
+        "InnoDB 不支持外键，MyISAM 支持外键"
+      ],
+      "answer": 3,
+      "explain": "恰恰相反，InnoDB 支持外键，MyISAM 不支持外键。"
+    },
+    {
+      "q": "MySQL 中负责选择执行计划的是哪个组件？",
+      "level": "基础",
+      "options": [
+        "解析器",
+        "预处理器",
+        "优化器",
+        "执行器"
+      ],
+      "answer": 2,
+      "explain": "优化器（Optimizer）基于成本（CBO）选择索引、JOIN 顺序等，生成执行计划。"
+    },
+    {
+      "q": "MEMORY 存储引擎的特点是？",
+      "level": "基础",
+      "options": [
+        "数据存磁盘，支持事务",
+        "数据存内存，重启丢失",
+        "数据压缩存储",
+        "数据以 CSV 文本存储"
+      ],
+      "answer": 1,
+      "explain": "MEMORY 引擎数据存于内存，速度极快，但服务器重启后数据丢失，适合临时表/缓存。"
+    },
+    {
+      "q": "MySQL 8.0 移除了哪个功能？",
+      "level": "基础",
+      "options": [
+        "Query Cache（查询缓存）",
+        "视图",
+        "触发器",
+        "存储过程"
+      ],
+      "answer": 0,
+      "explain": "MySQL 8.0 移除了 Query Cache，因命中率低、写失效频繁，弊大于利。"
+    },
+    {
+      "q": "InnoDB 索引采用的数据结构是？",
+      "level": "进阶",
+      "options": [
+        "B 树",
+        "B+ 树",
+        "红黑树",
+        "哈希表"
+      ],
+      "answer": 1,
+      "explain": "InnoDB 使用 B+ 树，非叶节点只存索引键，叶子节点存数据并形成双向链表，3-4 层可支撑千万级数据。"
+    },
+    {
+      "q": "关于 B+ 树相比 B 树的优势，错误的是？",
+      "level": "进阶",
+      "options": [
+        "非叶节点不存数据，单页能容纳更多键，树更矮",
+        "叶子节点形成有序链表，范围查询高效",
+        "所有数据都在叶子节点，查询性能稳定",
+        "B+ 树插入性能一定比 B 树好"
+      ],
+      "answer": 3,
+      "explain": "B+ 树的优势在于磁盘 IO 和范围查询，但插入性能不一定优于 B 树，需视场景而定。"
+    },
+    {
+      "q": "InnoDB 聚簇索引的叶子节点存储的是？",
+      "level": "进阶",
+      "options": [
+        "索引键值",
+        "主键值",
+        "完整数据行",
+        "指向数据行的指针"
+      ],
+      "answer": 2,
+      "explain": "聚簇索引叶子节点存储完整数据行，一张表只能有一个聚簇索引（通常是主键）。"
+    },
+    {
+      "q": "二级索引查询需要回表，回表指的是？",
+      "level": "进阶",
+      "options": [
+        "回到客户端重新查询",
+        "根据二级索引得到主键，再到聚簇索引查完整数据",
+        "回滚事务",
+        "重新解析 SQL"
+      ],
+      "answer": 1,
+      "explain": "二级索引叶子节点存储主键值，需再用主键到聚簇索引查完整数据行，称为回表。"
+    },
+    {
+      "q": "联合索引 (a,b,c)，以下哪个查询能完全命中索引？",
+      "level": "进阶",
+      "options": [
+        "WHERE b=1 AND c=2",
+        "WHERE a=1 AND c=3",
+        "WHERE a=1 AND b=2 AND c=3",
+        "WHERE b=1 AND a=1"
+      ],
+      "answer": 2,
+      "explain": "最左前缀原则，(a,b,c) 完全匹配需按 a→b→c 顺序，只有 a=1 AND b=2 AND c=3 完全命中。"
+    },
+    {
+      "q": "EXPLAIN 输出中 type 字段性能最差的是？",
+      "level": "进阶",
+      "options": [
+        "const",
+        "ref",
+        "range",
+        "ALL"
+      ],
+      "answer": 3,
+      "explain": "ALL 表示全表扫描，性能最差。从好到差：system > const > eq_ref > ref > range > index > ALL。"
+    },
+    {
+      "q": "覆盖索引能避免什么操作？",
+      "level": "进阶",
+      "options": [
+        "回表",
+        "排序",
+        "分组",
+        "加锁"
+      ],
+      "answer": 0,
+      "explain": "覆盖索引包含查询所需所有字段，无需回表，Extra 显示 Using index。"
+    },
+    {
+      "q": "索引下推 ICP 的作用是？",
+      "level": "进阶",
+      "options": [
+        "减少锁范围",
+        "减少回表次数",
+        "减少排序",
+        "减少网络传输"
+      ],
+      "answer": 1,
+      "explain": "ICP（Index Condition Pushdown）将 WHERE 条件下推到引擎层过滤，减少回表次数。"
+    },
+    {
+      "q": "MySQL 默认的隔离级别是？",
+      "level": "进阶",
+      "options": [
+        "READ UNCOMMITTED",
+        "READ COMMITTED",
+        "REPEATABLE READ",
+        "SERIALIZABLE"
+      ],
+      "answer": 2,
+      "explain": "MySQL 默认隔离级别为 REPEATABLE READ（可重复读），InnoDB 在该级别下通过临键锁解决幻读。"
+    },
+    {
+      "q": "事务的 ACID 中，由 Undo Log 保证的是？",
+      "level": "进阶",
+      "options": [
+        "原子性",
+        "一致性",
+        "隔离性",
+        "持久性"
+      ],
+      "answer": 0,
+      "explain": "Undo Log 记录反向操作，保证事务回滚，实现原子性；持久性由 Redo Log 保证。"
+    },
+    {
+      "q": "事务的持久性由哪个日志保证？",
+      "level": "进阶",
+      "options": [
+        "Undo Log",
+        "Redo Log",
+        "Binlog",
+        "Error Log"
+      ],
+      "answer": 1,
+      "explain": "Redo Log 记录页的物理修改，WAL 机制保证事务提交后即使宕机也能恢复，实现持久性。"
+    },
+    {
+      "q": "READ COMMITTED 隔离级别下，每次 SELECT 会怎样？",
+      "level": "进阶",
+      "options": [
+        "复用同一个 read view",
+        "生成新的 read view",
+        "加表锁",
+        "不读取数据"
+      ],
+      "answer": 1,
+      "explain": "RC 级别每次 SELECT 生成新的 read view，可能读到其他事务新提交的数据，存在不可重复读。"
+    },
+    {
+      "q": "InnoDB 在 RR 级别下解决幻读的机制是？",
+      "level": "进阶",
+      "options": [
+        "MVCC",
+        "间隙锁 + 临键锁",
+        "表锁",
+        "读锁"
+      ],
+      "answer": 1,
+      "explain": "InnoDB 在 RR 级别下通过临键锁（Next-Key Lock = 记录锁 + 间隙锁）防止插入，解决幻读。"
+    },
+    {
+      "q": "MySQL 两阶段提交涉及的两个日志是？",
+      "level": "进阶",
+      "options": [
+        "Undo Log 和 Redo Log",
+        "Redo Log 和 Binlog",
+        "Binlog 和 Undo Log",
+        "Error Log 和 Slow Log"
+      ],
+      "answer": 1,
+      "explain": "两阶段提交保证 Redo Log 和 Binlog 一致：Redo Log prepare → Binlog 写入 → Redo Log commit。"
+    },
+    {
+      "q": "以下哪种 binlog 格式最安全但日志量最大？",
+      "level": "高级",
+      "options": [
+        "STATEMENT",
+        "ROW",
+        "MIXED",
+        "NOLOG"
+      ],
+      "answer": 1,
+      "explain": "ROW 格式记录每行变更的前后镜像，最安全不会出现主从不一致，但日志量最大。"
+    },
+    {
+      "q": "关于主从复制原理，下列顺序正确的是？",
+      "level": "高级",
+      "options": [
+        "主库 SQL 线程→从库 IO 线程→Dump 线程",
+        "主库写 Binlog→从库 IO 线程拉取→写 Relay Log→SQL 线程重放",
+        "从库写 Binlog→主库 Dump 线程→从库重放",
+        "主库写 Relay Log→从库 IO 线程→SQL 线程"
+      ],
+      "answer": 1,
+      "explain": "主库写 Binlog，从库 IO 线程拉取并写 Relay Log，SQL 线程重放 Relay Log。"
+    },
+    {
+      "q": "半同步复制相比异步复制的优势是？",
+      "level": "高级",
+      "options": [
+        "性能更高",
+        "主库至少等待一个从库确认收到 Binlog 才提交，减少数据丢失",
+        "支持多主写",
+        "不需要 Binlog"
+      ],
+      "answer": 1,
+      "explain": "半同步复制主库提交前等待至少一个从库确认收到 Binlog，提升数据安全性。"
+    },
+    {
+      "q": "GTID 的作用是？",
+      "level": "高级",
+      "options": [
+        "加密传输",
+        "全局事务标识，简化复制配置与故障切换",
+        "压缩 Binlog",
+        "限制并发"
+      ],
+      "answer": 1,
+      "explain": "GTID（全局事务ID）格式为 server_uuid:transaction_id，简化复制配置、强制主从一致、便于故障切换。"
+    },
+    {
+      "q": "MySQL 主从延迟的常见原因不包括？",
+      "level": "高级",
+      "options": [
+        "从库单 SQL 线程重放慢",
+        "大事务",
+        "从库硬件差",
+        "从库使用 InnoDB 引擎"
+      ],
+      "answer": 3,
+      "explain": "从库使用 InnoDB 引擎不是延迟原因。延迟多由单线程重放慢、大事务、网络、硬件差异导致。"
+    },
+    {
+      "q": "mysqldump 实现 InnoDB 一致性备份的关键参数是？",
+      "level": "进阶",
+      "options": [
+        "--lock-tables",
+        "--single-transaction",
+        "--flush-logs",
+        "--quick"
+      ],
+      "answer": 1,
+      "explain": "--single-transaction 利用 InnoDB MVCC 在事务中获取一致性快照，不锁表。"
+    },
+    {
+      "q": "PITR（时间点恢复）需要依赖什么？",
+      "level": "进阶",
+      "options": [
+        "仅全量备份",
+        "全量备份 + Binlog",
+        "仅 Binlog",
+        "仅 Redo Log"
+      ],
+      "answer": 1,
+      "explain": "PITR 需先恢复全量备份，再应用 Binlog 到指定时间点，可恢复到任意时刻。"
+    },
+    {
+      "q": "xtrabackup 相比 mysqldump 的优势是？",
+      "level": "进阶",
+      "options": [
+        "跨平台",
+        "物理热备份，速度快，支持增量",
+        "不依赖 MySQL",
+        "无需磁盘空间"
+      ],
+      "answer": 1,
+      "explain": "xtrabackup 是物理热备份，直接拷贝数据文件，速度快，支持增量备份，适合大型数据库。"
+    },
+    {
+      "q": "关于 innodb_buffer_pool_size 的设置建议是？",
+      "level": "高级",
+      "options": [
+        "物理内存的 10%",
+        "物理内存的 60%-80%",
+        "固定 1GB",
+        "越大越好不超过 90%"
+      ],
+      "answer": 1,
+      "explain": "innodb_buffer_pool_size 缓存数据和索引，建议设为物理内存的 60%-80%，是 InnoDB 最重要的参数。"
+    },
+    {
+      "q": "innodb_flush_log_at_trx_commit=1 表示？",
+      "level": "高级",
+      "options": [
+        "每秒刷盘",
+        "每次事务提交刷盘，最安全",
+        "不刷盘",
+        "由 OS 决定"
+      ],
+      "answer": 1,
+      "explain": "值为 1 时每次事务提交都刷 Redo Log 到磁盘，最安全但性能略低，生产环境推荐。"
+    },
+    {
+      "q": "关于 Optimizer Trace 的作用是？",
+      "level": "高级",
+      "options": [
+        "记录慢查询",
+        "分析优化器选择执行计划的过程",
+        "监控锁等待",
+        "统计 IO"
+      ],
+      "answer": 1,
+      "explain": "Optimizer Trace 记录优化器决策过程，用于分析为何选择或不选择某个索引。"
+    },
+    {
+      "q": "performance_schema 主要用于？",
+      "level": "高级",
+      "options": [
+        "备份数据",
+        "性能监控与事件统计",
+        "用户权限管理",
+        "复制配置"
+      ],
+      "answer": 1,
+      "explain": "performance_schema 是 MySQL 内置性能监控，按事件采集，配合 sys schema 可查 TOP SQL、IO 统计等。"
+    },
+    {
+      "q": "以下哪个不是数据库第三范式的要求？",
+      "level": "进阶",
+      "options": [
+        "字段不可再分",
+        "非主键字段完全依赖主键",
+        "非主键字段直接依赖主键，消除传递依赖",
+        "所有字段必须有索引"
+      ],
+      "answer": 3,
+      "explain": "第三范式要求消除传递依赖，与是否有索引无关。索引是性能优化手段，不是范式要求。"
+    },
+    {
+      "q": "关于主键设计，下列做法最推荐的是？",
+      "level": "进阶",
+      "options": [
+        "使用 UUID 作为主键",
+        "使用自增 BIGINT 作为主键",
+        "使用手机号作为主键",
+        "使用身份证号作为主键"
+      ],
+      "answer": 1,
+      "explain": "自增 BIGINT 顺序插入，B+ 树友好无页分裂；UUID 无序导致频繁页分裂；业务字段可能变更不宜做主键。"
+    },
+    {
+      "q": "存储金额字段应使用的数据类型是？",
+      "level": "进阶",
+      "options": [
+        "FLOAT",
+        "DOUBLE",
+        "DECIMAL",
+        "INT"
+      ],
+      "answer": 2,
+      "explain": "金额应使用 DECIMAL 避免浮点精度丢失，FLOAT/DOUBLE 存在精度问题不适合金融场景。"
+    },
+    {
+      "q": "MySQL 8.0 默认的字符集排序规则是？",
+      "level": "进阶",
+      "options": [
+        "utf8mb4_general_ci",
+        "utf8mb4_bin",
+        "utf8mb4_0900_ai_ci",
+        "latin1_swedish_ci"
+      ],
+      "answer": 2,
+      "explain": "MySQL 8.0 默认字符集 utf8mb4，默认排序规则 utf8mb4_0900_ai_ci（不区分大小写、不区分重音）。"
+    },
+    {
+      "q": "InnoDB 数据页的默认大小是？",
+      "level": "高级",
+      "options": [
+        "4KB",
+        "8KB",
+        "16KB",
+        "32KB"
+      ],
+      "answer": 2,
+      "explain": "InnoDB 默认页大小为 16KB，可通过 innodb_page_size 参数修改（4K/8K/16K/32K/64K）。"
+    },
+    {
+      "q": "3 层 B+ 树（页 16KB）大约能存多少行数据？",
+      "level": "高级",
+      "options": [
+        "约 1 万行",
+        "约 200 万行",
+        "约 2000 万行",
+        "约 1 亿行"
+      ],
+      "answer": 2,
+      "explain": "非叶页约 1170 个指针，3 层约 1170*1170*16 ≈ 2190 万行，所以 B+ 树高度通常 3-4 层。"
+    },
+    {
+      "q": "Buffer Pool 采用的 LRU 算法变种将链表分为？",
+      "level": "高级",
+      "options": [
+        "热区和冷区（young + old）",
+        "读写区",
+        "新旧事务区",
+        "主备区"
+      ],
+      "answer": 0,
+      "explain": "InnoDB Buffer Pool LRU 分为 young（热数据 5/8）和 old（冷数据 3/8）区，防止全表扫描冲刷热点。"
+    },
+    {
+      "q": "Change Buffer 主要优化的是？",
+      "level": "高级",
+      "options": [
+        "聚簇索引读",
+        "二级索引写",
+        "全表扫描",
+        "排序操作"
+      ],
+      "answer": 1,
+      "explain": "Change Buffer 缓存二级索引的修改，等页读到内存再合并，减少随机 IO，适合写多读少场景。"
+    },
+    {
+      "q": "Adaptive Hash Index 的作用是？",
+      "level": "高级",
+      "options": [
+        "压缩数据",
+        "对热点查询自动建立 Hash 索引，提升等值查询",
+        "缓存 SQL 结果",
+        "加速排序"
+      ],
+      "answer": 1,
+      "explain": "AHI 自动监控热点查询，对索引页建立内存 Hash 索引，将 B+ 树 O(log N) 降为 O(1)。"
+    },
+    {
+      "q": "Doublewrite Buffer 的作用是？",
+      "level": "高级",
+      "options": [
+        "双写提升性能",
+        "防止页撕裂导致数据无法恢复",
+        "压缩存储",
+        "同步主从"
+      ],
+      "answer": 1,
+      "explain": "写数据页前先写 doublewrite 区，防止页撕裂（partial page write）导致无法用 Redo Log 恢复。"
+    },
+    {
+      "q": "WAL 机制的核心思想是？",
+      "level": "高级",
+      "options": [
+        "先写数据页再写日志",
+        "先写日志（Redo Log）再写数据页",
+        "日志和数据页同时写",
+        "不写日志"
+      ],
+      "answer": 1,
+      "explain": "WAL（Write-Ahead Logging）先写顺序的 Redo Log 再写随机的数据页，利用顺序写远快于随机写提升性能。"
+    },
+    {
+      "q": "关于 MGR 组复制，下列说法错误的是？",
+      "level": "高级",
+      "options": [
+        "基于 Paxos 变种实现共识",
+        "支持单主和多主模式",
+        "要求每张表必须有主键",
+        "最多支持 100 个节点"
+      ],
+      "answer": 3,
+      "explain": "MGR 最多支持 9 个节点，而非 100 个。其余选项均正确。"
+    },
+    {
+      "q": "MySQL InnoDB Cluster 由哪些组件构成？",
+      "level": "高级",
+      "options": [
+        "MGR + MySQL Router + MySQL Shell",
+        "MHA + ProxySQL",
+        "Galera + HAProxy",
+        "PXC + MaxScale"
+      ],
+      "answer": 0,
+      "explain": "官方 InnoDB Cluster = MGR（组复制）+ MySQL Router（路由）+ MySQL Shell（管理工具）。"
+    },
+    {
+      "q": "Galera/PXC 与 MGR 的主要区别是？",
+      "level": "高级",
+      "options": [
+        "Galera 不支持多主写",
+        "Galera 是第三方多主同步复制，MGR 是官方方案",
+        "MGR 性能一定更好",
+        "Galera 不需要主键"
+      ],
+      "answer": 1,
+      "explain": "Galera/PXC 是第三方多主同步复制方案，历史更久；MGR 是官方组复制方案，两者都需主键。"
+    },
+    {
+      "q": "MySQL XA 事务的特点是？",
+      "level": "高级",
+      "options": [
+        "异步非阻塞",
+        "两阶段提交，性能较差",
+        "仅支持单机",
+        "不需要 Binlog"
+      ],
+      "answer": 1,
+      "explain": "XA 是两阶段提交的分布式事务，同步阻塞性能较差，生产中常用 Seata/消息队列替代。"
+    },
+    {
+      "q": "关于死锁的描述，正确的是？",
+      "level": "高级",
+      "options": [
+        "死锁只出现在 MyISAM",
+        "InnoDB 自动检测死锁并回滚代价较小的事务",
+        "死锁无法避免也无法处理",
+        "关闭 innodb_deadlock_detect 可提升死锁处理速度"
+      ],
+      "answer": 1,
+      "explain": "InnoDB 通过死锁检测自动发现死锁并回滚代价较小的事务；高并发下检测本身耗 CPU，可关闭改用超时。"
+    },
+    {
+      "q": "意向锁（Intention Lock）的作用是？",
+      "level": "高级",
+      "options": [
+        "锁住某行数据",
+        "快速判断表上是否有行锁，避免逐行检查",
+        "提升查询性能",
+        "防止幻读"
+      ],
+      "answer": 1,
+      "explain": "意向锁是表级锁，事务加行锁前先加意向锁，其他事务加表锁时通过意向锁快速判断是否冲突。"
+    },
+    {
+      "q": "InnoDB 在 RR 隔离级别下默认的行锁算法是？",
+      "level": "高级",
+      "options": [
+        "记录锁",
+        "间隙锁",
+        "临键锁（Next-Key Lock）",
+        "表锁"
+      ],
+      "answer": 2,
+      "explain": "InnoDB 在 RR 级别默认使用临键锁（Next-Key Lock = 记录锁 + 间隙锁），左开右闭区间，防止幻读。"
+    }
+  ],
+  "sql": [
+    {
+      "q": "SQL 语句按功能分为几大类？下列哪个属于 DDL（数据定义语言）？",
+      "level": "基础",
+      "options": [
+        "SELECT",
+        "INSERT",
+        "CREATE",
+        "GRANT"
+      ],
+      "answer": 2,
+      "explain": "DDL（Data Definition Language）数据定义语言用于定义数据库结构，包括 CREATE、ALTER、DROP、TRUNCATE。SELECT 属于 DQL，INSERT 属于 DML，GRANT 属于 DCL。"
+    },
+    {
+      "q": "SQL 中 SELECT 语句的逻辑执行顺序是？",
+      "level": "基础",
+      "options": [
+        "SELECT→FROM→WHERE→GROUP BY→HAVING→ORDER BY",
+        "FROM→WHERE→GROUP BY→HAVING→SELECT→ORDER BY",
+        "FROM→SELECT→WHERE→GROUP BY→HAVING→ORDER BY",
+        "WHERE→FROM→GROUP BY→SELECT→HAVING→ORDER BY"
+      ],
+      "answer": 1,
+      "explain": "SQL 逻辑执行顺序为 FROM→ON→JOIN→WHERE→GROUP BY→HAVING→SELECT→DISTINCT→ORDER BY→LIMIT。这也是为何 WHERE 中不能用列别名（SELECT 还未执行），而 HAVING 后某些场景可用别名的原因。"
+    },
+    {
+      "q": "关于 WHERE 和 HAVING 的区别，下列说法正确的是？",
+      "level": "基础",
+      "options": [
+        "HAVING 在分组前过滤行，WHERE 在分组后过滤组",
+        "WHERE 不能用聚合函数，HAVING 可以",
+        "WHERE 和 HAVING 完全等价可以互换",
+        "HAVING 只能用在没 GROUP BY 的查询中"
+      ],
+      "answer": 1,
+      "explain": "WHERE 在 GROUP BY 前过滤行，不能使用聚合函数；HAVING 在 GROUP BY 后过滤分组，可使用聚合函数。两者作用阶段和对象不同，不可互换。"
+    },
+    {
+      "q": "下列 SQL 运算符中，用于匹配 NULL 的是？",
+      "level": "基础",
+      "options": [
+        "= NULL",
+        "== NULL",
+        "IS NULL",
+        "<> NULL"
+      ],
+      "answer": 2,
+      "explain": "判断 NULL 必须用 IS NULL 或 IS NOT NULL。NULL 与任何值的 =、<> 比较结果都是 UNKNOWN，不会被 WHERE 过滤出来。这是 SQL 三值逻辑的重要特性。"
+    },
+    {
+      "q": "SELECT DISTINCT name, age FROM students 的作用是？",
+      "level": "基础",
+      "options": [
+        "只对 name 去重",
+        "只对 age 去重",
+        "对 name 和 age 的组合去重",
+        "删除 age 重复的行"
+      ],
+      "answer": 2,
+      "explain": "DISTINCT 作用于 SELECT 的所有列组合，即返回 (name, age) 组合唯一的行。单独某列重复但组合不同不会被去重。"
+    },
+    {
+      "q": "LIMIT 10 OFFSET 20 的含义是？",
+      "level": "基础",
+      "options": [
+        "跳过 10 条返回 20 条",
+        "跳过 20 条返回 10 条",
+        "返回第 10 到 20 条",
+        "返回前 30 条"
+      ],
+      "answer": 1,
+      "explain": "LIMIT n OFFSET m 表示跳过 m 条记录后返回 n 条。OFFSET 20 LIMIT 10 即取第 21~30 条，常用于分页（第 3 页，每页 10 条）。MySQL 也支持 LIMIT 20, 10 写法。"
+    },
+    {
+      "q": "下列哪种 JOIN 只返回两表中满足连接条件的行？",
+      "level": "进阶",
+      "options": [
+        "LEFT JOIN",
+        "RIGHT JOIN",
+        "INNER JOIN",
+        "FULL JOIN"
+      ],
+      "answer": 2,
+      "explain": "INNER JOIN（内连接）只返回两表中满足 ON 条件的行，无匹配的行不出现在结果中。LEFT JOIN 返回左表全部，RIGHT JOIN 返回右表全部，FULL JOIN 返回两表全部。"
+    },
+    {
+      "q": "LEFT JOIN 中，左表某行在右表无匹配时，结果中右表字段值为？",
+      "level": "进阶",
+      "options": [
+        "空字符串 ''",
+        "0",
+        "NULL",
+        "报错"
+      ],
+      "answer": 2,
+      "explain": "LEFT JOIN 返回左表所有行，右表无匹配时右表所有字段填充为 NULL（不是空字符串或 0）。常通过 IS NULL 判断左表在右表无匹配的行。"
+    },
+    {
+      "q": "自连接（Self Join）常用于哪种场景？",
+      "level": "进阶",
+      "options": [
+        "两个不同表的笛卡尔积",
+        "同一表内的层级关系如员工-经理",
+        "合并两个结果集",
+        "优化查询性能"
+      ],
+      "answer": 1,
+      "explain": "自连接是表与自身连接，通过为同一表取不同别名区分。常用于层级关系（员工-经理、分类-父分类、好友关系）。例如 SELECT e.name, m.name FROM emp e LEFT JOIN emp m ON e.manager_id = m.id。"
+    },
+    {
+      "q": "USING(dept_id) 与 ON a.dept_id = b.dept_id 的区别是？",
+      "level": "进阶",
+      "options": [
+        "完全等价无区别",
+        "USING 要求两表连接列同名，且结果中该列只出现一次",
+        "ON 不能用于 JOIN",
+        "USING 性能更差"
+      ],
+      "answer": 1,
+      "explain": "USING 仅当两表连接列同名时使用，且结果集中该列只出现一次（ON 写法会重复出现两列）。ON 更灵活，可连接不同名列、支持复杂条件。推荐 ON，可读性更好。"
+    },
+    {
+      "q": "关于子查询，下列哪个是标量子查询？",
+      "level": "进阶",
+      "options": [
+        "SELECT dept_id, name FROM emp WHERE salary > (SELECT AVG(salary) FROM emp)",
+        "SELECT name FROM emp WHERE dept_id IN (SELECT id FROM dept)",
+        "SELECT * FROM (SELECT * FROM emp) t",
+        "SELECT * FROM emp WHERE EXISTS (SELECT 1 FROM orders)"
+      ],
+      "answer": 0,
+      "explain": "标量子查询返回单个值（一行一列），可用于 WHERE、SELECT、HAVING 中与值比较。选项 1 是列子查询（返回一列），选项 2 是表子查询/派生表，选项 3 是相关子查询。"
+    },
+    {
+      "q": "下列哪个关键字用于定义公用表表达式（CTE）？",
+      "level": "进阶",
+      "options": [
+        "DECLARE",
+        "WITH",
+        "DEFINE",
+        "TEMPORARY"
+      ],
+      "answer": 1,
+      "explain": "CTE 使用 WITH 关键字定义：WITH name AS (SELECT ...) SELECT ... FROM name。CTE 提升可读性、可多次引用、支持递归，是替代派生表和临时表的优雅方案。"
+    },
+    {
+      "q": "递归 CTE 必须包含的两部分是？",
+      "level": "进阶",
+      "options": [
+        "WHERE 和 HAVING",
+        "基础查询（anchor）和递归查询，用 UNION ALL 连接",
+        "ORDER BY 和 LIMIT",
+        "GROUP BY 和聚合函数"
+      ],
+      "answer": 1,
+      "explain": "递归 CTE 必须包含基础部分（查询根节点/初始数据）和递归部分（引用自身 CTE 继续扩展），通过 UNION ALL 连接。递归在层级数据（组织树、菜单树、评论回复）中非常有用。"
+    },
+    {
+      "q": "EXISTS 与 IN 在子查询中的性能说法正确的是？",
+      "level": "进阶",
+      "options": [
+        "IN 永远比 EXISTS 快",
+        "EXISTS 永远比 IN 快",
+        "子查询结果集大时 EXISTS 通常更快，外表大时 IN 通常更快",
+        "两者性能完全相同"
+      ],
+      "answer": 2,
+      "explain": "取决于驱动表。当子查询结果集大、外表小时，EXISTS（外表驱动）通常更快；当子查询结果小、外表大时，IN 通常更快。原则是小表驱动大表。具体以执行计划为准。"
+    },
+    {
+      "q": "关于 ROW_NUMBER()、RANK()、DENSE_RANK() 的区别，下列正确的是？",
+      "level": "高级",
+      "options": [
+        "三者完全相同",
+        "ROW_NUMBER 唯一无重复，RANK 跳号，DENSE_RANK 不跳号",
+        "RANK 不跳号，DENSE_RANK 跳号",
+        "三者都跳号"
+      ],
+      "answer": 1,
+      "explain": "ROW_NUMBER 返回唯一连续序号（1,2,3,4）；RANK 同值并列但跳号（1,1,3,4）；DENSE_RANK 同值并列不跳号（1,1,2,3）。三者都需配合 ORDER BY 使用。"
+    },
+    {
+      "q": "窗口函数中 PARTITION BY 的作用是？",
+      "level": "高级",
+      "options": [
+        "对结果排序",
+        "将数据分区，窗口函数在各分区内独立计算",
+        "去重",
+        "限制返回行数"
+      ],
+      "answer": 1,
+      "explain": "PARTITION BY 将结果集按列分区，窗口函数在每个分区内独立计算，类似 GROUP BY 但不合并行。例如 ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY salary DESC) 取每部门内排名。"
+    },
+    {
+      "q": "LAST_VALUE() 默认返回的是什么？",
+      "level": "高级",
+      "options": [
+        "整个窗口的最后一行",
+        "当前 frame 的最后一行，默认 frame 为至当前行",
+        "分区的第一行",
+        "报错"
+      ],
+      "answer": 1,
+      "explain": "LAST_VALUE 默认 frame 是 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW，即返回当前行而非整个窗口的最后一行。要取分区最后一行需显式指定 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING。这是常见陷阱。"
+    },
+    {
+      "q": "下列聚合函数中，不忽略 NULL 的是？",
+      "level": "基础",
+      "options": [
+        "SUM",
+        "AVG",
+        "COUNT(*)",
+        "MAX"
+      ],
+      "answer": 2,
+      "explain": "COUNT(*) 统计所有行（含 NULL），不忽略 NULL。其他聚合函数 SUM、AVG、MIN、MAX、COUNT(列) 都自动忽略 NULL。注意 AVG 是忽略 NULL 后求平均，而非除以总行数。"
+    },
+    {
+      "q": "SELECT COUNT(bonus) FROM employees 的含义是？",
+      "level": "基础",
+      "options": [
+        "统计总行数",
+        "统计 bonus 不为 NULL 的行数",
+        "统计 bonus 唯一值数",
+        "统计 bonus 总和"
+      ],
+      "answer": 1,
+      "explain": "COUNT(列名) 统计该列非 NULL 值的数量。COUNT(*) 统计所有行（含 NULL）。COUNT(DISTINCT 列) 统计不同非 NULL 值数量。要计算有奖金的员工数应用 COUNT(bonus)。"
+    },
+    {
+      "q": "GROUP BY dept_id, job_title 的含义是？",
+      "level": "基础",
+      "options": [
+        "先按 dept_id 分组再按 job_title 排序",
+        "按 dept_id 和 job_title 的组合分组",
+        "只按 job_title 分组",
+        "按 dept_id 或 job_title 分组"
+      ],
+      "answer": 1,
+      "explain": "GROUP BY 多列表示按列组合分组，每组是 (dept_id, job_title) 值相同的行集合。先按第一列分组，第一列相同时再按第二列细分。NULL 视为单独一组。"
+    },
+    {
+      "q": "ROLLUP 和 CUBE 的区别是？",
+      "level": "基础",
+      "options": [
+        "完全相同",
+        "ROLLUP 产生层级汇总，CUBE 产生所有维度组合",
+        "CUBE 只有小计，ROLLUP 有总计",
+        "ROLLUP 比 CUBE 组合更多"
+      ],
+      "answer": 1,
+      "explain": "ROLLUP 按列顺序产生层级汇总（如 (a,b)→(a,b),(a),()），CUBE 产生所有维度组合（(a,b)→(a,b),(a),(b),()）。CUBE 组合更多，ROLLUP 更聚焦层级。GROUPING SETS 可自定义任意分组组合。"
+    },
+    {
+      "q": "UNION 和 UNION ALL 的主要区别是？",
+      "level": "进阶",
+      "options": [
+        "UNION 保留重复行，UNION ALL 去重",
+        "UNION 去重，UNION ALL 保留重复行",
+        "UNION 只能合并两表，UNION ALL 可多表",
+        "UNION 性能更好"
+      ],
+      "answer": 1,
+      "explain": "UNION 合并结果并去重（需排序去重，性能较差）；UNION ALL 保留所有行含重复（无去重排序，性能更好）。确定无重复或需保留重复时优先用 UNION ALL。"
+    },
+    {
+      "q": "INTERSECT 运算的结果是？",
+      "level": "进阶",
+      "options": [
+        "两结果集的并集",
+        "两结果集的交集",
+        "第一个结果集减去第二个",
+        "两结果集的笛卡尔积"
+      ],
+      "answer": 1,
+      "explain": "INTERSECT 返回两结果集都存在的行（交集），自动去重。EXCEPT/MINUS 返回只在第一个结果集出现的行（差集）。要求两结果集列数、类型对应。"
+    },
+    {
+      "q": "集合运算对两个 SELECT 的要求是？",
+      "level": "进阶",
+      "options": [
+        "列数相同，列顺序对应，类型兼容",
+        "列名必须相同",
+        "列数和类型必须完全一致",
+        "行数必须相同"
+      ],
+      "answer": 0,
+      "explain": "集合运算要求两 SELECT 列数相同、列顺序对应、数据类型兼容（不必完全一致）。最终结果列名以第一个 SELECT 为准。ORDER BY 只能放在最后一个 SELECT 之后。"
+    },
+    {
+      "q": "MySQL 中拼接字符串且自动跳过 NULL 的函数是？",
+      "level": "基础",
+      "options": [
+        "CONCAT",
+        "CONCAT_WS",
+        "GROUP_CONCAT",
+        "||"
+      ],
+      "answer": 1,
+      "explain": "CONCAT_WS(separator, s1, s2, ...) 用指定分隔符拼接，自动跳过 NULL。普通 CONCAT 中任一参数为 NULL 则整个结果为 NULL。GROUP_CONCAT 用于聚合拼接多行值。MySQL 默认 || 是逻辑或而非拼接。"
+    },
+    {
+      "q": "下列哪个函数用于 NULL 处理，且是标准 SQL？",
+      "level": "基础",
+      "options": [
+        "IFNULL",
+        "NVL",
+        "COALESCE",
+        "ISNULL"
+      ],
+      "answer": 2,
+      "explain": "COALESCE(expr1, expr2, ...) 返回第一个非 NULL 值，是 SQL 标准函数，所有主流数据库都支持。IFNULL 是 MySQL 专有（只支持两参数），NVL 是 Oracle 专有，ISNULL 在 SQL Server 中类似 IFNULL。"
+    },
+    {
+      "q": "DATE_ADD(NOW(), INTERVAL 7 DAY) 的结果是？",
+      "level": "基础",
+      "options": [
+        "当前时间往前 7 天",
+        "当前时间往后 7 天",
+        "7 天前的日期",
+        "7 天后的日期（不含时间）"
+      ],
+      "answer": 1,
+      "explain": "DATE_ADD(date, INTERVAL n UNIT) 返回 date 加上 n 个单位后的日期时间。INTERVAL 7 DAY 表示当前时间往后 7 天。DATE_SUB 是减。常用单位：SECOND、MINUTE、HOUR、DAY、MONTH、YEAR。"
+    },
+    {
+      "q": "CASE WHEN ... THEN ... ELSE ... END 表达式中 ELSE 缺省时返回？",
+      "level": "基础",
+      "options": [
+        "报错",
+        "空字符串",
+        "NULL",
+        "0"
+      ],
+      "answer": 2,
+      "explain": "CASE 表达式无 ELSE 时，若所有 WHEN 都不匹配则返回 NULL。这是与编程语言 switch default 不同的地方。建议显式写 ELSE 保证逻辑清晰。CASE 可用于 SELECT、WHERE、ORDER BY、GROUP BY 等。"
+    },
+    {
+      "q": "MySQL 中实现 UPSERT（存在则更新否则插入）的语法是？",
+      "level": "高级",
+      "options": [
+        "MERGE INTO",
+        "INSERT ... ON DUPLICATE KEY UPDATE",
+        "REPLACE ... WHERE",
+        "UPDATE OR INSERT"
+      ],
+      "answer": 1,
+      "explain": "MySQL 用 INSERT ... ON DUPLICATE KEY UPDATE 实现 UPSERT，依赖唯一键/主键判断冲突。REPLACE INTO 是先删后插（会丢失自增ID、触发器影响）。标准 SQL 用 MERGE INTO，PostgreSQL 用 ON CONFLICT。"
+    },
+    {
+      "q": "关于 ON CONFLICT (id) DO UPDATE，下列正确的是？",
+      "level": "高级",
+      "options": [
+        "MySQL 语法",
+        "PostgreSQL 语法，EXCLUDED 指代待插入的值",
+        "Oracle 语法",
+        "SQL Server 语法"
+      ],
+      "answer": 1,
+      "explain": "INSERT ... ON CONFLICT (列) DO UPDATE SET ... 是 PostgreSQL 的 UPSERT 语法，EXCLUDED 关键字指代本次尝试插入的值（被冲突阻止的那行）。冲突判断基于唯一约束或主键。"
+    },
+    {
+      "q": "RETURNING 子句的作用是？",
+      "level": "高级",
+      "options": [
+        "返回查询结果",
+        "INSERT/UPDATE/DELETE 后返回受影响的行",
+        "限制返回行数",
+        "返回错误信息"
+      ],
+      "answer": 1,
+      "explain": "RETURNING 用于 INSERT/UPDATE/DELETE 后返回受影响的行数据，常用于取自增 ID 或审计。PostgreSQL 和 Oracle 支持，MySQL 不支持（用 LAST_INSERT_ID() 取自增ID）。可返回多列。"
+    },
+    {
+      "q": "下列哪种情况会导致索引失效？",
+      "level": "高级",
+      "options": [
+        "WHERE col = 1（col 有索引）",
+        "WHERE col BETWEEN 1 AND 10",
+        "WHERE YEAR(date_col) = 2024",
+        "WHERE col = 'abc'（col 是字符串列）"
+      ],
+      "answer": 2,
+      "explain": "对索引列使用函数或运算（如 YEAR(date_col)）会导致索引失效，触发全表扫描。应改写为 date_col >= '2024-01-01' AND date_col < '2025-01-01'。其他选项都正常使用索引。前导通配符 LIKE '%abc'、隐式类型转换、OR 部分无索引也会失效。"
+    },
+    {
+      "q": "联合索引 (a, b, c) 能用于下列哪个查询？",
+      "level": "高级",
+      "options": [
+        "WHERE b = 1",
+        "WHERE c = 1",
+        "WHERE a = 1 AND b = 2",
+        "WHERE b = 1 AND c = 2"
+      ],
+      "answer": 2,
+      "explain": "联合索引遵循最左前缀原则，可匹配 (a)、(a,b)、(a,b,c)。选项 3 (a=1 AND b=2) 符合。其他选项未从最左列 a 开始，无法有效使用索引（可能扫描索引但效率低）。"
+    },
+    {
+      "q": "深度分页 LIMIT 100000, 10 性能优化的常用方法是？",
+      "level": "高级",
+      "options": [
+        "增加内存",
+        "使用延迟关联（子查询覆盖索引）",
+        "去掉 LIMIT",
+        "使用 UNION"
+      ],
+      "answer": 1,
+      "explain": "深度分页 OFFSET 大时需扫描跳过的行，性能差。优化方案：1) 延迟关联 SELECT * FROM t JOIN (SELECT id FROM t ORDER BY id LIMIT 100000,10) tmp ON t.id=tmp.id（子查询走覆盖索引）；2) 游标分页 WHERE id > last_id LIMIT 10（记住上一页末尾ID）。"
+    },
+    {
+      "q": "EXPLAIN 输出中 type 为 ALL 表示？",
+      "level": "高级",
+      "options": [
+        "使用主键索引",
+        "使用唯一索引",
+        "使用覆盖索引",
+        "全表扫描，性能最差"
+      ],
+      "answer": 3,
+      "explain": "type 表示访问类型，性能从好到差：const > eq_ref > ref > range > index > ALL。ALL 是全表扫描，最慢，通常需优化（加索引或改写）。index 是扫描整个索引树（比 ALL 好，但仍是全扫描）。"
+    },
+    {
+      "q": "PRIMARY KEY 约束等价于哪两种约束的组合？",
+      "level": "基础",
+      "options": [
+        "UNIQUE + DEFAULT",
+        "NOT NULL + UNIQUE",
+        "UNIQUE + CHECK",
+        "NOT NULL + DEFAULT"
+      ],
+      "answer": 1,
+      "explain": "PRIMARY KEY 主键等价于 NOT NULL + UNIQUE，唯一标识每行且不能为空。每表只能有一个主键（可复合）。主键会自动创建索引（多数 DB 为聚簇索引）。"
+    },
+    {
+      "q": "外键 ON DELETE CASCADE 的含义是？",
+      "level": "基础",
+      "options": [
+        "删除被引用行时拒绝操作",
+        "删除被引用行时同步删除本表引用行",
+        "删除被引用行时将外键设为 NULL",
+        "删除被引用行时无影响"
+      ],
+      "answer": 1,
+      "explain": "ON DELETE CASCADE 表示被引用行删除时，本表引用该行的记录同步删除。SET NULL 是设为 NULL，RESTRICT/NO ACTION 是拒绝删除（保证参照完整性）。CASCADE 需谨慎使用避免误删。"
+    },
+    {
+      "q": "CHECK 约束的作用是？",
+      "level": "基础",
+      "options": [
+        "保证列唯一",
+        "保证列非空",
+        "限制列值满足指定条件",
+        "建立两表关联"
+      ],
+      "answer": 2,
+      "explain": "CHECK 约束限制列值必须满足布尔表达式，如 age CHECK (age >= 0 AND age <= 150)、salary CHECK (salary > 0)。用于域完整性，保证业务规则。MySQL 8.0.16 才真正强制执行 CHECK（之前只校验语法）。"
+    },
+    {
+      "q": "关于可更新视图，下列哪个视图通常可执行 UPDATE？",
+      "level": "进阶",
+      "options": [
+        "含多表 JOIN 的视图",
+        "含聚合函数 COUNT 的视图",
+        "基于单表无聚合的简单视图",
+        "含 DISTINCT 的视图"
+      ],
+      "answer": 2,
+      "explain": "可更新视图需满足：基于单表、无聚合函数、无 GROUP BY/HAVING/DISTINCT、无 JOIN/UNION、SELECT 列无计算表达式、包含底层表所有 NOT NULL 列。复杂视图通常不可更新。"
+    },
+    {
+      "q": "存储过程与自定义函数的区别，下列正确的是？",
+      "level": "进阶",
+      "options": [
+        "函数可有返回值也可无，过程必须返回",
+        "函数必须返回单个值且可用于 SELECT，过程用 CALL 调用",
+        "两者完全等价",
+        "过程可在 SELECT 中使用"
+      ],
+      "answer": 1,
+      "explain": "函数必须返回单个值且可在 SELECT 等表达式中使用（如 SELECT get_name(id)）；过程用 CALL 调用，可返回多结果集、可无返回值、可执行事务、支持流程控制。函数不能执行事务和 DDL。"
+    },
+    {
+      "q": "触发器的执行时机和事件组合，下列哪个不合法？",
+      "level": "进阶",
+      "options": [
+        "BEFORE INSERT",
+        "AFTER UPDATE",
+        "BEFORE DELETE",
+        "BEFORE SELECT"
+      ],
+      "answer": 3,
+      "explain": "触发器只针对 INSERT/UPDATE/DELETE 三种 DML 事件，结合 BEFORE/AFTER 时机。SELECT 不能触发触发器。BEFORE 常用于数据校验和修改 NEW 值，AFTER 用于审计日志、级联更新。"
+    },
+    {
+      "q": "SQL 注入最有效的防范方法是？",
+      "level": "高级",
+      "options": [
+        "过滤特殊字符如单引号",
+        "使用参数化查询/预编译语句",
+        "限制输入长度",
+        "关闭错误信息显示"
+      ],
+      "answer": 1,
+      "explain": "参数化查询（预编译语句）将 SQL 结构与数据分离，数据永远不会被解析为 SQL，是防范 SQL 注入最有效的方法。过滤字符、限制长度是辅助手段，可能被绕过。MyBatis 用 #{} 而非 ${}。"
+    },
+    {
+      "q": "MyBatis 中 #{} 和 ${} 的区别是？",
+      "level": "高级",
+      "options": [
+        "完全相同，都参数化",
+        "#{} 参数化安全，${} 字符串拼接有注入风险",
+        "${} 参数化安全，#{} 字符串拼接",
+        "#{} 用于查询，${} 用于更新"
+      ],
+      "answer": 1,
+      "explain": "#{} 是参数化占位符（生成 ? 由 JDBC 处理），安全防注入。${} 是字符串拼接，直接替换进 SQL，有 SQL 注入风险，仅用于表名、列名、ORDER BY 列等不能参数化的场景，且必须做白名单校验。"
+    },
+    {
+      "q": "GRANT SELECT ON db.* TO 'user'@'%' 的作用是？",
+      "level": "高级",
+      "options": [
+        "撤销用户查询权限",
+        "授予用户对 db 库所有表的查询权限",
+        "创建新用户",
+        "删除用户"
+      ],
+      "answer": 1,
+      "explain": "GRANT 授权。db.* 表示 db 数据库下所有表。'user'@'%' 中 % 表示任意主机可连接。授予后需 FLUSH PRIVILEGES 刷新（部分场景）。权限可列级、表级、库级、全局。WITH GRANT OPTION 可传递权限。"
+    },
+    {
+      "q": "REVOKE INSERT ON mydb.* FROM 'user'@'%' 的作用是？",
+      "level": "高级",
+      "options": [
+        "授予插入权限",
+        "撤销用户对 mydb 库所有表的插入权限",
+        "查询用户权限",
+        "删除用户"
+      ],
+      "answer": 1,
+      "explain": "REVOKE 撤销权限，语法与 GRANT 对应。撤销后用户仍可能通过其他授权途径保留权限，需检查 SHOW GRANTS。REVOKE ALL PRIVILEGES 撤销所有权限，DROP USER 才完全删除用户。"
+    },
+    {
+      "q": "下列哪种数据脱敏方式适用于手机号 13812345678？",
+      "level": "高级",
+      "options": [
+        "直接显示全部数字",
+        "CONCAT(LEFT(phone,3),'****',RIGHT(phone,4)) 显示 138****5678",
+        "全部替换为 0",
+        "显示前 4 位"
+      ],
+      "answer": 1,
+      "explain": "手机号脱敏常用前 3 后 4 中间星号：CONCAT(LEFT(phone,3),'****',RIGHT(phone,4)) → 138****5678。身份证常前 6 后 4，邮箱常前 2 后域名。脱敏应在查询层或视图层进行，底层存储完整数据。"
+    },
+    {
+      "q": "数据库审计日志应记录哪些关键信息？",
+      "level": "高级",
+      "options": [
+        "只记录查询语句",
+        "何人、何时、何操作、何对象、新旧值",
+        "只记录失败操作",
+        "只记录管理员操作"
+      ],
+      "answer": 1,
+      "explain": "审计日志应记录：操作人、时间、操作类型（INSERT/UPDATE/DELETE/DDL）、操作对象（表、行）、旧值、新值。日志应独立存储防篡改，定期审查异常操作（如大批量删除、权限变更、敏感数据查询）。"
     }
   ]
 };
