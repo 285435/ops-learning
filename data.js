@@ -451,6 +451,62 @@ const KNOWLEDGE = {
         "level": "高级",
         "content": "**容器 = namespace + cgroup + rootfs**\n- namespace：隔离视图（进程/网络/挂载等）\n- cgroup：限制资源（CPU/内存/IO）\n- rootfs：文件系统视图（镜像层）\n\n**Linux Namespace 类型**\n- PID：进程 ID 隔离，容器内 PID 1 是 init\n- NET：网络栈隔离（网卡/路由/iptables/端口）\n- MNT：挂载点隔离（文件系统视图）\n- UTS：主机名/域名隔离\n- IPC：消息队列/共享内存隔离\n- USER：用户 UID 映射，容器 root 映射宿主普通用户\n- CGROUP：cgroup 视图隔离（4.6+）\n\n**namespace 操作**\n- unshare：在新 namespace 中运行命令\n- nsenter：进入已有 namespace\n- /proc/PID/ns/：查看进程的 namespace\n- setns：切换 namespace\n\n**Cgroup（Control Group）**\n- 限制/隔离/统计进程组资源\n- v1：每个控制器独立层级\n- v2：统一层级（推荐，现代系统默认）\n- 控制器：cpu/cpuacct/memory/blkio/pids/devices/net_cls\n\n**cgroup v2 资源限制**\n- cpu.max：CPU 配额（quota period）\n- cpu.weight：CPU 权重（1-10000）\n- memory.max：内存上限\n- memory.swap.max：swap 上限\n- io.max：IO 限制\n- pids.max：进程数上限\n\n**Docker 实现机制**\n- docker run 调用 runc\n- runc 调用 clone(CLONE_NEWPID|CLONE_NEWNET|...) 创建 namespace\n- 设置 cgroup 限制\n- 挂载 rootfs（OverlayFS 分层）\n- 执行容器进程\n\n**OverlayFS（联合文件系统）**\n- lowerdir：只读层（镜像层）\n- upperdir：可读写层（容器层）\n- merged：合并视图\n- 容器修改文件：复制到 upperdir 再改（CoW）\n- 删除文件：在 upperdir 创建 whiteout\n\n**容器隔离的局限**\n- 内核共享：所有容器共享宿主内核\n- 内核漏洞影响所有容器\n- /proc /sys 部分未隔离\n- root 权限需谨慎（user namespace 缓解）\n- 资源争抢：cpu scheduler、IO 调度\n\n**安全加固**\n- 最小权限：--cap-drop ALL --cap-add NET_BIND_SERVICE\n- no-new-privileges:true\n- read-only rootfs：--read-only\n- seccomp：限制系统调用\n- AppArmor / SELinux：MAC\n- user namespace：root 映射",
         "example": "# 查看进程的 namespace\nls -l /proc/$$/ns\n# 显示 net/pid/mnt/user/uts/ipc/cgroup 链接\n\n# 比较两个进程是否同一 namespace\nreadlink /proc/1001/ns/net\nreadlink /proc/1002/ns/net\n\n# 用 unshare 创建新 namespace\nunshare --pid --fork --mount-proc bash\n# 此时 bash 是容器内 PID 1\nps aux  # 只能看到自己\n\n# 创建网络 namespace\nip netns add ns1\nip netns exec ns1 ip a\nip netns exec ns1 bash  # 进入网络命名空间\nip netns del ns1\n\n# 用 nsenter 进入容器 namespace\nPID=$(docker inspect -f '{{.State.Pid}}' mycontainer)\nnsenter -t $PID -m -u -i -n -p bash\n\n# cgroup v2 查看\ncat /sys/fs/cgroup/cgroup.controllers\n# cpu memory io pids ...\n\n# 创建 cgroup 并限制\nmkdir /sys/fs/cgroup/myapp\necho '100000 100000' > /sys/fs/cgroup/myapp/cpu.max  # 1 核\necho '512M' > /sys/fs/cgroup/myapp/memory.max\necho 100 > /sys/fs/cgroup/myapp/pids.max\necho $$ > /sys/fs/cgroup/myapp/cgroup.procs  # 加入进程\n\n# Docker 资源限制\ndocker run -d --name web \\\n  --cpus='1.5' \\\n  --memory='512m' \\\n  --memory-swap='1g' \\\n  --pids-limit=200 \\\n  --cap-drop=ALL --cap-add=NET_BIND_SERVICE \\\n  --security-opt=no-new-privileges \\\n  --read-only \\\n  nginx\n\n# 查看 Docker 容器的 cgroup\ndocker exec mycontainer cat /sys/fs/cgroup/memory.max\n# 或在宿主查看\ncat /sys/fs/cgroup/system.slice/docker-<id>.scope/memory.max\n\n# 查看 OverlayFS 层\ndocker inspect mycontainer | grep -A5 GraphDriver\n# 显示 LowerDir / UpperDir / MergedDir / WorkDir\n\n# 容器内执行实际上调用宿主内核\nstrace -p $(docker inspect -f '{{.State.Pid}}' mycontainer) \\\n  -e trace=openat,read,write 2>&1 | head"
+      },
+      {
+        "id": "linux-boot",
+        "title": "Linux 启动流程深度解析",
+        "level": "高级",
+        "content": "**完整启动流程**\n1. **BIOS/UEFI 阶段**\n   - POST 硬件自检\n   - 查找启动设备（按 BIOS 设置顺序）\n   - UEFI 直接从 EFI 分区加载 bootloader\n   - Legacy BIOS 读取 MBR 前 512 字节（446 字节 bootloader + 64 字节分区表 + 2 字节签名 0x55AA）\n\n2. **Bootloader 阶段**\n   - GRUB2（主流）：/boot/grub2/grub.cfg\n   - 显示启动菜单，加载内核 vmlinuz 和 initramfs\n   - GRUB 命令行：ls 查看分区、set root、linux /vmlinuz、initrd /initramfs、boot\n   - 单用户模式/救援模式通过 GRUB 编辑内核参数实现\n\n3. **内核阶段**\n   - 解压自身、初始化内存管理、CPU 检测\n   - 挂载 initramfs（内存中的临时根文件系统）\n   - 加载必要驱动模块（存储、文件系统）\n   - 切换真正的根文件系统（pivot_root）\n   - 执行第一个用户空间程序 /sbin/init（PID 1）\n\n4. **init 阶段**\n   - **SysVinit**（旧）：运行 /etc/inittab，按运行级别启动服务\n   - **systemd**（现代）：并行启动服务，依赖图管理\n   - systemd 目标（target）替代运行级别\n\n5. **用户空间初始化**\n   - 启动各系统服务\n   - 网络初始化\n   - getty 登录终端\n   - 图形界面（如配置）\n\n**initramfs vs initrd**\n- initrd：ramdisk，需要额外驱动支持，会占用 block 设备\n- initramfs：tmpfs，CPIO 归档直接解压到内存，无块设备开销，更灵活\n- 现代都用 initramfs\n\n**systemd 启动分析**\n- systemd-analyze：总启动时间\n- systemd-analyze blame：各服务耗时\n- systemd-analyze critical-chain：关键路径\n- systemd-analyze plot > boot.svg：生成启动图\n\n**启动故障排查**\n- 卡在某个服务：systemctl 查看、添加 systemd.debug-shell\n- 根文件系统找不到：检查 fstab、UUID、initramfs 中的驱动\n- 内核 panic：检查硬件兼容性、内核参数\n- GRUB 修复：grub2-install /dev/sda、grub2-mkconfig -o /boot/grub2/grub.cfg",
+        "example": "# 查看启动耗时\nsystemd-analyze\n# Startup finished in 3.234s (kernel) + 2.1s (initramfs) + 15.6s (userspace) = 21.0s\n\n# 查看各服务耗时\nsystemd-analyze blame\n#   8.3s docker.service\n#   3.1s NetworkManager-wait-online.service\n#   2.5s mysqld.service\n\n# 关键路径\nsystemd-analyze critical-chain\n\n# 生成启动图\nsystemd-analyze plot > /tmp/boot.svg\n\n# 查看当前启动目标\ncat /etc/systemd/system/default.target  # 通常是 graphical.target 或 multi-user.target\n\n# GRUB 配置\n# /etc/default/grub 主要配置\n# GRUB_TIMEOUT=5\n# GRUB_CMDLINE_LINUX=\"quiet rhgb\"\n# GRUB_DEFAULT=saved\ngrub2-mkconfig -o /boot/grub2/grub.cfg\n\n# initramfs 内容查看\nlsinitrd /boot/initramfs-$(uname -r).img | less\n\n# 重建 initramfs\ndracut -f /boot/initramfs-$(uname -r).img $(uname -r)\n\n# 单用户模式（GRUB 编辑）\n# 启动时按 e，找到 linux 行末尾加 systemd.unit=rescue.target\n# 或 init=/bin/bash\n\n# 救援模式\nsystemctl rescue  # 相当于运行级别 1\nsystemctl emergency  # 最小环境，不挂载其他文件系统"
+      },
+      {
+        "id": "linux-selinux",
+        "title": "SELinux 与 AppArmor 安全机制",
+        "level": "高级",
+        "content": "**SELinux（Security-Enhanced Linux）**\n- NSA 开发的强制访问控制（MAC）\n- 基于标签（Label）的安全策略\n- 每个进程和文件都有安全上下文（security context）\n- 格式：user:role:type:level\n\n**SELinux 三种模式**\n- **enforcing**：强制模式，违反策略的操作被拒绝\n- **permissive**：宽容模式，只记录不阻止（用于排错）\n- **disabled**：完全关闭\n- getenforce / setenforce 0|1 查看和临时切换\n- /etc/selinux/config 永久配置\n\n**SELinux 上下文查看与修改**\n- ls -Z：查看文件安全上下文\n- ps -eZ：查看进程安全上下文\n- chcon：临时修改上下文\n- semanage fcontext：永久修改上下文规则\n- restorecon：恢复默认上下文\n\n**常见 SELinux 问题**\n- 服务无法访问文件：上下文不匹配\n- Apache/Nginx 403：httpd_sys_content_t\n- FTP 上传失败：public_content_rw_t\n- 自定义端口服务：semanage port\n\n**AppArmor（Ubuntu/Debian 默认）**\n- 基于路径的 MAC\n- 配置文件在 /etc/apparmor.d/\n- aa-status：查看状态\n- aa-enforce / aa-complain：切换模式\n- 比 SELinux 简单，学习曲线低\n\n**SELinux vs AppArmor**\n- SELinux：基于标签，更细粒度，但复杂\n- AppArmor：基于路径，易用，但灵活性稍差\n- 两者不能同时启用\n- RHEL/CentOS/Fedora 默认 SELinux，Ubuntu/Debian 默认 AppArmor",
+        "example": "# SELinux 状态\ngetenforce\n# Enforcing\n\n# 查看文件上下文\nls -Z /var/www/html/index.html\n# system_u:object_r:httpd_sys_content_t:s0 /var/www/html/index.html\n\n# 临时切换模式\nsetenforce 0  # permissive\nsetenforce 1  # enforcing\n\n# 永久修改 /etc/selinux/config\nSELINUX=enforcing\nSELINUXTYPE=targeted\n\n# 修改文件上下文（临时）\nchcon -t httpd_sys_content_t /web/index.html\n\n# 永久修改（规则持久化）\nsemanage fcontext -a -t httpd_sys_content_t \"/web(/.*)?\"\nrestorecon -Rv /web\n\n# 允许 httpd 访问自定义端口\nsemanage port -a -t http_port_t -p tcp 8080\n\n# 查看 SELinux 日志排错\nausearch -m AVC -ts recent  # 查看近期拒绝\n# 或安装 setroubleshoot\ncat /var/log/audit/audit.log | grep AVC\n\n# AppArmor\naa-status  # 查看状态\naa-enforce /etc/apparmor.d/usr.sbin.nginx  # 强制模式\naa-complain /etc/apparmor.d/usr.sbin.nginx  # 投诉模式\napparmor_parser -r /etc/apparmor.d/usr.sbin.nginx  # 重新加载配置"
+      },
+      {
+        "id": "linux-lvm",
+        "title": "LVM 逻辑卷管理",
+        "level": "高级",
+        "content": "**LVM 三层架构**\n1. **PV（Physical Volume）**：物理卷，把磁盘/分区转为 LVM 可用\n2. **VG（Volume Group）**：卷组，一个或多个 PV 组成的存储池\n3. **LV（Logical Volume）**：逻辑卷，从 VG 中分配，相当于虚拟分区\n\n**优势**\n- 动态扩容/缩容\n- 快照备份\n- 跨多个物理磁盘\n- 在线迁移\n\n**常用命令**\n- pvcreate / pvdisplay / pvs / pvremove\n- vgcreate / vgextend / vgreduce / vgdisplay / vgs\n- lvcreate / lvextend / lvreduce / lvremove / lvdisplay / lvs\n\n**创建流程**\n1. fdisk/gdisk 创建分区（类型 8e Linux LVM）\n2. pvcreate /dev/sdb1\n3. vgcreate myvg /dev/sdb1 /dev/sdc1\n4. lvcreate -L 50G -n mylv myvg\n5. mkfs.ext4 /dev/myvg/mylv\n6. mount /dev/myvg/mylv /mnt/data\n\n**扩容**\n- 空间不足：vgextend 加新 PV，再 lvextend + resize2fs/xfs_growfs\n- 在线扩容：无需卸载（ext4/xfs 支持）\n\n**快照**\n- lvcreate -s -L 10G -n snap /dev/myvg/mylv\n- 快照是 COW（写时复制），不复制原始数据\n- 快照量超出容量会失效\n- 恢复快照：umount + lvconvert --merge\n\n**缩容**\n- ext4 支持，xfs 不支持在线缩容\n- 先卸载 → e2fsck → resize2fs 缩文件系统 → lvreduce\n\n**迁移**\n- pvmove /dev/sdb1：将 PV 上的数据迁移到 VG 中其他 PV\n- 在线迁移，不中断服务",
+        "example": "# 创建 LVM\nfdisk /dev/sdb  # 创建分区，类型选 8e (Linux LVM)\npvcreate /dev/sdb1 /dev/sdc1\nvgcreate datavg /dev/sdb1 /dev/sdc1\nlvcreate -L 100G -n datalv datavg\nmkfs.ext4 /dev/datavg/datalv\nmkdir /data\nmount /dev/datavg/datalv /data\necho '/dev/datavg/datalv /data ext4 defaults 0 0' >> /etc/fstab\n\n# 查看\npvs  # 物理卷\nvgs  # 卷组\nlvs  # 逻辑卷\npvdisplay /dev/sdb1\nvgdisplay datavg\nlvdisplay /dev/datavg/datalv\n\n# 扩容（加新磁盘）\npvcreate /dev/sdd1\nvgextend datavg /dev/sdd1\nlvextend -L +50G /dev/datavg/datalv\n# 或 lvextend -l +100%FREE /dev/datavg/datalv (用完所有可用空间)\nresize2fs /dev/datavg/datalv  # ext4\n# xfs_growfs /data  # xfs\n\n# 创建快照\nlvcreate -s -L 20G -n datalv_snap /dev/datavg/datalv\n# 快照挂载查看\nmount /dev/datavg/datalv_snap /mnt/snap\n# 恢复快照\numount /data\nlvconvert --merge /dev/datavg/datalv_snap\nmount /dev/datavg/datalv /data\n\n# 缩容（ext4，xfs不支持缩容）\numount /data\ne2fsck -f /dev/datavg/datalv\nresize2fs /dev/datavg/datalv 50G\nlvreduce -L 50G /dev/datavg/datalv\nmount /dev/datavg/datalv /data\n\n# 迁移数据到新磁盘（在线）\npvcreate /dev/sde1\nvgextend datavg /dev/sde1\npvmove /dev/sdb1  # 把 sdb1 数据移到其他 PV\nvgreduce datavg /dev/sdb1\npvremove /dev/sdb1"
+      },
+      {
+        "id": "linux-raid",
+        "title": "RAID 磁盘阵列",
+        "level": "高级",
+        "content": "**RAID 级别**\n\n| 级别 | 磁盘数 | 可用容量 | 容错 | 读性能 | 写性能 | 用途 |\n|------|--------|---------|------|--------|--------|------|\n| RAID 0 | >=2 | 100% | 无 | 高 | 高 | 临时数据 |\n| RAID 1 | >=2 | 50% | 1块 | 高 | 中 | 系统盘 |\n| RAID 5 | >=3 | (n-1)/n | 1块 | 高 | 中 | 通用存储 |\n| RAID 6 | >=4 | (n-2)/n | 2块 | 高 | 低 | 大容量存储 |\n| RAID 10 | >=4 | 50% | 每组1块 | 很高 | 高 | 高可用+高性能 |\n\n**RAID 0**：条带化，数据分散到多个盘，无冗余，性能最高\n**RAID 1**：镜像，两块盘互为备份，读并行，写两份\n**RAID 5**：条带+分布式奇偶校验，允许坏1块，写惩罚（读旧数据+读旧校验+写新数据+写新校验 = 4 IO）\n**RAID 6**：双奇偶校验，允许坏2块，写惩罚更大\n**RAID 10**：RAID 1+0，先做镜像再条带化，性能+容错兼顾\n\n**软件 RAID**\n- mdadm：Linux 软 RAID 工具\n- /proc/mdstat：查看状态\n- mdadm --detail /dev/md0：详细信息\n\n**硬件 RAID**\n- RAID 卡（LSI/Broadcom、Adaptec）\n- 带电池缓存（BBU），断电保护\n- 性能优于软 RAID\n\n**创建 mdadm RAID**\n```bash\nmdadm --create /dev/md0 --level=1 --raid-devices=2 /dev/sdb1 /dev/sdc1\n```\n\n**监控**\n- 配置 /etc/mdadm.conf\n- 设置邮件告警\n- 热备盘（spare）自动重建\n\n**重建**\n- mdadm --manage /dev/md0 --add /dev/sdd1（添加热备或替换故障盘）\n- 重建期间 IO 性能下降\n\n**LVM on RAID vs RAID on LVM**\n- RAID on LVM：先建 LVM，LV 做 RAID（不推荐）\n- LVM on RAID：先建 RAID，RAID 上做 LVM（推荐，灵活性高）",
+        "example": "# 创建 RAID 1\nmdadm --create /dev/md0 --level=1 --raid-devices=2 /dev/sdb1 /dev/sdc1\nmkfs.ext4 /dev/md0\nmount /dev/md0 /mnt/raid1\n\n# 查看状态\ncat /proc/mdstat\n# Personalities : [raid1] [raid6] [raid5] [raid4]\n# md0 : active raid1 sdc1[1] sdb1[0]\n#       1046528 blocks super 1.2 [2/2] [UU]\n#       [UU] 表示两块都正常，[_U] 表示第一块故障\n\nmdadm --detail /dev/md0\n\n# 创建 RAID 5（至少3块）\nmdadm --create /dev/md1 --level=5 --raid-devices=3 /dev/sdb1 /dev/sdc1 /dev/sdd1\n\n# 配置持久化\necho 'DEVICE /dev/sdb1 /dev/sdc1' > /etc/mdadm.conf\nmdadm --detail --scan >> /etc/mdadm.conf\nupdate-initramfs -u\n\n# 模拟故障\necho 1 > /sys/block/sdb/device/delete  # 或拔盘\n# 查看降级状态\ncat /proc/mdstat\n# md0 : active raid1 sdc1[1] sdb1[0](F)\n#       [U_] 表示第一块故障\n\n# 移除故障盘并添加新盘\nmdadm --manage /dev/md0 --remove /dev/sdb1\nmdadm --manage /dev/md0 --add /dev/sde1\n# 自动开始重建\ncat /proc/mdstat  # 显示重建进度\n\n# 添加热备盘\nmdadm --manage /dev/md0 --add-spare /dev/sdf1\n\n# 停止 RAID\numount /dev/md0\nmdadm --stop /dev/md0\nmdadm --zero-superblock /dev/sdb1 /dev/sdc1"
+      },
+      {
+        "id": "linux-dns-resolve",
+        "title": "DNS 配置与故障排查",
+        "level": "进阶",
+        "content": "**Linux DNS 解析流程**\n1. 检查 /etc/nsswitch.conf 中 hosts 行配置\n2. 先查 /etc/hosts（如果 files 在前）\n3. 再查 DNS（/etc/resolv.conf）\n4. 也可查 NIS、LDAP 等（如果配置）\n\n**/etc/resolv.conf**\n- nameserver：DNS 服务器地址（最多3个）\n- search：搜索域（如 example.com）\n- options：超时、重试次数等\n- 传统上手动编辑，现代系统由 NetworkManager/systemd-resolved 管理\n\n**systemd-resolved**\n- 本地 DNS 缓存和解析服务\n- 监听 127.0.0.53\n- /etc/resolv.conf 通常指向它（nameserver 127.0.0.53）\n- resolvectl status：查看配置\n- resolvectl query：查询 DNS\n- 缓存加速重复查询\n\n**故障排查工具**\n- dig：最详细的 DNS 查询工具\n  - dig @8.8.8.8 example.com A\n  - dig +trace example.com（追踪解析链）\n- nslookup：简单查询\n- host：简洁查询\n- drill：unbound 带的工具\n\n**常见故障**\n1. resolv.conf 为空或配置错误 → 无法解析域名\n2. DNS 服务器不可达 → 超时\n3. DNS 缓存污染 → 解析到错误 IP\n4. /etc/hosts 配置错误 → 优先命中错误记录\n5. 防火墙阻断 UDP 53 → DNS 查询失败\n6. IPv6 优先导致问题 → 禁用 IPv6 DNS\n\n**排查步骤**\n1. ping 8.8.8.8（确认网络通）\n2. cat /etc/resolv.conf（确认 DNS 配置）\n3. dig example.com（测试解析）\n4. dig +trace（追踪完整链）\n5. 检查防火墙\n6. 重启 systemd-resolved / NetworkManager",
+        "example": "# 查看当前 DNS 配置\ncat /etc/resolv.conf\n# nameserver 127.0.0.53\n# search localdomain\n# options edns0 trust-ad\n\n# systemd-resolved 管理\nresolvectl status\n# 显示各接口的 DNS 配置\n\nresolvectl query google.com\n# google.com: 142.250.185.78\n\n# dig 详细查询\ndig google.com A\n# ;; ANSWER SECTION:\n# google.com.  285  IN  A  142.250.185.78\n\ndig @8.8.8.8 google.com A  # 指定 DNS 服务器\n# +short 简洁模式\ndig +short google.com\n\n# 追踪完整解析链\ndig +trace google.com\n\n# 查看 MX 记录\ndig google.com MX\n\n# 反向解析\ndig -x 8.8.8.8\n\n# nslookup\nnslookup google.com 8.8.8.8\n\n# 检查本地缓存（systemd-resolved）\nresolvectl statistics\n\n# 清空 DNS 缓存\nresolvectl flush-caches\n# 或 systemd-resolve --flush-caches\n\n# 手动配置 /etc/resolv.conf（无 NetworkManager 时）\ncat > /etc/resolv.conf <<EOF\nnameserver 223.5.5.5\nnameserver 119.29.29.29\nsearch example.com\noptions timeout:2 attempts:3\nEOF\n\n# 临时测试（不修改配置）\n# 用 nslookup - 交互模式设置 server\n\n# 防火墙检查\niptables -L -n | grep 53\nss -lunp | grep :53"
+      },
+      {
+        "id": "linux-tcpdump",
+        "title": "网络抓包分析 tcpdump",
+        "level": "进阶",
+        "content": "**tcpdump 基础**\n- 命令行抓包工具\n- 基于 libpcap\n- 需要 root 权限（或 CAP_NET_RAW）\n- 捕获指定接口的网络流量\n\n**基本语法**\n- tcpdump -i eth0：监听 eth0\n- tcpdump -i any：监听所有接口\n- tcpdump -c 100：抓100个包后停止\n- tcpdump -w file.pcap：写入文件（Wireshark 可读）\n- tcpdump -r file.pcap：读取文件\n- tcpdump -nn：不解析域名和端口名\n\n**过滤表达式**\n- host 192.168.1.1：指定主机\n- port 80：指定端口\n- src/dst：源/目标\n- net 192.168.0.0/24：网段\n- proto：协议（tcp/udp/icmp/arp）\n- and/or/not：逻辑组合\n\n**高级过滤**\n- tcpdump 'tcp[tcpflags] & tcp-syn != 0'：只抓 SYN 包\n- tcpdump 'tcp port 80 and (((ip[2:2] - ((ip[0]&0xf)<<2)) - ((tcp[12]&0xf0)>>2)) != 0)'：只抓有数据的 HTTP\n- tcpdump -s0：抓完整包（默认68字节）\n- tcpdump -A：以 ASCII 显示内容\n- tcpdump -X：十六进制显示\n\n**实用场景**\n1. 排查连接问题：抓 SYN/ACK/RST\n2. 分析 HTTP 请求：端口80抓包\n3. DNS 问题：端口53抓包\n4. 丢包排查：对比发送和接收\n5. 安全审计：监控异常流量\n\n**Wireshark 配合**\n- tcpdump -w capture.pcap 本地抓包\n- scp 下载后用 Wireshark 分析\n- tshark：Wireshark 的命令行版本\n\n**性能注意**\n- 生产环境抓包影响性能\n- 尽量用精确过滤减少数据量\n- 限制抓包数量或时间\n- 磁盘 I/O 可能成为瓶颈",
+        "example": "# 基本抓包\nsudo tcpdump -i eth0\n\n# 抓80端口\nsudo tcpdump -i eth0 port 80\n\n# 抓特定主机\nsudo tcpdump -i eth0 host 192.168.1.100\n\n# 抓特定主机和端口\nsudo tcpdump -i eth0 host 192.168.1.100 and port 443\n\n# 不解析名称，显示数字\nsudo tcpdump -i eth0 -nn port 443\n\n# 抓 ICMP (ping)\nsudo tcpdump -i eth0 icmp\n\n# 只抓 SYN 包（排查连接问题）\nsudo tcpdump 'tcp[tcpflags] & tcp-syn != 0 and tcp[tcpflags] & tcp-ack == 0'\n\n# 只抓有数据的 HTTP 包\nsudo tcpdump -i eth0 -s0 -A 'tcp port 80 and (((ip[2:2] - ((ip[0]&0xf)<<2)) - ((tcp[12]&0xf0)>>2)) != 0)'\n\n# 保存到文件\nsudo tcpdump -i eth0 -w /tmp/capture.pcap -C 100 -W 5\n# -C 100: 每个文件100MB\n# -W 5: 最多5个文件循环\n\n# 读取文件\nsudo tcpdump -r /tmp/capture.pcap\nsudo tcpdump -r /tmp/capture.pcap host 192.168.1.1  # 过滤读取\n\n# 显示 HTTP 请求头\nsudo tcpdump -i eth0 -s0 -A 'tcp port 80' | grep -E 'GET|POST|Host:|User-Agent:'\n\n# 抓 DNS 查询\nsudo tcpdump -i eth0 -nn port 53\n\n# 抓 MySQL 通信\nsudo tcpdump -i lo -s0 -l -nn port 3306 | strings\n\n# 统计连接数\nsudo tcpdump -i eth0 -nn 'tcp[tcpflags] & tcp-syn != 0' | awk '{print $3}' | cut -d. -f1-4 | sort | uniq -c | sort -rn\n\n# 限制包数\nsudo tcpdump -i eth0 -c 100 -w /tmp/100.pcap\n\n# 抓指定时间\nsudo timeout 30 tcpdump -i eth0 -w /tmp/30s.pcap\n\n# tshark 统计 Top 10 请求 IP\ntshark -r capture.pcap -q -z conv,ip"
+      },
+      {
+        "id": "linux-kernel-module",
+        "title": "内核模块与驱动",
+        "level": "高级",
+        "content": "**内核模块（Kernel Module）**\n- 动态加载/卸载的内核代码（.ko 文件）\n- 无需重新编译整个内核\n- 设备驱动、文件系统、网络协议等\n\n**常用命令**\n- lsmod：列出已加载模块\n- insmod /path/xxx.ko：加载模块\n- rmmod xxx：卸载模块\n- modprobe xxx：智能加载（自动解决依赖）\n- modprobe -r xxx：智能卸载\n- modinfo xxx：模块信息\n- depmod -a：生成模块依赖关系\n\n**模块信息**\n- /lib/modules/$(uname -r)/：模块目录\n- modules.dep：依赖关系\n- /etc/modprobe.d/：模块配置（黑名单、参数）\n\n**模块参数**\n- insmod xxx.ko param=value\n- modprobe xxx param=value\n- /etc/modprobe.d/xxx.conf 永久配置\n\n**黑名单**\n- /etc/modprobe.d/blacklist.conf\n- blacklist xxx：禁止自动加载\n\n**DKMS（Dynamic Kernel Module Support）**\n- 内核升级后自动重建模块\n- 常用于显卡驱动（NVIDIA）、VirtualBox Guest Additions\n- dkms status / dkms add / dkms build / dkms install\n\n**加载时自动执行**\n- /etc/modules-load.d/：开机加载的模块列表\n- systemd-modules-load.service\n\n**编写简单模块**\n```c\n#include <linux/module.h>\nstatic int __init hello_init(void) { printk(\"Hello\\n\"); return 0; }\nstatic void __exit hello_exit(void) { printk(\"Goodbye\\n\"); }\nmodule_init(hello_init);\nmodule_exit(hello_exit);\nMODULE_LICENSE(\"GPL\");\n```",
+        "example": "# 查看已加载模块\nlsmod\n# Module              Size  Used by\n# ext4              733184  2\n# crc16              16384  1 ext4\n\n# 加载模块\nsudo insmod /lib/modules/$(uname -r)/kernel/fs/nls/nls_utf8.ko\n# 或\nsudo modprobe nls_utf8  # 自动解决依赖\n\n# 卸载\nsudo rmmod nls_utf8\n# 或\nsudo modprobe -r nls_utf8\n\n# 模块信息\nmodinfo ext4\n# filename:       /lib/modules/.../ext4.ko\n# license:        GPL\n# description:    Fourth Extended Filesystem\n\n# 查看模块参数\ncat /sys/module/ext4/parameters/*\n\n# 带参数加载\nsudo modprobe zfs zfs_arc_max=4294967296\n\n# 永久配置参数\necho 'options zfs zfs_arc_max=4294967296' | sudo tee /etc/modprobe.d/zfs.conf\n\n# 黑名单模块\nsudo tee /etc/modprobe.d/blacklist.conf <<EOF\nblacklist nouveau\nEOF\n# 然后更新 initramfs\nsudo update-initramfs -u\n\n# 开机自动加载\necho 'nvme' | sudo tee /etc/modules-load.d/nvme.conf\n\n# DKMS\nsudo dkms status\n# nvidia/535.104.05, 6.2.0-36-generic, x86_64: installed\n\nsudo dkms build nvidia/535.104.05\nsudo dkms install nvidia/535.104.05\n\n# 查看模块日志\ndmesg | grep -i ext4\n# 或 journalctl -k | grep ext4"
+      },
+      {
+        "id": "linux-systemd-timer",
+        "title": "systemd 定时器（替代 cron）",
+        "level": "进阶",
+        "content": "**systemd Timer**\n- systemd 的定时任务机制\n- 替代传统 cron\n- 更灵活、更可靠、日志集成\n- 每个定时器关联一个 service 单元\n\n**Timer 类型**\n1. **实时定时器（Realtime）**：基于日历时间\n   - OnCalendar：类似 cron\n   - 可精确到微秒\n2. **单调定时器（Monotonic）**：基于系统启动时间\n   - OnBootSec：启动后多久\n   - OnStartupSec：systemd 启动后多久\n   - OnUnitActiveSec：上次激活后多久\n   - OnUnitInactiveSec：上次停止后多久\n\n**Timer 单元文件**\n```\n[Unit]\nDescription=My backup timer\n\n[Timer]\nOnCalendar=daily\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n```\n\n**Persistent=true**\n- 系统关机期间错过的任务，开机后立即补执行\n- cron 做不到这点\n\n**OnCalendar 格式**\n- daily → *-*-* 00:00:00\n- weekly → Mon *-*-* 00:00:00\n- hourly → *-*-* *:00:00\n- *-*-* 02:00:00 → 每天 2 点\n- Mon *-*-* 09:00:00 → 每周一 9 点\n- *-*-1 00:00:00 → 每月1号\n- *-01-01 00:00:00 → 每年元旦\n\n**与 cron 对比**\n| 特性 | systemd Timer | cron |\n|------|--------------|------|\n| 依赖管理 | 可依赖其他服务 | 无 |\n| 日志 | journalctl 统一查看 | 分散 |\n| 环境变量 | 继承 systemd 环境 | 最小环境 |\n| 错过执行 | Persistent 可补 | 丢失 |\n| 精度 | 微秒级 | 分钟级 |\n| 资源控制 | cgroups 限制 | 无 |\n| 开机执行 | OnBootSec | @reboot |\n\n**管理命令**\n- systemctl list-timers --all\n- systemctl start/stop/enable/disable xxx.timer\n- systemctl status xxx.timer",
+        "example": "# 创建定时器: 每天凌晨2点备份\n# /etc/systemd/system/backup.service\n'''\n[Unit]\nDescription=Daily backup\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/backup.sh\n'''\n\n# /etc/systemd/system/backup.timer\n'''\n[Unit]\nDescription=Run backup daily at 2am\n\n[Timer]\nOnCalendar=*-*-* 02:00:00\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n'''\n\nsudo systemctl daemon-reload\nsudo systemctl enable --now backup.timer\n\n# 查看所有定时器\nsystemctl list-timers --all\n# NEXT                          LEFT          LAST                          PASSED       UNIT           ACTIVATES\n# Fri 2024-02-02 02:00:00 CST   10h left      Thu 2024-02-01 02:00:01 CST   13h ago      backup.timer   backup.service\n\n# 查看定时器日志\njournalctl -u backup.service\njournalctl -u backup.timer\n\n# 即时触发一次（测试）\nsystemctl start backup.service\n\n# 复杂日历示例\n# 每15分钟\nOnCalendar=*:0/15\n\n# 工作日早9点晚6点\nOnCalendar=Mon..Fri 9,18:00\n\n# 每月1日和15日\nOnCalendar=*-*-1,15 00:00:00\n\n# 每3天\nOnCalendar=*-* 00:00:00\nOnUnitActiveSec=3d\n\n# 系统启动5分钟后执行\n'''\n[Timer]\nOnBootSec=5min\n'''\n\n# 上次执行后间隔1小时再次执行\n'''\n[Timer]\nOnUnitActiveSec=1h\n'''\n\n# 每10秒（精度远高于 cron）\n'''\n[Timer]\nOnCalendar=*-*-* *:*:0/10\n'''\n\n# 随机延迟（避免同时执行）\n'''\n[Timer]\nOnCalendar=daily\nRandomizedDelaySec=1h\n'''\n\n# 配合资源限制\n'''\n[Service]\nExecStart=/usr/local/bin/heavy-job.sh\nCPUQuota=50%\nMemoryMax=1G\n'''"
       }
     ]
   },
@@ -997,6 +1053,20 @@ const KNOWLEDGE = {
         "level": "进阶",
         "content": "**监控目标**\n- CPU/内存/磁盘/网络\n- 进程状态\n- 服务可用性\n- 日志关键字\n- 端口监听\n- 业务指标\n\n**CPU 监控**\n- top/htop：交互查看\n- /proc/loadavg：负载\n- /proc/stat：CPU 时间\n- mpstat：多核 CPU\n- vmstat：综合\n\n**内存监控**\n- free -m/-g\n- /proc/meminfo\n- ps：进程内存\n- smem：实际内存（PSS）\n\n**磁盘监控**\n- df：空间\n- du：目录大小\n- iostat：IO 性能\n- iotop：IO 进程\n- /proc/diskstats\n\n**网络监控**\n- ss/netstat：连接\n- iftop：流量\n- nethogs：进程流量\n- sar -n DEV：历史\n\n**进程监控**\n- pgrep/pkill：按名查找\n- pidof\n- ps + grep\n- /proc/PID/\n\n**告警通知**\n- 邮件：mailx/sendmail\n- Webhook：curl 调用钉钉/企业微信/Slack\n- 短信：API 调用\n\n**脚本设计原则**\n- 单一职责\n- 可配置（变量/配置文件）\n- 幂等（重复执行无害）\n- 有日志\n- 有退出码\n- 可被 cron 调度\n- 告警去重/收敛",
         "example": "#!/bin/bash\n# 综合监控脚本\n# 配置\nALERT_EMAIL=\"ops@example.com\"\nWEBHOOK_URL=\"https://oapi.dingtalk.com/robot/send?access_token=xxx\"\nLOG_FILE=\"/var/log/monitor.log\"\n\nlog() { echo \"$(date '+%F %T') $*\" | tee -a $LOG_FILE; }\n\nalert() {\n  local msg=$1\n  log \"[ALERT] $msg\"\n  # 钉钉 Webhook\n  curl -s -X POST \"$WEBHOOK_URL\" \\\n    -H 'Content-Type: application/json' \\\n    -d \"{\\\"msgtype\\\":\\\"text\\\",\\\"text\\\":{\\\"content\\\":\\\"[告警] $msg\\\"}}\"\n}\n\n# CPU 使用率检查\ncheck_cpu() {\n  local threshold=80\n  # 取所有 CPU 平均使用率\n  local usage=$(top -bn1 | grep 'Cpu(s)' |\n    awk '{print 100 - $8}' | cut -d. -f1)\n  if [ \"$usage\" -gt \"$threshold\" ]; then\n    alert \"CPU 使用率 ${usage}% 超过阈值 ${threshold}%\"\n  fi\n}\n\n# 内存检查\ncheck_memory() {\n  local threshold=90\n  local usage=$(free | awk '/Mem:/ {printf \"%.0f\", $3/$2*100}')\n  if [ \"$usage\" -gt \"$threshold\" ]; then\n    alert \"内存使用率 ${usage}% 超过阈值 ${threshold}%\"\n  fi\n}\n\n# 磁盘空间检查\ncheck_disk() {\n  local threshold=85\n  df -h | awk 'NR>1 && $5 ~ /%/ {print $5 \" \" $6}' | while read line; do\n    usage=$(echo $line | awk '{print $1}' | tr -d '%')\n    mount=$(echo $line | awk '{print $2}')\n    if [ \"$usage\" -gt \"$threshold\" ]; then\n      alert \"磁盘 ${mount} 使用率 ${usage}% 超过阈值\"\n    fi\n  done\n}\n\n# 进程存活检查\ncheck_process() {\n  local procs=(nginx mysqld redis-server)\n  for p in \"${procs[@]}\"; do\n    if ! pgrep -x \"$p\" > /dev/null; then\n      alert \"进程 $p 未运行\"\n      # 尝试重启\n      systemctl restart $p 2>/dev/null\n    fi\n  done\n}\n\n# 端口检查\ncheck_port() {\n  local services=(\"80:nginx\" \"3306:mysql\" \"6379:redis\")\n  for svc in \"${services[@]}\"; do\n    port=${svc%%:*}\n    name=${svc##*:}\n    if ! ss -tln | grep -q \":$port \"; then\n      alert \"${name} 端口 $port 未监听\"\n    fi\n  done\n}\n\n# 日志错误检查\ncheck_log() {\n  local log_file=/var/log/nginx/error.log\n  local count=$(awk -v d=\"$(date '+%Y/%m/%d %H:')\" \\\n    '$0 ~ d && /error|fatal/' $log_file | wc -l)\n  if [ \"$count\" -gt 100 ]; then\n    alert \"nginx error.log 最近 1 小时错误数 ${count}\"\n  fi\n}\n\n# 主流程\nmain() {\n  log \"=== 监控开始 ===\"\n  check_cpu\n  check_memory\n  check_disk\n  check_process\n  check_port\n  check_log\n  log \"=== 监控结束 ===\"\n}\n\nmain\n\n# cron 调度（每 5 分钟）\n# crontab -e\n# */5 * * * * /opt/monitor.sh\n\n# 一行式快速检查\n# CPU: top -bn1 | grep 'Cpu' | awk '{print 100-$8}'\n# 内存: free -m | awk '/Mem/ {print $3}'\n# 磁盘: df -h | awk '$5 > 85 {print}'\n# 连接数: ss -s | grep 'TCP:'\n# 负载: cat /proc/loadavg"
+      },
+      {
+        "id": "shell-security",
+        "title": "Shell 脚本安全与最佳实践",
+        "level": "高级",
+        "content": "**严格模式（Defensive Programming）**\n```bash\nset -euo pipefail\n```\n- -e：命令失败立即退出\n- -u：使用未定义变量报错\n- -o pipefail：管道中任一命令失败，整个管道返回非零\n- 配合 IFS=$'\\n\\t' 防止单词分割问题\n\n**输入验证**\n- 所有外部输入必须验证（位置参数、环境变量、文件内容）\n- 使用正则表达式匹配预期格式\n- 数字检查：`[[ $var =~ ^[0-9]+$ ]]`\n- 路径检查：禁止包含 .. 或以 / 开头（除非预期）\n\n**命令注入防护**\n- 永远不要把用户输入直接拼接到命令中\n- 使用数组传参：`cmd \"$@\"` 而非 `cmd $@`\n- 避免 eval 执行用户输入\n- 使用 printf '%q' 转义参数\n\n**敏感数据处理**\n- 密码通过 read -s 读取\n- 使用 mktemp 创建临时文件\n- 设置 umask 077 限制临时文件权限\n- trap 清理临时文件\n- 历史记录中隐藏敏感命令：命令前加空格（需 HISTCONTROL=ignorespace）\n\n**权限与SUID/SGID**\n- 脚本不宜设置 SUID/SGID（竞争条件风险）\n- 如需提权，使用 sudo + 白名单\n- 检查文件所有权和权限后再操作\n\n**审计与日志**\n- 记录脚本执行日志\n- 记录操作人、时间、参数、结果\n- 敏感操作需确认机制\n\n**常见陷阱**\n- 文件名含空格：始终用引号包围变量\n- 通配符未匹配时保持原样（shopt -s nullglob）\n- [ 和 [[ 的区别\n- 整数溢出：Shell 整数有精度限制\n- 递归深度限制",
+        "example": "#!/bin/bash\nset -euo pipefail\nIFS=$'\\n\\t'\n\n# 输入验证\nvalidate_input() {\n  local input=$1\n  if [[ ! $input =~ ^[a-zA-Z0-9_-]+$ ]]; then\n    echo \"Invalid input: $input\" >&2\n    exit 1\n  fi\n}\n\n# 安全临时文件\nTMPFILE=$(mktemp /tmp/script.XXXXXX)\ntrap 'rm -f \"$TMPFILE\"' EXIT\n\n# 隐藏密码输入\nread -rsp \"Enter password: \" PASSWORD\necho\n\n# 安全执行命令（数组方式）\ncmd=(ls -la \"/path with spaces\")\n\"${cmd[@]}\"\n\n# 参数转义\nuser_input='; rm -rf /'\nsafe_arg=$(printf '%q' \"$user_input\")\necho \"Safe arg: $safe_arg\"\n\n# 检查命令存在\ncommand -v jq >/dev/null 2>&1 || { echo \"jq required\" >&2; exit 1; }\n\n# 路径安全检查\npath='/etc/passwd'\nif [[ $path == *..* || $path == */* ]]; then\n  echo \"Path contains unsafe components\" >&2\n  exit 1\nfi\n\n# 设置严格的 umask\numask 077"
+      },
+      {
+        "id": "shell-text-processing",
+        "title": "文本处理高级技巧与实战",
+        "level": "高级",
+        "content": "**高级文本处理场景**\n\n1. **多文件批量处理**\n   - find + sed -i 批量替换\n   - 备份原文件：sed -i.bak\n   - 跨目录递归处理\n\n2. **CSV/TSV 处理**\n   - awk -F, 处理 CSV\n   - 处理含引号的字段（复杂 CSV）\n   - 推荐使用 csvkit（Python）或 mlr（Miller）\n\n3. **JSON 处理**\n   - jq：命令行 JSON 处理器\n   - jq '.key | .nested' 提取字段\n   - jq '.[] | select(.age > 18)' 过滤\n   - jq -s 'add' 合并多个 JSON\n\n4. **XML/HTML 处理**\n   - xmlstarlet\n   - pup（HTML）\n   - hxselect\n   - 简单提取可用 grep/sed/awk（不推荐复杂 HTML）\n\n5. **YAML 处理**\n   - yq（类似 jq）\n   - Python + PyYAML\n\n**文本编码处理**\n- file -i 检测编码\n- iconv 转换编码\n- enca 智能检测编码\n- dos2unix/unix2dos 换行符转换\n\n**文本-diff 与补丁**\n- diff -u 统一格式\n- patch 应用补丁\n- wdiff 单词级 diff\n- colordiff 彩色输出\n\n**随机与采样**\n- shuf 随机打乱\n- sort -R 随机排序\n- awk 'NR % 10 == 0' 每隔 N 行采样\n- head/tail 组合提取中间行",
+        "example": "# 批量替换多文件中的字符串\nfind . -name '*.conf' -exec sed -i 's/old_domain/new_domain/g' {} +\n\n# JSON 处理（jq）\ncurl -s api.example.com/data | jq '.users[] | {name: .name, email: .email}'\n\n# 处理 CSV 并计算平均值\nawk -F, 'NR>1 {sum+=$3; count++} END {print \"Avg:\" sum/count}' data.csv\n\n# 文本编码转换\niconv -f GBK -t UTF-8 input.txt > output.txt\n\n# 随机抽取 100 行\nshuf large_file.txt | head -n 100\n\n# diff 并生成补丁\ndiff -u file1.txt file2.txt > patch.diff\npatch file1.txt < patch.diff\n\n# 提取中间行（1000-2000 行）\nsed -n '1000,2000p' large_file.txt\nawk 'NR>=1000 && NR<=2000' large_file.txt\n\n# 多列排序\nsort -t, -k2,2nr -k1,1 data.tsv\n\n# 去重并保持顺序\nawk '!seen[$0]++' file.txt\n\n# 用 printf 格式化输出\nawk '{printf \"%-10s %5d %8.2f\\n\", $1, $2, $3}' data.txt"
       }
     ]
   },
@@ -7793,6 +7863,366 @@ const QUESTIONS = {
       ],
       "answer": 1,
       "explain": "容器共享宿主内核，不像虚拟机有独立内核。内核漏洞可能导致容器逃逸影响宿主和其他容器。因此需配合 user namespace、seccomp、AppArmor 等加固。"
+    },
+    {
+      "q": "Linux 启动时，GRUB2 的配置文件位置是？",
+      "level": "进阶",
+      "options": [
+        "/boot/grub/grub.conf",
+        "/boot/grub2/grub.cfg",
+        "/etc/grub.conf",
+        "/usr/share/grub.cfg"
+      ],
+      "answer": 1,
+      "explain": "GRUB2 的主配置文件在 /boot/grub2/grub.cfg（RHEL/CentOS/Fedora）或 /boot/grub/grub.cfg（Debian/Ubuntu），由 grub2-mkconfig 从 /etc/default/grub 和 /etc/grub.d/ 生成。"
+    },
+    {
+      "q": "initramfs 的作用是？",
+      "level": "高级",
+      "options": [
+        "加快启动",
+        "提供临时根文件系统，加载必要驱动后切换真实根文件系统",
+        "代替内核",
+        "存储日志"
+      ],
+      "answer": 1,
+      "explain": "initramfs 是内存中的临时根文件系统，内核用它来加载存储控制器、文件系统等必要驱动，然后 pivot_root 切换到真实的根文件系统。"
+    },
+    {
+      "q": "systemd-analyze blame 的作用是？",
+      "level": "进阶",
+      "options": [
+        "查看启动总时间",
+        "查看各服务启动耗时排序",
+        "查看依赖链",
+        "生成图表"
+      ],
+      "answer": 1,
+      "explain": "systemd-analyze blame 按耗时从长到短列出各服务的启动时间，帮助定位启动慢的原因。systemd-analyze 只看总时间，critical-chain 看依赖链，plot 生成 SVG 图。"
+    },
+    {
+      "q": "单用户模式（救援模式）通过什么实现？",
+      "level": "进阶",
+      "options": [
+        "重启",
+        "在 GRUB 编辑内核参数加 systemd.unit=rescue.target",
+        "systemctl rescue",
+        "以上都可以"
+      ],
+      "answer": 3,
+      "explain": "三种方式：启动时 GRUB 编辑加 rescue.target 或 init=/bin/bash；运行中 systemctl rescue 切换到救援模式；systemctl emergency 进入最小环境。"
+    },
+    {
+      "q": "SELinux 的 enforcing 模式表示？",
+      "level": "高级",
+      "options": [
+        "记录不阻止",
+        "强制拒绝违反策略的操作",
+        "关闭",
+        "仅警告"
+      ],
+      "answer": 1,
+      "explain": "enforcing 是强制模式，违反 SELinux 策略的操作会被拒绝。permissive 是宽容模式只记录不阻止，disabled 完全关闭。"
+    },
+    {
+      "q": "修改文件 SELinux 上下文并持久化的命令是？",
+      "level": "高级",
+      "options": [
+        "chcon",
+        "semanage fcontext + restorecon",
+        "setenforce",
+        "chmod"
+      ],
+      "answer": 1,
+      "explain": "semanage fcontext -a -t type_t '/path(/.*)?' 添加持久规则，restorecon -Rv /path 应用规则。chcon 是临时修改，重启后失效。"
+    },
+    {
+      "q": "AppArmor 与 SELinux 的主要区别是？",
+      "level": "高级",
+      "options": [
+        "无区别",
+        "AppArmor 基于路径更简单，SELinux 基于标签更细粒度",
+        "SELinux 更快",
+        "AppArmor 更安全"
+      ],
+      "answer": 1,
+      "explain": "AppArmor 基于文件路径做访问控制，配置简单；SELinux 基于标签（安全上下文），更细粒度但复杂。两者都是 MAC（强制访问控制），不能同时启用。"
+    },
+    {
+      "q": "LVM 的三层架构是？",
+      "level": "高级",
+      "options": [
+        "RAID-VG-LV",
+        "PV-VG-LV",
+        "FS-PV-LV",
+        "DISK-VG-FS"
+      ],
+      "answer": 1,
+      "explain": "LVM 三层：PV（Physical Volume 物理卷）→ VG（Volume Group 卷组）→ LV（Logical Volume 逻辑卷）。PV 是底层磁盘/分区，VG 是存储池，LV 是最终使用的逻辑卷。"
+    },
+    {
+      "q": "LVM 在线扩容的正确顺序是？",
+      "level": "高级",
+      "options": [
+        "lvextend -> resize2fs",
+        "resize2fs -> lvextend",
+        "vgextend -> lvextend -> resize2fs",
+        "mkfs -> mount"
+      ],
+      "answer": 2,
+      "explain": "如果 VG 空间不足，先 vgextend 添加新 PV；然后 lvextend 扩展 LV；最后 resize2fs（ext4）或 xfs_growfs（xfs）扩展文件系统。后两步可以合并为 lvextend -r（--resizefs）。"
+    },
+    {
+      "q": "LVM 快照的机制是？",
+      "level": "高级",
+      "options": [
+        "复制全部数据",
+        "COW（写时复制），只记录变化",
+        "增量备份",
+        "镜像"
+      ],
+      "answer": 1,
+      "explain": "LVM 快照是 COW（Copy-on-Write），创建时不复制原始数据，只在原始数据被修改时复制旧块到快照区。快照大小只需覆盖变化的数据量。"
+    },
+    {
+      "q": "RAID 1 的可用容量是总容量的？",
+      "level": "进阶",
+      "options": [
+        "100%",
+        "50%",
+        "(n-1)/n",
+        "(n-2)/n"
+      ],
+      "answer": 1,
+      "explain": "RAID 1 是镜像，每份数据存两份，可用容量为总容量的 50%。RAID 0 是100%，RAID 5 是(n-1)/n，RAID 6 是(n-2)/n。"
+    },
+    {
+      "q": "RAID 5 允许同时坏几块盘？",
+      "level": "进阶",
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "answer": 1,
+      "explain": "RAID 5 有1份分布式奇偶校验，允许同时坏1块盘。RAID 6 有2份奇偶校验，允许坏2块。RAID 1 每组镜像允许坏1块（多组可多坏）。"
+    },
+    {
+      "q": "RAID 10 相比 RAID 5 的优势是？",
+      "level": "高级",
+      "options": [
+        "容量更大",
+        "读写性能更高且恢复更快",
+        "更安全",
+        "更简单"
+      ],
+      "answer": 1,
+      "explain": "RAID 10（镜像+条带）读写性能很高，重建只需复制镜像盘数据（快）。RAID 5 重建需计算所有数据+校验（慢且对剩余盘压力大），且重建期间无冗余保护。"
+    },
+    {
+      "q": "mdadm 查看 RAID 状态的命令是？",
+      "level": "进阶",
+      "options": [
+        "cat /proc/mdstat 和 mdadm --detail",
+        "lsblk",
+        "fdisk -l",
+        "df -h"
+      ],
+      "answer": 0,
+      "explain": "cat /proc/mdstat 快速查看状态（[UU] 正常，[_U] 降级），mdadm --detail /dev/md0 查看详细信息。"
+    },
+    {
+      "q": "Linux DNS 解析时，/etc/nsswitch.conf 中 hosts 行 files 在 dns 前表示？",
+      "level": "进阶",
+      "options": [
+        "先查 /etc/hosts，再查 DNS",
+        "先查 DNS，再查 /etc/hosts",
+        "只查 hosts",
+        "只查 DNS"
+      ],
+      "answer": 0,
+      "explain": "nsswitch.conf 中 hosts: files dns 表示解析顺序是先查 /etc/hosts 文件，再查 DNS。如果 hosts 放前面，/etc/hosts 中的记录会覆盖 DNS 解析。"
+    },
+    {
+      "q": "systemd-resolved 的作用不包括？",
+      "level": "进阶",
+      "options": [
+        "本地 DNS 缓存",
+        "监听 127.0.0.53 提供解析服务",
+        "替代 /etc/resolv.conf",
+        "充当权威 DNS 服务器"
+      ],
+      "answer": 3,
+      "explain": "systemd-resolved 是本地 DNS 存根解析器（stub resolver），提供缓存和解析服务，但不充当权威 DNS 服务器（不对外提供域名解析服务）。"
+    },
+    {
+      "q": "dig +trace 的作用是？",
+      "level": "进阶",
+      "options": [
+        "加速查询",
+        "追踪完整 DNS 解析链（从根服务器开始）",
+        "反向解析",
+        "查看缓存"
+      ],
+      "answer": 1,
+      "explain": "dig +trace 从根 DNS 服务器开始，逐层追踪到权威服务器，显示完整的解析路径，用于排查 DNS 解析链问题。"
+    },
+    {
+      "q": "tcpdump 只抓取 TCP SYN 包的过滤表达式是？",
+      "level": "高级",
+      "options": [
+        "tcp port 80",
+        "tcp[tcpflags] & tcp-syn != 0",
+        "syn only",
+        "port 80"
+      ],
+      "answer": 1,
+      "explain": "tcp[tcpflags] & tcp-syn != 0 过滤 TCP 标志位中 SYN 位被设置的包。配合 tcp-ack == 0 可只抓纯 SYN（不含 ACK）的连接请求包。"
+    },
+    {
+      "q": "tcpdump -w file.pcap 的用途是？",
+      "level": "基础",
+      "options": [
+        "显示内容",
+        "保存为 pcap 文件供 Wireshark 分析",
+        "打印到屏幕",
+        "压缩"
+      ],
+      "answer": 1,
+      "explain": "-w 将抓到的包写入二进制 pcap 文件，可用 Wireshark、tshark 等工具离线分析。不带 -w 是直接在终端打印。"
+    },
+    {
+      "q": "lsmod 命令的作用是？",
+      "level": "进阶",
+      "options": [
+        "列出已加载的内核模块",
+        "加载模块",
+        "卸载模块",
+        "查看模块信息"
+      ],
+      "answer": 0,
+      "explain": "lsmod 列出当前已加载的所有内核模块（.ko），显示模块名、大小、被谁使用。加载用 modprobe/insmod，卸载用 rmmod/modprobe -r。"
+    },
+    {
+      "q": "modprobe 相比 insmod 的优势是？",
+      "level": "进阶",
+      "options": [
+        "更快",
+        "自动解决模块依赖关系",
+        "不需要 root",
+        "更简单"
+      ],
+      "answer": 1,
+      "explain": "modprobe 会读取 modules.dep 自动加载该模块依赖的其他模块，而 insmod 只加载指定文件，不会自动处理依赖。modprobe -r 也能自动卸载不再被使用的依赖模块。"
+    },
+    {
+      "q": "DKMS 的主要用途是？",
+      "level": "高级",
+      "options": [
+        "编译内核",
+        "内核升级后自动重建第三方模块（如显卡驱动）",
+        "加载模块",
+        "配置模块参数"
+      ],
+      "answer": 1,
+      "explain": "DKMS（Dynamic Kernel Module Support）在系统升级到新内核后，自动重新编译安装第三方内核模块（如 NVIDIA 驱动、VirtualBox 增强功能），无需手动操作。"
+    },
+    {
+      "q": "systemd Timer 相比 cron 的优势不包括？",
+      "level": "高级",
+      "options": [
+        "支持微秒级精度",
+        "错过执行可补（Persistent）",
+        "journalctl 统一日志",
+        "更简单的语法"
+      ],
+      "answer": 3,
+      "explain": "systemd Timer 的语法（OnCalendar 等）比 cron 复杂，但功能更强：支持依赖管理、微秒精度、错过补执行、cgroups 资源限制、journalctl 统一日志查看。"
+    },
+    {
+      "q": "systemd Timer 的 Persistent=true 表示？",
+      "level": "高级",
+      "options": [
+        "持续运行",
+        "系统关机期间错过的任务开机后立即补执行",
+        "永久存在",
+        "后台运行"
+      ],
+      "answer": 1,
+      "explain": "Persistent=true 使定时器记录上次应执行的时间，如果系统在该时间点关机，下次开机后会立即补执行错过的任务。cron 在关机期间的任务会直接丢失。"
+    },
+    {
+      "q": "OnCalendar=*-*-* 02:00:00 表示？",
+      "level": "进阶",
+      "options": [
+        "每小时",
+        "每天2点",
+        "每周一",
+        "每月1日"
+      ],
+      "answer": 1,
+      "explain": "OnCalendar 格式：*-*-* 02:00:00 表示每天的 02:00:00 执行。Mon..Fri 9:00:00 是工作日9点，*:0/15 是每15分钟。"
+    },
+    {
+      "q": "/etc/modules-load.d/ 目录的用途是？",
+      "level": "进阶",
+      "options": [
+        "存储模块文件",
+        "配置开机自动加载的模块列表",
+        "模块黑名单",
+        "模块日志"
+      ],
+      "answer": 1,
+      "explain": "/etc/modules-load.d/*.conf 中的模块名列表会在系统启动时由 systemd-modules-load.service 自动加载。黑名单在 /etc/modprobe.d/blacklist.conf 中配置。"
+    },
+    {
+      "q": "以下哪个 RAID 级别写性能最好？",
+      "level": "高级",
+      "options": [
+        "RAID 1",
+        "RAID 5",
+        "RAID 0",
+        "RAID 6"
+      ],
+      "answer": 2,
+      "explain": "RAID 0 条带化，数据分散到多个盘并行写入，无校验计算，写性能最高。但无冗余，坏一块盘数据全丢。RAID 5/6 有校验写惩罚，RAID 1 写两份数据。"
+    },
+    {
+      "q": "xfs_growfs 的作用是？",
+      "level": "进阶",
+      "options": [
+        "创建 XFS 文件系统",
+        "在线扩展 XFS 文件系统",
+        "修复 XFS",
+        "格式化"
+      ],
+      "answer": 1,
+      "explain": "xfs_growfs /mountpoint 在线扩展已挂载的 XFS 文件系统（无需卸载）。XFS 不支持在线缩容。ext4 用 resize2fs 扩展/缩容。"
+    },
+    {
+      "q": "resolvectl flush-caches 的作用是？",
+      "level": "进阶",
+      "options": [
+        "重启网络",
+        "清空 systemd-resolved 的 DNS 缓存",
+        "刷新页面",
+        "更新 DNS 配置"
+      ],
+      "answer": 1,
+      "explain": "resolvectl flush-caches 清空本地 DNS 缓存，用于解决 DNS 缓存污染或记录更新后客户端仍解析到旧 IP 的问题。"
+    },
+    {
+      "q": "pvmove 命令的作用是？",
+      "level": "高级",
+      "options": [
+        "创建 PV",
+        "删除 PV",
+        "在线将 PV 上的数据迁移到 VG 中其他 PV",
+        "扩展 PV"
+      ],
+      "answer": 2,
+      "explain": "pvmove /dev/sdb1 在线将 /dev/sdb1 上的所有数据块迁移到卷组中的其他物理卷，不中断服务。迁移完成后可安全移除该 PV。"
     }
   ],
   "frontend": [
@@ -16115,6 +16545,366 @@ const QUESTIONS = {
       ],
       "answer": 1,
       "explain": "钉钉/企业微信/Slack 等都提供 Webhook URL，用 curl POST JSON 即可发送告警消息，是最简单的方式。配置机器人获取 Webhook URL，脚本中 curl 调用。"
+    },
+    {
+      "q": "xargs 的哪个参数可以实现并行处理？",
+      "level": "高级",
+      "options": [
+        "-n",
+        "-I",
+        "-P",
+        "-d"
+      ],
+      "answer": 2,
+      "explain": "-P N 参数指定同时运行 N 个进程实现并行处理。-n 指定每批参数个数，-I 定义替换字符串，-d 指定分隔符。"
+    },
+    {
+      "q": "Shell 严格模式 set -euo pipefail 中，-o pipefail 的作用是？",
+      "level": "高级",
+      "options": [
+        "管道超时退出",
+        "管道中任一命令失败则整个管道返回非零",
+        "管道输出到文件",
+        "管道使用 FIFO"
+      ],
+      "answer": 1,
+      "explain": "-o pipefail 使得管道中只要有一个命令返回非零状态，整个管道的退出状态就是非零，而非默认的最后一个命令状态。"
+    },
+    {
+      "q": "Expect 脚本中，exp_continue 的作用是？",
+      "level": "高级",
+      "options": [
+        "退出脚本",
+        "匹配后继续 expect",
+        "发送继续信号",
+        "忽略错误"
+      ],
+      "answer": 1,
+      "explain": "exp_continue 表示匹配到当前模式后，不退出 expect，而是继续等待匹配其他模式，常用于处理多重提示。"
+    },
+    {
+      "q": "以下哪个命令可以安全地创建临时文件？",
+      "level": "进阶",
+      "options": [
+        "touch /tmp/tmpfile",
+        "mktemp /tmp/script.XXXXXX",
+        "echo > /tmp/file",
+        "cat > /tmp/tmp"
+      ],
+      "answer": 1,
+      "explain": "mktemp 以原子方式创建具有随机后缀的唯一临时文件，避免命名冲突和竞争条件。"
+    },
+    {
+      "q": "如何统计日志文件中访问量 Top 10 的 IP？",
+      "level": "进阶",
+      "options": [
+        "awk '{print $1}' | sort | uniq -c | sort -rn | head",
+        "cat | grep IP | head",
+        "awk '{print $1}' | head",
+        "sort | uniq | head"
+      ],
+      "answer": 0,
+      "explain": "标准流程：awk 提取 IP 字段，sort 排序，uniq -c 统计，sort -rn 按数量倒序，head 取前 10。"
+    },
+    {
+      "q": "Shell 中防止单词分割的正确做法是？",
+      "level": "进阶",
+      "options": [
+        "使用 $var",
+        "使用 \"$var\"",
+        "使用 ${var}",
+        "使用 $var|"
+      ],
+      "answer": 1,
+      "explain": "始终用双引号包围变量引用 \"$var\"，防止空格、制表符、换行导致的单词分割。"
+    },
+    {
+      "q": "jq 命令 '.users[] | select(.age > 18)' 的作用是？",
+      "level": "高级",
+      "options": [
+        "排序用户",
+        "选择 age 大于 18 的用户",
+        "统计用户数量",
+        "删除 age 字段"
+      ],
+      "answer": 1,
+      "explain": "这是 jq 的过滤语法：遍历 users 数组，选择 age 大于 18 的元素。"
+    },
+    {
+      "q": "iconv 命令的主要用途是？",
+      "level": "进阶",
+      "options": [
+        "压缩文件",
+        "转换文本编码",
+        "改变文件权限",
+        "网络传输"
+      ],
+      "answer": 1,
+      "explain": "iconv 用于在不同字符编码之间转换文本文件，如 GBK 转 UTF-8。"
+    },
+    {
+      "q": "如何设置脚本在退出时自动清理临时文件？",
+      "level": "进阶",
+      "options": [
+        "rm -f tmpfile",
+        "trap 'rm -f tmpfile' EXIT",
+        "exit 0",
+        "clear"
+      ],
+      "answer": 1,
+      "explain": "trap 'rm -f tmpfile' EXIT 会在脚本正常退出、被信号终止等情况下执行清理命令。"
+    },
+    {
+      "q": "Shell 脚本中，${#array[@]} 表示？",
+      "level": "进阶",
+      "options": [
+        "数组所有元素拼接",
+        "数组元素个数",
+        "数组最后一个元素",
+        "数组第一个元素"
+      ],
+      "answer": 1,
+      "explain": "${#array[@]} 返回数组元素的数量。${#array[*]} 效果相同。"
+    },
+    {
+      "q": "以下哪种方式可以并行执行多个后台任务并等待全部完成？",
+      "level": "进阶",
+      "options": [
+        "cmd1; cmd2",
+        "cmd1 & cmd2 & wait",
+        "cmd1 && cmd2",
+        "cmd1 || cmd2"
+      ],
+      "answer": 1,
+      "explain": "cmd1 & 和 cmd2 & 将命令放入后台执行，wait 会等待所有后台任务完成。"
+    },
+    {
+      "q": "Expect 的 spawn 命令用于？",
+      "level": "高级",
+      "options": [
+        "生成随机数",
+        "启动一个新的程序",
+        "创建文件",
+        "发送信号"
+      ],
+      "answer": 1,
+      "explain": "spawn 用于启动一个新的交互式程序，后续 expect/send 与该程序交互。"
+    },
+    {
+      "q": "如何限制 xargs 每批处理的参数数量？",
+      "level": "进阶",
+      "options": [
+        "-P",
+        "-n",
+        "-I",
+        "-t"
+      ],
+      "answer": 1,
+      "explain": "-n N 限制每批传递给命令的参数个数为 N。"
+    },
+    {
+      "q": "Shell 中 HISTCONTROL=ignorespace 的作用是？",
+      "level": "高级",
+      "options": [
+        "忽略历史记录",
+        "以空格开头的命令不记录到历史",
+        "清空历史",
+        "显示历史时间戳"
+      ],
+      "answer": 1,
+      "explain": "设置 HISTCONTROL=ignorespace 后，命令行前加空格执行时不会记录到 bash 历史中，适合隐藏敏感命令。"
+    },
+    {
+      "q": "awk 'NR % 10 == 0' file.txt 的作用是？",
+      "level": "进阶",
+      "options": [
+        "每隔 10 行输出一行",
+        "输出前 10 行",
+        "输出行号",
+        "删除第 10 行"
+      ],
+      "answer": 0,
+      "explain": "NR 是当前行号，NR % 10 == 0 匹配行号能被 10 整除的行，即每隔 10 行输出一行。"
+    },
+    {
+      "q": "Shell 脚本中，IFS=$'\\n\\t' 的作用是？",
+      "level": "高级",
+      "options": [
+        "设置输出格式",
+        "设置字段分隔符为换行和制表符",
+        "设置输入提示",
+        "设置编码"
+      ],
+      "answer": 1,
+      "explain": "IFS（Internal Field Separator）设置单词分割的分隔符为换行和制表符，避免空格导致的分割问题。"
+    },
+    {
+      "q": "tail -f 配合什么命令可以给输出加上时间戳？",
+      "level": "进阶",
+      "options": [
+        "date",
+        "ts",
+        "time",
+        "timestamp"
+      ],
+      "answer": 1,
+      "explain": "ts 命令来自 moreutils 包，可以实时给管道输出添加时间戳，如 tail -f log | ts。"
+    },
+    {
+      "q": "如何检查一个命令是否存在？",
+      "level": "进阶",
+      "options": [
+        "which cmd",
+        "command -v cmd",
+        "find cmd",
+        "locate cmd"
+      ],
+      "answer": 1,
+      "explain": "command -v cmd 是 POSIX 标准方式，可以检查命令是否存在且支持别名、函数、内建命令。"
+    },
+    {
+      "q": "dos2unix 命令的主要作用是？",
+      "level": "进阶",
+      "options": [
+        "DOS 转 UNIX 文件权限",
+        "转换 CRLF 换行符为 LF",
+        "转换文件编码",
+        "转换文件名"
+      ],
+      "answer": 1,
+      "explain": "dos2unix 将 Windows 风格的 CRLF（\\r\\n）换行符转换为 Unix 风格的 LF（\\n）。"
+    },
+    {
+      "q": "awk '!seen[$0]++' file.txt 的作用是？",
+      "level": "高级",
+      "options": [
+        "统计行数",
+        "去重并保持原始顺序",
+        "排序",
+        "反转行顺序"
+      ],
+      "answer": 1,
+      "explain": "seen 数组记录每行是否出现过，!seen[$0]++ 只在第一次遇到某行时为真并输出，实现去重且保持原始顺序。"
+    },
+    {
+      "q": "在 Shell 脚本中，使用数组传参的正确语法是？",
+      "level": "高级",
+      "options": [
+        "cmd $@",
+        "cmd \"$@\"",
+        "cmd $*",
+        "cmd $#"
+      ],
+      "answer": 1,
+      "explain": "\"$@\" 将每个参数作为独立的带引号的字符串传递，是安全的数组传参方式。$@ 和 $* 不引号时会导致空格分割问题。"
+    },
+    {
+      "q": "logrotate 的主要功能是？",
+      "level": "进阶",
+      "options": [
+        "实时查看日志",
+        "日志轮转、压缩和清理",
+        "分析日志内容",
+        "搜索日志"
+      ],
+      "answer": 1,
+      "explain": "logrotate 是 Linux 日志管理工具，负责按大小/时间轮转日志、压缩旧日志、删除过期日志。"
+    },
+    {
+      "q": "Shell 中如何隐藏用户输入的密码？",
+      "level": "进阶",
+      "options": [
+        "read pass",
+        "read -s pass",
+        "read -p pass",
+        "read -n pass"
+      ],
+      "answer": 1,
+      "explain": "read -s 选项关闭回显，适合读取密码等敏感输入，用户输入不会在屏幕上显示。"
+    },
+    {
+      "q": "shuf 命令的作用是？",
+      "level": "进阶",
+      "options": [
+        "排序",
+        "随机打乱行顺序",
+        "去重",
+        "统计"
+      ],
+      "answer": 1,
+      "explain": "shuf（shuffle）随机打乱输入行的顺序，常用于随机抽样。"
+    },
+    {
+      "q": "如何计算文件的 MD5 校验和？",
+      "level": "基础",
+      "options": [
+        "md5 file",
+        "md5sum file",
+        "checksum file",
+        "hash file"
+      ],
+      "answer": 1,
+      "explain": "md5sum 命令计算文件的 MD5 哈希值，常用于文件完整性校验。"
+    },
+    {
+      "q": "Shell 中，$? 变量表示？",
+      "level": "基础",
+      "options": [
+        "当前进程 ID",
+        "上一个命令的退出状态",
+        "脚本参数个数",
+        "当前行号"
+      ],
+      "answer": 1,
+      "explain": "$? 保存上一个命令/管道的退出状态码，0 通常表示成功，非零表示失败。"
+    },
+    {
+      "q": "awk 的 BEGIN 块什么时候执行？",
+      "level": "进阶",
+      "options": [
+        "处理每一行前",
+        "处理任何输入前",
+        "文件结束时",
+        "遇到错误时"
+      ],
+      "answer": 1,
+      "explain": "BEGIN 块在 awk 开始处理任何输入之前执行一次，常用于初始化变量。"
+    },
+    {
+      "q": "sed -i.bak 's/foo/bar/g' file 的作用是？",
+      "level": "进阶",
+      "options": [
+        "直接修改文件并创建 .bak 备份",
+        "只输出不修改",
+        "修改并删除原文件",
+        "修改并压缩"
+      ],
+      "answer": 0,
+      "explain": "-i.bak 表示直接修改文件，同时创建 file.bak 的原始备份。"
+    },
+    {
+      "q": "Shell 中如何定义关联数组（字典）？",
+      "level": "高级",
+      "options": [
+        "declare -a dict",
+        "declare -A dict",
+        "typeset dict",
+        "local dict"
+      ],
+      "answer": 1,
+      "explain": "declare -A dict 定义关联数组（Associative Array），可以用字符串作为下标，类似字典/Map。"
+    },
+    {
+      "q": "以下哪个不是 Expect 的命令？",
+      "level": "高级",
+      "options": [
+        "spawn",
+        "expect",
+        "send",
+        "fork"
+      ],
+      "answer": 3,
+      "explain": "Expect 的核心命令包括 spawn、expect、send、interact 等，fork 不是 Expect 的命令（fork 是系统调用/C 函数）。"
     }
   ],
   "python": [
