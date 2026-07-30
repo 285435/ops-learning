@@ -1144,6 +1144,62 @@ const KNOWLEDGE = {
         "level": "基础",
         "content": "**虚拟环境**：隔离依赖\n- venv：标准库（Python 3.3+）\n  - python -m venv venv\n  - source venv/bin/activate\n  - deactivate\n- virtualenv：第三方，功能更全\n- conda：数据科学常用，含非 Python 依赖\n- poetry / pdm：现代包管理\n\n**pip 包管理**\n- pip install package / pip install -r requirements.txt\n- pip freeze > requirements.txt\n- pip install package==1.2.3 指定版本\n- pip uninstall / pip list / pip show\n- pip install --upgrade\n\n**pyproject.toml（现代标准）**\n- PEP 518/621 规范\n- 替代 setup.py + requirements.txt\n- [build-system]：构建后端（setuptools/hatchling/flit）\n- [project]：项目元数据与依赖\n- [tool.xxx]：工具配置（black/ruff/pytest）\n\n**poetry 工作流**\n- poetry init：初始化\n- poetry add package：添加依赖\n- poetry install：安装\n- poetry run python script.py\n- poetry build：打包 sdist/wheel\n- poetry publish：发布到 PyPI\n\n**打包发布**\n- sdist：源码包 .tar.gz\n- wheel：预编译包 .whl（推荐）\n- twine upload dist/*：上传到 PyPI\n\n**import 机制**\n- sys.path 搜索路径\n- __init__.py：标记包（命名空间包可不带）\n- 相对导入：from . import module\n- __all__：控制 from package import * 导出\n\n**uv（新一代极速工具）**\n- Rust 编写，比 pip 快 10-100 倍\n- uv pip install / uv venv",
         "example": "# 创建虚拟环境\n# python -m venv .venv\n# source .venv/bin/activate\n\n# pyproject.toml 示例\n'''\n[build-system]\nrequires = [\"hatchling\"]\nbuild-backend = \"hatchling.build\"\n\n[project]\nname = \"mypackage\"\nversion = \"1.0.0\"\ndescription = \"My awesome package\"\nrequires-python = \">=3.9\"\ndependencies = [\n    \"requests>=2.28\",\n    \"pydantic>=2.0\",\n]\n[project.optional-dependencies]\ndev = [\"pytest\", \"black\", \"ruff\"]\n\n[tool.black]\nline-length = 100\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\n'''\n\n# setup.py 传统方式\n'''\nfrom setuptools import setup, find_packages\nsetup(\n    name='mypackage',\n    version='1.0.0',\n    packages=find_packages(),\n    install_requires=['requests>=2.28'],\n)\n'''\n\n# requirements.txt 格式\n'''\nrequests==2.31.0\nflask>=2.0,<3.0\n# 注释\n-r requirements-dev.txt\n'''\n\n# 包结构示例\n'''\nmypackage/\n  __init__.py\n  core.py\n  utils/\n    __init__.py\n    string.py\n'''\n# mypackage/__init__.py\nfrom .core import main\n__all__ = ['main']\n__version__ = '1.0.0'"
+      },
+      {
+        "id": "py-gil",
+        "title": "GIL 与并发模型深度解析",
+        "level": "高级",
+        "content": "**GIL（全局解释器锁）是什么**\n- CPython 解释器中的一把互斥锁\n- 同一时刻只允许一个线程执行 Python 字节码\n- 目的：保护 CPython 内部数据结构（如引用计数）不被并发破坏\n- GIL 是 CPython 实现细节，Jython/IronPython 没有 GIL，PyPy 也有 GIL\n\n**GIL 的释放时机**\n- IO 操作（文件/网络/socket）会主动释放 GIL\n- time.sleep() 释放 GIL\n- 每执行一定数量的字节码指令（sys.getswitchinterval，默认5ms）检查是否释放\n- C 扩展中可手动 Py_BEGIN_ALLOW_THREADS / Py_END_ALLOW_THREADS 释放\n\n**GIL 对性能的影响**\n- CPU 密集型多线程无法利用多核，甚至比单线程更慢（线程切换开销）\n- IO 密集型多线程有效（IO 等待时释放 GIL 让其他线程运行）\n- multiprocessing 绕过 GIL（每个进程独立解释器独立 GIL）\n- C 扩展（如 numpy）在计算时释放 GIL，可多线程加速\n\n**GIL 竞争与线程调度**\n- 多个 CPU 密集线程会激烈竞争 GIL，导致频繁上下文切换\n- 可用 sys.setswitchinterval() 调整检查间隔\n- GIL 的释放是协作式 + 抢占式混合\n\n**PEP 703：移除 GIL 的提案**\n- Python 3.13 引入实验性 free-threaded 模式（--disable-gil）\n- 基于 PEP 689 的修改，引用计数改为原子操作\n- 移除 GIL 后单线程性能略有下降（约5-10%），但多线程可真正并行\n- 未来版本可能默认无 GIL\n\n**为什么不去掉 GIL**\n- 历史包袱：大量 C 扩展依赖 GIL 保证线程安全\n- 单线程性能：带 GIL 的引用计数比原子引用计数快\n- 工程难度：需要重新设计内存管理",
+        "example": "import sys, threading, time\n\n# 演示 GIL 对 CPU 密集任务的影响\ndef cpu_work(n):\n    s = 0\n    for i in range(n):\n        s += i * i\n    return s\n\n# 单线程\nstart = time.time()\ncpu_work(10**7); cpu_work(10**7)\nprint('单线程:', time.time() - start)\n\n# 多线程（因 GIL 不会更快，可能更慢）\nstart = time.time()\nt1 = threading.Thread(target=cpu_work, args=(10**7,))\nt2 = threading.Thread(target=cpu_work, args=(10**7,))\nt1.start(); t2.start(); t1.join(); t2.join()\nprint('多线程:', time.time() - start)\n\n# 用 multiprocessing 真正并行\nfrom multiprocessing import Pool\nstart = time.time()\nwith Pool(2) as p:\n    p.map(cpu_work, [10**7, 10**7])\nprint('多进程:', time.time() - start)\n\n# IO 密集型多线程有效（GIL 在 IO 时释放）\ndef io_work(url):\n    import urllib.request\n    return urllib.request.urlopen(url).read()\n\n# 查看线程切换间隔\nprint('切换间隔:', sys.getswitchinterval())  # 0.005\nsys.setswitchinterval(0.01)  # 调大减少切换开销"
+      },
+      {
+        "id": "py-gc",
+        "title": "内存管理与垃圾回收",
+        "level": "高级",
+        "content": "**Python 内存模型**\n- 一切皆对象，对象在堆上分配\n- 不可变对象：int/float/str/tuple，小整数缓存（-5~256）\n- 可变对象：list/dict/set\n- 引用计数：每个对象有 ob_refcnt 字段记录被引用次数\n\n**引用计数（Reference Counting）**\n- 主回收机制，实时进行\n- 引用 +1：赋值、传参、加入容器\n- 引用 -1：变量离开作用域、del、容器移除\n- ob_refcnt 归零时立即回收对象\n- 优点：即时、可预测\n- 缺点：无法处理循环引用，维护计数有开销\n\n**分代垃圾回收（Generational GC）**\n- 解决循环引用问题\n- 三代：第0代（年轻）、第1代、第2代（年老）\n- 新对象在第0代，存活过 GC 晋升到老代\n- 老代 GC 频率低（对象稳定）\n- gc.collect() 手动触发\n- gc.get_threshold() 默认 (700, 10, 10)\n\n**循环引用示例**\n- a.ref = b, b.ref = a，两者引用计数都不为零但已无用\n- 分代 GC 通过遍历容器对象检测循环引用组\n- 弱引用（weakref）不增加引用计数，可打破循环\n\n**__del__ 与 GC**\n- 有 __del__ 的对象在循环引用时 GC 无法安全回收（3.4 前）\n- PEP 442 修复：3.4+ 可正确回收带 __del__ 的循环引用\n\n**内存优化**\n- __slots__：固定属性集，省去 __dict__，节省内存\n- 生成器：惰性求值不一次性占用内存\n- intern：字符串驻留，相同字符串共享对象\n- 大数据用 numpy array 而非 list\n\n**内存查看工具**\n- sys.getsizeof(obj)：对象直接大小\n- tracemalloc：追踪内存分配\n- objgraph：可视化对象引用关系\n- memory_profiler：逐行内存",
+        "example": "import sys, gc, weakref\n\n# 引用计数演示\na = [1, 2, 3]\nprint(sys.getrefcount(a))  # 2 (a 和 getrefcount 参数)\nb = a\nprint(sys.getrefcount(a))  # 3\ndel b\nprint(sys.getrefcount(a))  # 2\n\n# 循环引用\nclass Node:\n    def __init__(self):\n        self.ref = None\n    def __del__(self):\n        print('Node deleted')\n\nn1 = Node(); n2 = Node()\nn1.ref = n2; n2.ref = n1\ndel n1; del n2  # 引用计数不为0，等待 GC\nprint('手动 GC 回收循环引用:')\nuncollectable = gc.collect()\nprint('回收:', uncollectable)\n\n# 弱引用打破循环\nclass Cache:\n    def __init__(self):\n        self._data = {}\n    def get(self, key, factory):\n        obj = self._data.get(key)\n        if obj is None or obj() is None:\n            obj = factory()\n            self._data[key] = weakref.ref(obj)\n        return obj\n\n# __slots__ 节省内存\nclass Point:\n    __slots__ = ('x', 'y')\n    def __init__(self, x, y):\n        self.x = x; self.y = y\n# Point 实例无 __dict__，更省内存\np = Point(1, 2)\nprint(sys.getsizeof(p))  # 比普通对象小\n\n# tracemalloc 追踪内存\nimport tracemalloc\ntracemalloc.start()\n# ... 你的代码 ...\nsnapshot = tracemalloc.take_snapshot()\nfor stat in snapshot.statistics('lineno')[:5]:\n    print(stat)\n\n# GC 阈值\ngc.set_threshold(1000, 15, 15)\n# 临时禁用 GC（性能敏感场景）\ngc.disable()\n# gc.enable()"
+      },
+      {
+        "id": "py-context-manager",
+        "title": "上下文管理器与 with 语句原理",
+        "level": "进阶",
+        "content": "**with 语句作用**\n- 确保资源（文件/锁/连接）被正确释放\n- 即使发生异常也会执行清理代码\n- 替代 try-finally 的优雅写法\n\n**上下文管理器协议**\n- __enter__(self)：进入时调用，返回值赋给 as 变量\n- __exit__(self, exc_type, exc_val, exc_tb)：退出时调用\n- __exit__ 返回 True 则抑制异常，返回 None/False 则向上抛\n\n**实现方式一：类实现协议**\n- 定义 __enter__ 和 __exit__\n- 适合复杂场景\n\n**实现方式二：contextlib.contextmanager 装饰器**\n- 用生成器函数简化\n- yield 之前为 __enter__，yield 值为 as 变量，yield 之后为 __exit__\n- 异常会在 yield 处重新抛出\n\n**contextlib 常用工具**\n- contextmanager：生成器转上下文管理器\n- suppress(*exceptions)：忽略指定异常\n- redirect_stdout/redirect_stderr：重定向标准流\n- closing(thing)：调用 thing.close()\n- ExitStack：动态管理多个上下文\n- asynccontextmanager：异步版本\n\n**嵌套与 ExitStack**\n- 多个 with 嵌套可用 ExitStack 统一管理\n- 运行时动态决定进入哪些上下文\n- enter_context(cm) 注册，按 LIFO 顺序退出\n\n**常见应用**\n- open() 文件\n- threading.Lock\n- contextvars 上下文变量\n- 数据库连接/事务\n- 临时修改全局状态",
+        "example": "from contextlib import contextmanager, suppress, redirect_stdout, ExitStack\nimport io\nimport threading\n\n# 方式一：类实现\nclass DatabaseConnection:\n    def __init__(self, dsn):\n        self.dsn = dsn\n    def __enter__(self):\n        print(f'连接 {self.dsn}')\n        return self  # 赋给 as 变量\n    def __exit__(self, exc_type, exc_val, exc_tb):\n        print(f'关闭连接，异常: {exc_type}')\n        # return True 会吞掉异常，通常不这么做\n        return False\n\nwith DatabaseConnection('mysql://localhost') as db:\n    print('使用 db')\n    # raise RuntimeError('test')  # __exit__ 仍会执行\n\n# 方式二：contextmanager 装饰器\n@contextmanager\ndef timer(label):\n    import time\n    start = time.time()\n    try:\n        yield  # as 变量为 None（或 yield 值）\n    finally:\n        print(f'{label}: {time.time()-start:.3f}s')\n\nwith timer('任务'):\n    sum(i for i in range(10**6))\n\n# suppress 忽略异常\nwith suppress(FileNotFoundError):\n    open('not_exist.txt')\nprint('继续执行，未崩溃')\n\n# redirect_stdout 捕获输出\nbuf = io.StringIO()\nwith redirect_stdout(buf):\n    print('这行不会显示，被捕获')\nprint('捕获到:', buf.getvalue())\n\n# ExitStack 管理多个文件\nfiles = ['a.txt', 'b.txt', 'c.txt']\nwith ExitStack() as stack:\n    handles = [stack.enter_context(open(f)) for f in files]\n    for h in handles:\n        print(h.read())\n\n# 异步上下文管理器\nimport asyncio\nclass AsyncResource:\n    async def __aenter__(self):\n        print('获取')\n        return self\n    async def __aexit__(self, *exc):\n        print('释放')\n\nasync def main():\n    async with AsyncResource() as r:\n        print('使用')"
+      },
+      {
+        "id": "py-dataclass",
+        "title": "数据类 dataclass 与类型注解",
+        "level": "进阶",
+        "content": "**dataclass（Python 3.7+）**\n- @dataclass 装饰器自动生成 __init__/__repr__/__eq__\n- 减少样板代码，替代手写 __init__\n- 基于类型注解声明字段\n\n**字段配置**\n- default：默认值\n- default_factory：可变默认值（避免共享陷阱）\n- field(default=, default_factory=, init=, repr=, compare=, hash=)\n- init=False：不作为构造参数\n- repr=False：不参与 __repr__\n\n**常用参数**\n- @dataclass(frozen=True)：不可变（可哈希，可作 dict key）\n- @dataclass(slots=True)：3.10+ 自动生成 __slots__\n- @dataclass(order=True)：生成 __lt__/__le__ 等比较方法\n- @dataclass(eq=True, frozen=True) 可哈希\n\n**继承**\n- 子类可扩展字段\n- 父类有默认值时子类字段也必须有默认值\n\n**类型注解（Type Hints）**\n- int / str / float / bool\n- List[int] / Dict[str, int] / Tuple[int, ...]（typing 模块）\n- 3.9+ 可直接 list[int] / dict[str, int]\n- Optional[int] = int | None（3.10+ 用 |）\n- Union[int, str] = int | str\n- Callable[[int], str]：可调用类型\n- TypeVar / Generic：泛型\n- TypedDict：带类型的 dict\n- Literal['a', 'b']：字面量类型\n\n**mypy 静态类型检查**\n- pip install mypy\n- mypy script.py 检查类型错误\n- 渐进式类型：不注解的部分不检查\n\n**Pydantic（运行时数据校验）**\n- 基于类型注解自动校验数据\n- BaseModel 基类\n- 错误时抛 ValidationError\n- FastAPI 核心依赖",
+        "example": "from dataclasses import dataclass, field\nfrom typing import Optional, List\n\n@dataclass\nclass User:\n    name: str\n    age: int = 0\n    tags: list = field(default_factory=list)  # 可变默认值\n    password: str = field(default='', repr=False)  # 不显示\n\nu = User('Alice', 25, ['a', 'b'])\nprint(u)  # User(name='Alice', age=25, tags=['a', 'b'])\n\n# frozen 不可变\n@dataclass(frozen=True)\nclass Point:\n    x: int\n    y: int\np = Point(1, 2)\n# p.x = 3  # FrozenInstanceError\nprint(hash(p))  # 可哈希\n\n# order 排序\n@dataclass(order=True)\nclass Priority:\n    level: int\nsorted([Priority(3), Priority(1), Priority(2)])\n\n# slots（3.10+）\n@dataclass(slots=True)\nclass Config:\n    host: str\n    port: int\n# Config 实例无 __dict__，节省内存且禁止额外属性\n\n# Pydantic 校验\nfrom pydantic import BaseModel, validator\n\nclass Article(BaseModel):\n    title: str\n    views: int = 0\n    tags: list[str] = []\n\n    @validator('title')\n    def title_not_empty(cls, v):\n        if not v.strip():\n            raise ValueError('标题不能为空')\n        return v\n\nart = Article(title='Hello', views=100, tags=['py'])\nprint(art.model_dump())  # 转字典\n# Article(title='', views='abc')  # ValidationError\n\n# 类型注解示例\nfrom typing import Callable, Optional\n\ndef greet(name: str, times: int = 1) -> str:\n    return f'Hello {name} ' * times\n\n# mypy 检查：greet(123) 会报错"
+      },
+      {
+        "id": "py-fastapi",
+        "title": "FastAPI 框架与 Pydantic",
+        "level": "进阶",
+        "content": "**FastAPI 特点**\n- 基于 Starlette（ASGI）+ Pydantic\n- 性能接近 NodeJS/Go\n- 原生支持 async/await\n- 自动生成 OpenAPI/Swagger 文档\n- 类型注解驱动的参数校验\n\n**路由与参数**\n- 路径参数：@app.get('/items/{item_id}')\n- 查询参数：函数参数自动识别为 query\n- 请求体：Pydantic BaseModel 参数\n- Header/Cookie/Form/File：从 fastapi 导入\n\n**依赖注入（Depends）**\n- 公共逻辑提取为依赖\n- 支持嵌套依赖\n- yield 依赖：yield 前为初始化，yield 后为清理\n- 常用于数据库会话、认证、权限\n\n**中间件**\n- @app.middleware('http')\n- CORS、日志、限流等\n- 请求前/响应后处理\n\n**后台任务**\n- BackgroundTasks：响应后执行\n- 适合发邮件、写日志等\n\n**异常处理**\n- HTTPException(status_code, detail)\n- 自定义异常处理器 @app.exception_handler\n\n**数据库集成**\n- SQLAlchemy 2.0 async\n- async sessionmaker\n- 依赖注入管理会话生命周期\n\n**测试**\n- TestClient（基于 httpx）\n- pytest + httpx.AsyncClient",
+        "example": "from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks\nfrom pydantic import BaseModel\nfrom typing import Optional\nimport uvicorn\n\napp = FastAPI(title='My API', version='1.0')\n\n# Pydantic 模型\nclass Item(BaseModel):\n    name: str\n    price: float\n    tax: Optional[float] = None\n\n# 路径参数 + 查询参数\n@app.get('/items/{item_id}')\nasync def get_item(item_id: int, q: Optional[str] = None):\n    return {'item_id': item_id, 'q': q}\n\n# 请求体\n@app.post('/items/')\nasync def create_item(item: Item):\n    return item\n\n# 依赖注入：数据库会话\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get('/users/')\nasync def list_users(db = Depends(get_db)):\n    return db.query(User).all()\n\n# 认证依赖\nasync def get_current_user(token: str = Depends(oauth2_scheme)):\n    user = verify_token(token)\n    if not user:\n        raise HTTPException(status_code=401, detail='Invalid token')\n    return user\n\n@app.get('/me')\nasync def me(user = Depends(get_current_user)):\n    return user\n\n# 后台任务\ndef send_email(to: str, content: str):\n    # 发邮件逻辑\n    pass\n\n@app.post('/notify/{email}')\nasync def notify(email: str, bg: BackgroundTasks):\n    bg.add_task(send_email, email, 'Hello')\n    return {'msg': 'notification queued'}\n\n# 中间件\n@app.middleware('http')\nasync def add_process_time(request, call_next):\n    import time\n    start = time.time()\n    response = await call_next(request)\n    response.headers['X-Process-Time'] = str(time.time() - start)\n    return response\n\n# 启动\n# uvicorn main:app --reload --host 0.0.0.0 --port 8000\n# 访问 /docs 查看 Swagger 文档"
+      },
+      {
+        "id": "py-functional",
+        "title": "函数式编程与 itertools",
+        "level": "进阶",
+        "content": "**函数式编程特性**\n- 函数是一等公民：可赋值、传参、返回\n- 纯函数：无副作用，相同输入相同输出\n- 不可变数据：优先用 tuple/frozen 而非 list/dict\n- 高阶函数：接收函数作为参数或返回函数\n\n**内置高阶函数**\n- map(func, *iterables)：对每个元素应用函数\n- filter(func, iterable)：过滤\n- functools.reduce(func, iterable)：累积\n- sorted(iterable, key=func)：排序\n- any()/all()：判断\n\n**lambda 表达式**\n- 匿名函数，单表达式\n- lambda args: expression\n- 适合简单回调，复杂逻辑用 def\n\n**偏函数 partial**\n- functools.partial(func, *args, **kwargs)\n- 固定部分参数生成新函数\n\n**itertools 核心工具**\n- chain(*iterables)：串联\n- chain.from_iterable(iterables)\n- islice(iterable, start, stop, step)：切片（惰性）\n- takewhile/dropwhile(func, iterable)：取/丢到条件不满足\n- groupby(iterable, key)：分组（需先排序）\n- starmap(func, iterable)：解包参数\n- zip_longest(*iterables, fillvalue)\n- product(*iterables)：笛卡尔积\n- permutations(iterable, r)：排列\n- combinations(iterable, r)：组合\n- count(start, step)/cycle(iterable)/repeat(elem, n)：无限迭代\n- accumulate(iterable, func)：累积\n\n**functools 其他**\n- lru_cache：LRU 缓存\n- wraps：保留元信息\n- total_ordering：自动补全比较方法\n- singledispatch：单分派泛型函数\n\n**生成器表达式**\n- (expr for x in iterable)\n- 惰性求值，节省内存\n- 只能迭代一次",
+        "example": "from itertools import *\nfrom functools import partial, reduce, lru_cache\nimport operator\n\n# map / filter / reduce\nnums = [1, 2, 3, 4, 5]\nsquared = list(map(lambda x: x**2, nums))\nevens = list(filter(lambda x: x % 2 == 0, nums))\nproduct = reduce(operator.mul, nums)  # 120\n\n# 生成器表达式（节省内存）\ntotal = sum(x**2 for x in range(10**6))  # 不创建列表\n\n# 偏函数\nint2 = partial(int, base=2)\nprint(int2('1010'))  # 10\n\n# chain 串联\nfor x in chain([1,2], [3,4], [5,6]):\n    print(x, end=' ')  # 1 2 3 4 5 6\n\n# groupby 分组（需先排序）\ndata = [('a', 1), ('a', 2), ('b', 3), ('a', 4)]\ndata.sort(key=lambda x: x[0])\nfor k, g in groupby(data, key=lambda x: x[0]):\n    print(k, list(g))\n\n# islice 惰性切片\nfor x in islice(count(1), 5):  # 1 2 3 4 5\n    print(x)\n\n# product 笛卡尔积\nfor a, b in product('AB', '12'):\n    print(a+b, end=' ')  # A1 A2 B1 B2\n\n# combinations / permutations\nprint(list(combinations('ABC', 2)))  # AB AC BC\nprint(list(permutations('ABC', 2)))   # AB AC BA BC CA CB\n\n# accumulate 累积\nprint(list(accumulate([1,2,3,4], operator.add)))  # 1 3 6 10\n\n# singledispatch 泛型函数\nfrom functools import singledispatch\n@singledispatch\ndef to_json(obj):\n    raise TypeError(f'unsupported {type(obj)}')\n@to_json.register(str)\ndef _(s): return f'\"{s}\"'\n@to_json.register(list)\ndef _(l): return '[' + ','.join(to_json(x) for x in l) + ']'\nprint(to_json(['a', 'b']))  # [\"a\",\"b\"]\n\n# lru_cache\n@lru_cache(maxsize=None)\ndef fib(n):\n    return n if n < 2 else fib(n-1) + fib(n-2)"
+      },
+      {
+        "id": "py-bytecode",
+        "title": "Python 内部机制：字节码与执行流程",
+        "level": "高级",
+        "content": "**Python 执行流程**\n1. 源码 (.py) → 词法分析 → Token\n2. Token → 语法分析 → AST（抽象语法树）\n3. AST → 编译 → 字节码 (.pyc)\n4. 字节码 → 虚拟机执行\n\n**字节码文件 .pyc**\n- 存放在 __pycache__ 目录\n- 文件名含 Python 版本和 magic number\n- 首次导入时编译生成，后续直接加载（加速）\n- 源码修改后自动重新编译\n\n**dis 模块：反汇编字节码**\n- dis.dis(func) 查看函数字节码\n- 帮助理解 Python 内部行为\n- 优化热点函数时可参考\n\n**帧对象（Frame）**\n- 每次函数调用创建一个 Frame\n- Frame 包含：代码对象、局部变量、全局变量、字节码指针、栈\n- 调用栈：Frame 的链表\n- sys._getframe() 获取当前帧\n\n**代码对象（Code Object）**\n- 函数的编译产物\n- 属性：co_code（字节码）、co_consts（常量）、co_names（全局名）、co_varnames（局部名）、co_argcount（参数数）\n- func.__code__ 访问\n\n**栈式虚拟机**\n- Python 是栈式虚拟机\n- 操作数压栈/出栈\n- 如 LOAD_FAST 加载局部变量到栈顶\n- BINARY_ADD 弹出两个操作数相加压回\n\n**常见的字节码指令**\n- LOAD_CONST / LOAD_FAST / LOAD_GLOBAL\n- STORE_FAST / STORE_GLOBAL\n- CALL_FUNCTION / RETURN_VALUE\n- BINARY_ADD / BINARY_MULTIPLY\n- POP_TOP / ROT_TWO\n- MAKE_FUNCTION\n\n**优化启示**\n- 局部变量访问比全局快（LOAD_FAST vs LOAD_GLOBAL）\n- 常量折叠：编译期计算常量表达式\n- 列表推导比 for 循环快（专用字节码）\n- 属性访问慢：涉及 __dict__ 查找",
+        "example": "import dis\nimport sys\n\n# 查看函数字节码\ndef add(a, b):\n    return a + b\n\nprint('=== add 字节码 ===')\ndis.dis(add)\n# LOAD_FAST 0 (a)\n# LOAD_FAST 1 (b)\n# BINARY_ADD\n# RETURN_VALUE\n\n# 列表推导 vs for 循环\ndef list_comp():\n    return [i*i for i in range(100)]\n\ndef for_loop():\n    result = []\n    for i in range(100):\n        result.append(i*i)\n    return result\n\nprint('=== 列表推导字节码（更紧凑）===')\ndis.dis(list_comp)\n\n# 代码对象\nprint('=== 代码对象属性 ===')\ncode = add.__code__\nprint('参数数:', code.co_argcount)\nprint('局部变量:', code.co_varnames)\nprint('常量:', code.co_consts)\nprint('字节码长度:', len(code.co_code))\n\n# 当前帧\nframe = sys._getframe()\nprint('当前函数:', frame.f_code.co_name)\nprint('当前行号:', frame.f_lineno)\nprint('局部变量:', frame.f_locals)\n\n# 常量折叠（编译期计算）\ndef folded():\n    return 2 * 3 + 4  # 编译为 LOAD_CONST 10\nprint('=== 常量折叠 ===')\ndis.dis(folded)  # 只有 LOAD_CONST 10; RETURN_VALUE\n\n# 局部 vs 全局性能对比\nimport timeit\nglobal_var = 100\ndef access_global():\n    return global_var  # 慢：LOAD_GLOBAL\ndef access_local():\n    local_var = 100\n    return local_var  # 快：LOAD_FAST\n\nprint('全局:', timeit.timeit(access_global, number=10**6))\nprint('局部:', timeit.timeit(access_local, number=10**6))"
+      },
+      {
+        "id": "py-metaprogramming",
+        "title": "元编程进阶：元类与描述符协议",
+        "level": "高级",
+        "content": "**元编程概述**\n- 编写能操作代码的代码\n- 动态修改/创建类和函数\n- Python 元编程手段：装饰器、元类、描述符、__init_subclass__、__class_getitem__\n\n**元类（Metaclass）**\n- 类的类，type 是默认元类\n- class Foo: 等价于 Foo = type('Foo', (), {})\n- 自定义元类继承 type\n- __new__：创建类（控制类创建）\n- __init__：初始化类\n- __call__：实例创建时调用（控制 __new__/__init__）\n\n**元类应用场景**\n- ORM：自动注册模型、生成字段\n- 插件系统：自动发现注册类\n- 单例模式\n- 接口/抽象类强制\n- 自动添加方法\n\n**__init_subclass__（3.6+）**\n- 替代元类的轻量方案\n- 父类定义后，子类创建时自动调用\n- cls 是子类\n- 适合简单的类层级控制\n\n**描述符协议**\n- __get__(self, obj, objtype=None)\n- __set__(self, obj, value)\n- __delete__(self, obj)\n- 数据描述符：同时定义 __get__ 和 __set__\n- 非数据描述符：只有 __get__\n- property 是描述符的简化形式\n\n**描述符查找优先级**\n1. 数据描述符\n2. 实例 __dict__\n3. 非数据描述符\n4. 类 __dict__\n\n**__class_getitem__**\n- 支持类参数化，如 List[int]\n- 3.9+ 用于原生泛型\n\n**import hooks**\n- sys.meta_path：自定义导入器\n- PEP 302/451 导入系统扩展",
+        "example": "# 元类：自动收集所有子类\nclass PluginMeta(type):\n    def __init__(cls, name, bases, namespace):\n        super().__init__(name, bases, namespace)\n        if not hasattr(cls, '_plugins'):\n            cls._plugins = []\n        else:\n            cls._plugins.append(cls)\n\nclass Plugin(metaclass=PluginMeta):\n    def run(self): pass\n\nclass AuthPlugin(Plugin):\n    def run(self): return 'auth'\n\nclass LogPlugin(Plugin):\n    def run(self): return 'log'\n\nprint([p.__name__ for p in Plugin._plugins])\n# ['AuthPlugin', 'LogPlugin']\n\n# __init_subclass__ 替代元类\nclass Base:\n    registry = []\n    def __init_subclass__(cls, **kwargs):\n        super().__init_subclass__(**kwargs)\n        Base.registry.append(cls)\n\nclass Child1(Base): pass\nclass Child2(Base): pass\nprint([c.__name__ for c in Base.registry])\n\n# 描述符：类型校验\nclass TypedField:\n    def __init__(self, type_):\n        self.type_ = type_\n    def __set_name__(self, owner, name):\n        self.name = name\n    def __get__(self, obj, objtype=None):\n        if obj is None:\n            return self\n        return obj.__dict__.get(self.name)\n    def __set__(self, obj, value):\n        if not isinstance(value, self.type_):\n            raise TypeError(f'{self.name} must be {self.type_.__name__}')\n        obj.__dict__[self.name] = value\n\nclass User:\n    name = TypedField(str)\n    age = TypedField(int)\n\nu = User()\nu.name = 'Alice'\nu.age = 25\n# u.age = 'old'  # TypeError: age must be int\n\n# 单例元类\nclass Singleton(type):\n    _instances = {}\n    def __call__(cls, *args, **kwargs):\n        if cls not in cls._instances:\n            cls._instances[cls] = super().__call__(*args, **kwargs)\n        return cls._instances[cls]\n\nclass DB(metaclass=Singleton):\n    pass\nprint(DB() is DB())  # True\n\n# __class_getitem__\nclass Vector:\n    def __class_getitem__(cls, item):\n        return f'Vector[{item.__name__}]'\nprint(Vector[int])  # Vector[int]"
       }
     ]
   },
@@ -1277,6 +1333,62 @@ const KNOWLEDGE = {
         "level": "高级",
         "content": "**GCC 内联汇编语法**\n- 基本形式：asm(\"汇编指令\");\n- 扩展形式：asm(模板 : 输出 : 输入 : 修改的寄存器);\n- AT&T 语法（默认）：源在前目的在后，% 寄存器，$ 立即数\n\n**扩展内联汇编**\n- 输出操作数：= 只写，+ 读写\n- 输入操作数\n- clobber list：告知编译器哪些寄存器被修改\n- 约束字符：r 任意寄存器，m 内存，i 立即数，a/b/c/d 对应 rax/rbx/rcx/rdx\n\n**常用场景**\n- 读取特殊寄存器（cr0、IDTR）\n- 原子操作（lock 前缀）\n- CPUID 获取 CPU 信息\n- RDTSC 读取时间戳计数器\n- 性能计数器\n- 硬件相关 IO（in/out）\n\n**volatile 修饰**\n- asm volatile 防止编译器优化掉\n- 有副作用的汇编必须加\n\n**原子操作**\n- __sync 系列（旧）：__sync_fetch_and_add / __sync_bool_compare_and_swap\n- __atomic 系列（新）：__atomic_load_n / __atomic_store_n / __atomic_add_fetch\n- 内存序：__ATOMIC_RELAXED / ACQUIRE / RELEASE / SEQ_CST\n\n**编译器内置函数**\n- __builtin_expect：分支预测提示 likely/unlikely\n- __builtin_prefetch：预取数据\n- __builtin_popcount：位计数\n- __builtin_ctz/clz：前导/尾随零计数\n\n**屏障**\n- asm volatile(\"\" ::: \"memory\")：编译器内存屏障\n- mfence/sfence/lfence：CPU 内存屏障",
         "example": "#include <stdio.h>\n#include <stdint.h>\n\n// 读取时间戳计数器\nstatic inline uint64_t rdtsc() {\n    uint32_t lo, hi;\n    asm volatile(\"rdtsc\" : \"=a\"(lo), \"=d\"(hi));\n    return ((uint64_t)hi << 32) | lo;\n}\n\n// CPUID\nvoid cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx) {\n    asm volatile(\"cpuid\"\n        : \"=a\"(*eax), \"=b\"(*ebx), \"=c\"(*ecx), \"=d\"(*edx)\n        : \"a\"(leaf));\n}\n\n// 原子加\nstatic inline int atomic_add(int *p, int v) {\n    return __atomic_add_fetch(p, v, __ATOMIC_SEQ_CST);\n}\n\n// CAS\nstatic inline int cas(int *p, int old, int new) {\n    return __atomic_compare_exchange_n(p, &old, new, 0,\n        __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n}\n\n// likely/unlikely\n#define likely(x)   __builtin_expect(!!(x), 1)\n#define unlikely(x) __builtin_expect(!!(x), 0)\n\nint main() {\n    uint64_t t1 = rdtsc();\n    volatile int sum = 0;\n    for (int i = 0; i < 1000; i++) sum += i;\n    uint64_t t2 = rdtsc();\n    printf(\"cycles: %lu\\n\", t2 - t1);\n\n    // CPU 厂商字符串\n    uint32_t a, b, c, d;\n    cpuid(0, &a, &b, &c, &d);\n    char vendor[13];\n    *(uint32_t*)(vendor) = b;\n    *(uint32_t*)(vendor + 4) = d;\n    *(uint32_t*)(vendor + 8) = c;\n    vendor[12] = 0;\n    printf(\"CPU: %s\\n\", vendor);\n\n    // 原子操作\n    int counter = 0;\n    atomic_add(&counter, 5);\n    printf(\"counter=%d\\n\", counter);\n\n    // 位操作\n    printf(\"popcount(15)=%d\\n\", __builtin_popcount(15));  // 4\n    printf(\"ctz(8)=%d\\n\", __builtin_ctz(8));              // 3\n    return 0;\n}"
+      },
+      {
+        "id": "c-complex-decl",
+        "title": "复杂声明解读：右左法则与函数指针",
+        "level": "高级",
+        "content": "**右左法则（Right-Left Rule）**\n- 从变量名开始，先向右看，再向左看，遇到括号跳出\n- * 读作 \"指向...的指针\"\n- [] 读作 \"...的数组\"\n- () 读作 \"返回...的函数\"\n\n**经典复杂声明解读**\n- `int *p;` p 是指向 int 的指针\n- `int p[10];` p 是含10个 int 的数组\n- `int *p[10];` p 是含10个元素的数组，每个元素是指向 int 的指针（指针数组）\n- `int (*p)[10];` p 是指针，指向含10个 int 的数组（数组指针）\n- `int p(void);` p 是返回 int 的函数\n- `int *p(void);` p 是返回 int* 的函数\n- `int (*p)(void);` p 是指针，指向返回 int 的函数（函数指针）\n\n**函数指针详解**\n- 声明：`int (*fp)(int, int);` fp 指向 `int(int,int)` 的函数\n- 赋值：`fp = &func;` 或 `fp = func;`（函数名退化为指针）\n- 调用：`fp(a, b);` 或 `(*fp)(a, b);`\n- 用途：回调函数、策略模式、跳转表、事件处理\n\n**函数指针数组（跳转表）**\n- `int (*ops[4])(int,int) = {add, sub, mul, div};`\n- 替代 switch-case，O(1) 分发\n- 解释器/虚拟机指令分发的经典手法\n\n**回调函数模式**\n- qsort 的比较函数：`int (*compar)(const void*, const void*)`\n- 线程入口函数：`void* (*start_routine)(void*)`\n- 信号处理：`void (*sighandler_t)(int)`\n\n**typedef 简化复杂声明**\n- `typedef int (*FuncPtr)(int, int);` 之后可写 `FuncPtr fp;`\n- 极大提升可读性\n- 标准库常用：signal/sigaction 等\n\n**陷阱**\n- `int *p[10]` 与 `int (*p)[10]` 含义完全不同\n- 函数不能返回函数，不能返回数组\n- 数组不能含函数，但可含函数指针",
+        "example": "#include <stdio.h>\n#include <stdlib.h>\n\n// 函数指针\ntypedef int (*BinOp)(int, int);\n\nint add(int a, int b) { return a + b; }\nint sub(int a, int b) { return a - b; }\nint mul(int a, int b) { return a * b; }\nint div_op(int a, int b) { return b ? a / b : 0; }\n\n// 跳转表（函数指针数组）\nBinOp ops[] = {add, sub, mul, div_op};\n\n// 回调示例：通用计算器\nint compute(int a, int b, BinOp op) {\n    return op(a, b);\n}\n\n// qsort 比较函数\nint cmp_int(const void *a, const void *b) {\n    return *(int*)a - *(int*)b;\n}\n\nint main() {\n    // 直接调用\n    printf(\"%d\\n\", compute(3, 4, add));  // 7\n\n    // 跳转表分发\n    int op = 2;  // 乘法\n    printf(\"%d\\n\", ops[op](3, 4));  // 12\n\n    // qsort 回调\n    int arr[] = {5, 2, 8, 1, 9, 3};\n    qsort(arr, 6, sizeof(int), cmp_int);\n    for (int i = 0; i < 6; i++) printf(\"%d \", arr[i]);\n    // 1 2 3 5 8 9\n    return 0;\n}\n\n// 复杂声明练习：\n// signal(int, void (*handler)(int)) 返回旧的 handler\n// typedef void (*sighandler_t)(int);\n// sighandler_t signal(int signum, sighandler_t handler);\n//\n// 解读：char (*(*x())[])();\n// x 是函数，返回指针，指针指向数组，数组元素是函数指针，函数返回 char"
+      },
+      {
+        "id": "c-volatile-const",
+        "title": "volatile 与 const 关键字深度",
+        "level": "进阶",
+        "content": "**const 关键字**\n- 修饰变量：只读，不可修改\n- 修饰指针：\n  - `const int *p` 或 `int const *p`：指向 const int 的指针，不能通过 p 改值，可改指向\n  - `int * const p`：const 指针，指向不可改，可改值\n  - `const int * const p`：都不可改\n- 修饰函数参数：承诺不修改参数，接口契约\n- 修饰函数返回值：返回值不可修改（指针返回时有意义）\n- 修饰结构体成员：该成员不可修改\n\n**const 读写规则（右左法则）**\n- const 在 * 左边：指向的数据是 const\n- const 在 * 右边：指针本身是 const\n\n**volatile 关键字**\n- 告诉编译器变量可能被意外修改，不要优化\n- 每次访问都从内存读取，不缓存到寄存器\n- 禁止编译器对 volatile 变量的激进优化（如消除冗余读）\n\n**volatile 应用场景**\n1. 内存映射 IO（MMIO）：硬件寄存器地址\n2. 中断服务程序修改的全局变量\n3. 多线程共享变量（但不保证线程安全，需配合原子操作）\n4. sig_atomic_t 信号处理中修改的标志\n\n**const volatile 组合**\n- `const volatile int *p`：程序不能改（const）但硬件会改（volatile）\n- 典型：只读硬件状态寄存器\n\n**const 与 #define 的区别**\n- const 有类型检查，#define 无类型\n- const 有作用域，#define 全局（文件级）\n- const 在内存有地址可取，#define 不可取地址\n- const 调试时可见符号，#define 已替换\n\n**const 优化提示**\n- 编译器可对 const 变量做常量传播优化\n- 但 volatile const 不会优化",
+        "example": "#include <stdio.h>\n\n// const 指针四种组合\nvoid pointer_const() {\n    int a = 10, b = 20;\n    const int *p1 = &a;   // 指向 const int\n    int * const p2 = &a;  // const 指针\n    const int * const p3 = &a;  // 都 const\n\n    // *p1 = 5;   // 错：不能通过 p1 修改\n    p1 = &b;      // 对：可改指向\n    *p2 = 5;      // 对：可改值\n    // p2 = &b;   // 错：不能改指向\n}\n\n// const 参数：承诺不修改字符串\nsize_t my_strlen(const char *s) {\n    size_t n = 0;\n    while (*s++) n++;\n    return n;\n}\n\n// volatile：硬件寄存器\n#define HW_STATUS (*(volatile unsigned int *)0x40000000)\n\nvoid wait_ready() {\n    while ((HW_STATUS & 0x1) == 0) {\n        // 没有 volatile 编译器可能优化成空循环或只读一次\n    }\n}\n\n// volatile 中断标志\nstatic volatile int flag = 0;\n\n// 中断服务程序中设置\nvoid ISR() {\n    flag = 1;\n}\n\nint main() {\n    // 主循环检查\n    while (!flag) {\n        // 编译器不会把 flag 缓存到寄存器\n        // 每次都从内存读取\n    }\n    printf(\"中断触发\\n\");\n    return 0;\n}\n\n// const volatile：只读硬件寄存器\n// 程序不能写（const），但硬件会更新（volatile）\nconst volatile uint32_t *timer = (uint32_t *)0x40001000;\nuint32_t current_time() { return *timer; }\n\n// const 与 #define\n#define PI 3.14159\nconst double pi = 3.14159;\n// &pi 合法，&PI 非法"
+      },
+      {
+        "id": "c-memory-alignment",
+        "title": "内存对齐与字节序",
+        "level": "进阶",
+        "content": "**内存对齐（Memory Alignment）**\n- 数据在内存中的地址是其大小的整数倍\n- CPU 访问对齐数据更快（一次读取）\n- 部分架构（ARM/MIPS）非对齐访问会异常\n- x86 支持非对齐访问但性能下降\n\n**对齐规则**\n- 结构体每个成员对齐到自身大小的倍数\n- 结构体整体大小是最大成员对齐值的倍数\n- 编译器自动插入填充字节（padding）\n\n**#pragma pack**\n- `#pragma pack(1)` 取消对齐（1字节对齐）\n- `#pragma pack()` 恢复默认\n- 节省空间但可能牺牲性能\n- 网络协议/文件格式常需紧凑结构\n\n**__attribute__((packed))**\n- GCC/Clang 语法\n- `struct __attribute__((packed)) S { ... };`\n- 作用同 #pragma pack(1)\n\n**offsetof 宏**\n- `offsetof(struct_type, member)` 计算成员偏移\n- stddef.h 定义\n- 用于实现通用容器\n\n**字节序（Endianness）**\n- **小端（Little-Endian）**：低字节存低地址。x86/ARM（默认）\n  - 0x12345678 在内存：78 56 34 12\n- **大端（Big-Endian）**：高字节存低地址。网络字节序、PowerPC\n  - 0x12345678 在内存：12 34 56 78\n\n**判断字节序**\n- 用 union 或指针转换\n\n**字节序转换函数**\n- htons/htonl：主机序转网络序（大端）\n- ntohs/ntohl：网络序转主机序\n- 网络协议规定用大端传输\n\n**位域（Bit Field）**\n- 结构体成员指定位宽\n- 位域分配顺序由实现定义（通常从低到高）\n- 跨平台不可靠，慎用于协议解析",
+        "example": "#include <stdio.h>\n#include <stddef.h>\n\n// 默认对齐\ntypedef struct {\n    char a;     // 1 byte + 3 padding\n    int b;      // 4 bytes\n    char c;     // 1 byte + 3 padding\n} S1;  // sizeof = 12\n\n// 紧凑排列\ntypedef struct {\n    int b;      // 4 bytes\n    char a;     // 1 byte\n    char c;     // 1 byte + 2 padding\n} S2;  // sizeof = 8（调整顺序省空间）\n\n// #pragma pack(1)\n#pragma pack(1)\ntypedef struct {\n    char a;\n    int b;\n    char c;\n} S3;  // sizeof = 6（无填充）\n#pragma pack()\n\n// __attribute__((packed))\ntypedef struct __attribute__((packed)) {\n    char a;\n    int b;\n    char c;\n} S4;  // sizeof = 6\n\nint main() {\n    printf(\"S1: %zu\\n\", sizeof(S1));  // 12\n    printf(\"S2: %zu\\n\", sizeof(S2));  // 8\n    printf(\"S3: %zu\\n\", sizeof(S3));  // 6\n    printf(\"S4: %zu\\n\", sizeof(S4));  // 6\n\n    // offsetof\n    printf(\"S1.b offset: %zu\\n\", offsetof(S1, b));  // 4\n\n    // 判断字节序\n    union {\n        int i;\n        char c[4];\n    } u = { .i = 0x12345678 };\n\n    if (u.c[0] == 0x78) {\n        printf(\"小端\\n\");\n    } else {\n        printf(\"大端\\n\");\n    }\n\n    // 通用判断\n    int x = 1;\n    if (*(char *)&x == 1) printf(\"小端\\n\");\n    else printf(\"大端\\n\");\n    return 0;\n}\n\n// 位域\ntypedef struct {\n    unsigned int a : 1;   // 1 bit\n    unsigned int b : 3;   // 3 bits\n    unsigned int c : 4;   // 4 bits\n} Bits;  // sizeof 通常为 4\n\n// 网络字节序\n#include <arpa/inet.h>\nuint32_t host_val = 0x12345678;\nuint32_t net_val = htonl(host_val);  // 转大端\n// 小端机器上 net_val == 0x78563412"
+      },
+      {
+        "id": "c-varargs",
+        "title": "可变参数函数与 va_list",
+        "level": "进阶",
+        "content": "**可变参数函数**\n- 参数个数和类型可变\n- 经典示例：printf/scanf/fprintf\n- 通过 stdarg.h 的 va_list 实现\n\n**stdarg.h 宏**\n- `va_list ap;` 声明参数指针\n- `va_start(ap, last)` 初始化，last 是最后一个命名参数\n- `va_arg(ap, type)` 获取下一个参数，需指定类型\n- `va_end(ap)` 清理\n- `va_copy(dest, src)` 复制（C99）\n\n**实现原理**\n- 函数调用时参数从右向左压栈（cdecl 约定）\n- va_list 指向最后一个命名参数之后的栈位置\n- va_arg 根据类型大小移动指针\n\n**类型提升规则**\n- 可变参数会发生默认参数提升\n- char/short → int\n- float → double\n- 因此 va_arg 取 char/short 要用 int，取 float 要用 double\n\n**经典实现：简易 printf**\n- 格式字符串扫描 %d/%s/%c 等\n- 遇到占位符调用 va_arg 取值\n\n**安全注意事项**\n- 无类型检查，类型不匹配导致未定义行为\n- va_arg 取多了会读到栈上垃圾数据\n- 必须有方式知道参数个数（如格式串、哨兵值）\n- printf 的格式串与参数不匹配是常见漏洞\n\n**sentinel 哨兵**\n- execl(path, arg0, arg1, ..., NULL)\n- 最后一个参数必须是 NULL 作为结束标记\n- GCC: __attribute__((sentinel)) 检查\n\n**vfprintf 系列**\n- vprintf(const char *fmt, va_list ap)\n- 用于包装 printf：自定义日志函数",
+        "example": "#include <stdio.h>\n#include <stdarg.h>\n#include <string.h>\n\n// 求和：n 表示个数\nint sum(int n, ...) {\n    va_list ap;\n    int total = 0;\n    va_start(ap, n);\n    for (int i = 0; i < n; i++) {\n        total += va_arg(ap, int);\n    }\n    va_end(ap);\n    return total;\n}\n\n// 简易 printf 实现\nvoid my_printf(const char *fmt, ...) {\n    va_list ap;\n    va_start(ap, fmt);\n    for (const char *p = fmt; *p; p++) {\n        if (*p == '%') {\n            p++;\n            switch (*p) {\n                case 'd': printf(\"%d\", va_arg(ap, int)); break;\n                case 'f': printf(\"%f\", va_arg(ap, double)); break;  // float 提升\n                case 'c': printf(\"%c\", va_arg(ap, int)); break;     // char 提升\n                case 's': printf(\"%s\", va_arg(ap, char*)); break;\n                case '%': putchar('%'); break;\n                default: putchar('%'); putchar(*p);\n            }\n        } else {\n            putchar(*p);\n        }\n    }\n    va_end(ap);\n}\n\n// 日志函数：包装 vfprintf\nvoid log_msg(int level, const char *fmt, ...) {\n    const char *names[] = {\"DEBUG\", \"INFO\", \"WARN\", \"ERROR\"};\n    printf(\"[%s] \", names[level]);\n    va_list ap;\n    va_start(ap, fmt);\n    vprintf(fmt, ap);  // 传递 va_list\n    va_end(ap);\n    putchar('\\n');\n}\n\n// 哨兵结束\nvoid run_all(void (*fn)(void), ...) {\n    va_list ap;\n    va_start(ap, fn);\n    while (fn != NULL) {\n        fn();\n        fn = va_arg(ap, void(*)(void));\n    }\n    va_end(ap);\n}\n\nint main() {\n    printf(\"%d\\n\", sum(3, 10, 20, 30));      // 60\n    printf(\"%d\\n\", sum(5, 1, 2, 3, 4, 5));    // 15\n\n    my_printf(\"name=%s age=%d score=%f\\n\", \"Alice\", 25, 95.5);\n\n    log_msg(1, \"user %s logged in\", \"admin\");\n    log_msg(3, \"error code %d\", 500);\n    return 0;\n}"
+      },
+      {
+        "id": "c-signal",
+        "title": "信号处理与异步安全",
+        "level": "高级",
+        "content": "**信号（Signal）概述**\n- 软件中断，由内核或进程发送\n- 异步发生，可在任意时刻打断当前执行\n- signal.h 定义信号编号\n\n**常见信号**\n- SIGINT(2)：Ctrl+C\n- SIGTERM(15)：终止请求（可捕获）\n- SIGKILL(9)：强制终止（不可捕获/忽略）\n- SIGSEGV(11)：段错误（非法内存访问）\n- SIGABRT(6)：abort() 触发\n- SIGALRM(14)：alarm 定时到期\n- SIGCHLD(17)：子进程状态变化\n- SIGPIPE(13)：写已关闭的管道\n- SIGUSR1/USR2：用户自定义\n\n**signal() vs sigaction()**\n- signal()：老接口，行为跨平台不一致\n- sigaction()：POSIX 标准，功能强大，推荐\n- sigaction 可设置标志（SA_RESTART 自动重启、SA_SIGINFO 带信息）\n\n**信号处理函数的限制（异步信号安全）**\n- 处理函数中只能调用异步信号安全函数（async-signal-safe）\n- 不可调用 malloc/printf/fopen 等（可能持锁导致死锁）\n- 安全函数：write/_exit/signal 等\n- 推荐做法：处理函数只设置 flag，主循环检查\n\n**volatile sig_atomic_t**\n- 信号处理中修改的标志变量必须用 volatile sig_atomic_t\n- volatile 防止编译器优化\n- sig_atomic_t 保证读写原子性\n\n**信号屏蔽**\n- sigprocmask 屏蔽信号（延迟投递而非丢弃）\n- 临界区保护：屏蔽 → 操作 → 恢复\n\n**不可捕获的信号**\n- SIGKILL(9) 和 SIGSTOP(19) 不能被捕获/忽略/屏蔽\n- 这是系统保留的最后手段\n\n**SIGCHLD 处理僵尸进程**\n- 子进程退出后父进程未 wait 会变僵尸\n- 捕获 SIGCHLD 在处理函数中 wait\n- 或显式忽略：signal(SIGCHLD, SIG_IGN)",
+        "example": "#include <stdio.h>\n#include <signal.h>\n#include <unistd.h>\n#include <string.h>\n#include <sys/wait.h>\n\nvolatile sig_atomic_t stop = 0;\n\nvoid handler(int sig) {\n    // 只做最简单操作：设置标志\n    // 不可用 printf，用 write\n    const char *msg = \"caught signal\\n\";\n    write(STDOUT_FILENO, msg, strlen(msg));\n    stop = 1;\n}\n\n// sigaction 注册\nvoid setup_signal() {\n    struct sigaction sa;\n    memset(&sa, 0, sizeof(sa));\n    sa.sa_handler = handler;\n    sigemptyset(&sa.sa_mask);\n    sa.sa_flags = SA_RESTART;  // 被中断的系统调用自动重启\n    sigaction(SIGINT, &sa, NULL);\n}\n\nint main() {\n    setup_signal();\n    printf(\"pid=%d, Ctrl+C to stop\\n\", getpid());\n    while (!stop) {\n        pause();  // 等待信号\n    }\n    printf(\"exiting\\n\");\n    return 0;\n}\n\n// 定时器\nvoid alarm_handler(int sig) {\n    printf(\"timeout!\\n\");\n    _exit(1);\n}\n\nvoid read_with_timeout() {\n    signal(SIGALRM, alarm_handler);\n    alarm(5);  // 5秒后发送 SIGALRM\n    char buf[100];\n    if (fgets(buf, sizeof(buf), stdin)) {\n        alarm(0);  // 取消定时\n        printf(\"got: %s\", buf);\n    }\n}\n\n// 处理僵尸进程\nvoid sigchld_handler(int sig) {\n    int status;\n    while (waitpid(-1, &status, WNOHANG) > 0) {\n        // 回收所有已退出子进程\n    }\n}\n\n// 忽略 SIGPIPE（写已关闭 socket 时不崩溃）\nsignal(SIGPIPE, SIG_IGN);\n\n// 屏蔽信号（临界区）\nsigset_t mask, oldmask;\nsigemptyset(&mask);\nsigaddset(&mask, SIGINT);\nsigprocmask(SIG_BLOCK, &mask, &oldmask);  // 屏蔽\n// ... 临界区操作 ...\nsigprocmask(SIG_SETMASK, &oldmask, NULL);  // 恢复"
+      },
+      {
+        "id": "c-ipc",
+        "title": "进程间通信 IPC 全集",
+        "level": "高级",
+        "content": "**IPC 主要方式**\n1. 管道（Pipe）\n2. 命名管道（FIFO）\n3. 消息队列（Message Queue）\n4. 共享内存（Shared Memory）\n5. 信号量（Semaphore）\n6. 信号（Signal）\n7. 套接字（Socket）\n\n**管道（Pipe）**\n- 半双工，单向数据流\n- 只能在有亲缘关系进程间使用（父子）\n- pipe(fd[2])：fd[0] 读端，fd[1] 写端\n- 内核缓冲区，默认 64KB\n- 读端关闭写端收到 SIGPIPE\n\n**命名管道（FIFO）**\n- 文件系统中的特殊文件\n- 任意进程可打开使用\n- mkfifo(path, mode) 创建\n- 阻塞打开直到对端也打开\n\n**消息队列**\n- System V 和 POSIX 两套 API\n- 消息有类型，可选择性接收\n- msgget/msgsnd/msgrcv/msgctl（System V）\n- 克服管道无格式字节流的缺点\n\n**共享内存**\n- 最快的 IPC（零拷贝）\n- 多个进程映射同一物理内存\n- 需配合信号量同步\n- shmget/shmat/shmdt/shmctl（System V）\n- mmap(MAP_SHARED) 也可实现\n\n**信号量**\n- 用于同步和互斥\n- P 操作（wait）减1，V 操作（post）加1\n- semget/semop/semctl（System V）\n- POSIX 信号量更简洁：sem_open/sem_wait/sem_post\n\n**套接字（Socket）**\n- 最通用，可跨主机\n- 本地 socket（AF_UNIX）用于本机 IPC\n- 网络 socket（AF_INET）跨主机\n\n**选型建议**\n- 父子进程简单通信：管道\n- 任意进程本机通信：FIFO 或 Unix Socket\n- 大数据高效传输：共享内存 + 信号量\n- 跨主机：Socket",
+        "example": "#include <stdio.h>\n#include <unistd.h>\n#include <string.h>\n#include <sys/wait.h>\n#include <sys/ipc.h>\n#include <sys/shm.h>\n#include <fcntl.h>\n#include <sys/stat.h>\n\n// 管道：父子进程通信\nvoid pipe_example() {\n    int fd[2];\n    pipe(fd);\n    pid_t pid = fork();\n    if (pid == 0) {  // 子进程写\n        close(fd[0]);\n        write(fd[1], \"hello\", 5);\n        close(fd[1]);\n    } else {  // 父进程读\n        close(fd[1]);\n        char buf[100];\n        int n = read(fd[0], buf, sizeof(buf));\n        buf[n] = 0;\n        printf(\"got: %s\\n\", buf);\n        wait(NULL);\n    }\n}\n\n// FIFO 命名管道\nvoid fifo_example() {\n    mkfifo(\"/tmp/myfifo\", 0666);\n    if (fork() == 0) {\n        int fd = open(\"/tmp/myfifo\", O_WRONLY);\n        write(fd, \"via fifo\", 8);\n        close(fd);\n    } else {\n        int fd = open(\"/tmp/myfifo\", O_RDONLY);\n        char buf[100];\n        int n = read(fd, buf, sizeof(buf));\n        buf[n] = 0;\n        printf(\"fifo: %s\\n\", buf);\n    }\n}\n\n// 共享内存\nvoid shm_example() {\n    int shmid = shmget(IPC_PRIVATE, 4096, 0666 | IPC_CREAT);\n    char *addr = shmat(shmid, NULL, 0);\n\n    if (fork() == 0) {\n        strcpy(addr, \"shared data\");\n        shmdt(addr);\n    } else {\n        wait(NULL);\n        printf(\"shm: %s\\n\", addr);\n        shmdt(addr);\n        shmctl(shmid, IPC_RMID, NULL);\n    }\n}\n\n// Unix Socket（本地高性能）\n#include <sys/socket.h>\n#include <sys/un.h>\nvoid unix_socket_example() {\n    int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);\n    struct sockaddr_un addr;\n    addr.sun_family = AF_UNIX;\n    strcpy(addr.sun_path, \"/tmp/unix.sock\");\n    // bind/listen/accept/connect 同网络 socket\n}\n\nint main() {\n    pipe_example();\n    fifo_example();\n    shm_example();\n    return 0;\n}"
+      },
+      {
+        "id": "c-pthread",
+        "title": "多线程编程：pthread 与同步",
+        "level": "高级",
+        "content": "**pthread 基础**\n- POSIX 线程标准\n- pthread.h + -lpthread\n- pthread_create(&tid, attr, func, arg)\n- pthread_join(tid, &retval)：等待线程结束\n- pthread_exit(retval)：线程退出\n- pthread_self()：获取自身 tid\n\n**线程终止**\n- 线程函数 return 等价 pthread_exit\n- 主线程 return 或 exit() 会终止整个进程（所有线程）\n- pthread_cancel(tid) 取消线程\n- 主线程只退出用 pthread_exit\n\n**同步原语**\n1. **互斥锁（Mutex）**\n   - pthread_mutex_lock/unlock\n   - 保护临界区\n   - trylock 非阻塞尝试\n   - timedlock 超时锁定\n\n2. **条件变量（Condition Variable）**\n   - pthread_cond_wait/signal/broadcast\n   - 必须配合 mutex 使用\n   - wait 会原子地释放 mutex 并等待\n   - 虚假唤醒：用 while 循环检查条件\n\n3. **读写锁（RWLock）**\n   - 读共享，写独占\n   - 适合读多写少\n   - pthread_rwlock_rdlock/wrlock/unlock\n\n4. **自旋锁（Spinlock）**\n   - 忙等待，不睡眠\n   - 临界区极短时用\n   - pthread_spin_lock/unlock\n\n5. **屏障（Barrier）**\n   - 等待 N 个线程到达后一起继续\n   - pthread_barrier_wait\n\n6. **一次性初始化**\n   - pthread_once(&once_control, init_func)\n   - 保证 init_func 只执行一次\n\n**死锁条件（四大必要条件）**\n- 互斥、持有并等待、不可剥夺、循环等待\n- 避免方法：固定锁顺序、trylock、避免嵌套\n\n**线程安全**\n- 可重入函数（reentrant）：不依赖全局/静态变量\n- 线程安全函数：可用锁保护\n- errno 是线程局部存储（TLS）\n\n**线程局部存储**\n- __thread 关键字（GCC）\n- 每个线程独立副本",
+        "example": "#include <stdio.h>\n#include <pthread.h>\n#include <unistd.h>\n\n// 互斥锁\npthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;\nint counter = 0;\n\nvoid *increment(void *arg) {\n    for (int i = 0; i < 100000; i++) {\n        pthread_mutex_lock(&lock);\n        counter++;  // 临界区\n        pthread_mutex_unlock(&lock);\n    }\n    return NULL;\n}\n\nvoid mutex_demo() {\n    pthread_t t1, t2;\n    pthread_create(&t1, NULL, increment, NULL);\n    pthread_create(&t2, NULL, increment, NULL);\n    pthread_join(t1, NULL);\n    pthread_join(t2, NULL);\n    printf(\"counter = %d\\n\", counter);  // 200000\n}\n\n// 条件变量：生产者消费者\npthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;\npthread_cond_t cond = PTHREAD_COND_INITIALIZER;\nint queue[100], head = 0, tail = 0;\n\nvoid *producer(void *arg) {\n    for (int i = 0; i < 10; i++) {\n        pthread_mutex_lock(&m);\n        queue[tail++] = i;\n        pthread_cond_signal(&cond);  // 通知消费者\n        pthread_mutex_unlock(&m);\n    }\n    return NULL;\n}\n\nvoid *consumer(void *arg) {\n    for (int i = 0; i < 10; i++) {\n        pthread_mutex_lock(&m);\n        while (head == tail) {  // while 防虚假唤醒\n            pthread_cond_wait(&cond, &m);  // 释放 m 并等待\n        }\n        int item = queue[head++];\n        pthread_mutex_unlock(&m);\n        printf(\"consumed %d\\n\", item);\n    }\n    return NULL;\n}\n\n// 读写锁\npthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;\nint data = 0;\n\nvoid *reader(void *arg) {\n    pthread_rwlock_rdlock(&rwlock);\n    printf(\"read %d\\n\", data);  // 多个读可并发\n    pthread_rwlock_unlock(&rwlock);\n    return NULL;\n}\n\nvoid *writer(void *arg) {\n    pthread_rwlock_wrlock(&rwlock);\n    data++;  // 写独占\n    pthread_rwlock_unlock(&rwlock);\n    return NULL;\n}\n\n// 线程局部存储\n__thread int tid = 0;  // 每线程独立\n\nvoid *tls_demo(void *arg) {\n    tid = (int)(long)arg;\n    printf(\"thread tid=%d\\n\", tid);  // 各线程独立\n    return NULL;\n}\n\nint main() {\n    mutex_demo();\n    pthread_t p, c;\n    pthread_create(&p, NULL, producer, NULL);\n    pthread_create(&c, NULL, consumer, NULL);\n    pthread_join(p, NULL);\n    pthread_join(c, NULL);\n    return 0;\n}"
+      },
+      {
+        "id": "c-dlopen",
+        "title": "动态库与 dlopen 运行时加载",
+        "level": "高级",
+        "content": "**静态库 vs 动态库**\n- **静态库（.a）**：编译时链接，代码拷贝进可执行文件\n  - 优点：独立运行、启动快\n  - 缺点：体积大、更新需重新编译、多进程重复占用内存\n- **动态库（.so/.dll）**：运行时链接，内存中只一份\n  - 优点：体积小、可独立更新、多进程共享\n  - 缺点：依赖运行环境、启动稍慢\n\n**动态库创建**\n- `gcc -shared -fPIC -o libfoo.so foo.c`\n- -fPIC：位置无关代码（Position Independent Code）\n- -shared：生成共享库\n\n**链接方式**\n1. **链接时绑定（普通链接）**\n   - `gcc main.c -L. -lfoo -o main`\n   - 运行时由动态链接器加载\n   - LD_LIBRARY_PATH 指定搜索路径\n   - ldd 查看依赖\n\n2. **运行时绑定（dlopen）**\n   - 程序运行中按需加载\n   - dlfcn.h：dlopen/dlsym/dlclose/dlerror\n   - 实现插件系统\n\n**dlopen API**\n- `dlopen(path, flag)`：加载库，返回 handle\n  - RTLD_LAZY：延迟绑定（用到时解析符号）\n  - RTLD_NOW：立即解析所有符号\n  - RTLD_GLOBAL：符号可被后续库共享\n  - RTLD_LOCAL：符号不共享（默认）\n- `dlsym(handle, name)`：查找符号，返回地址\n- `dlclose(handle)`：卸载库（引用计数归零才真卸载）\n- `dlerror()`：获取错误信息\n\n**插件架构实现**\n1. 定义统一接口（头文件）\n2. 插件实现接口，编译为 .so\n3. 主程序扫描插件目录，dlopen 加载\n4. dlsym 获取约定函数（如 plugin_init）\n5. 调用插件功能\n\n**符号可见性**\n- 默认所有全局符号导出\n- __attribute__((visibility(\"hidden\"))) 隐藏\n- -fvisibility=hidden 全局默认隐藏，显式导出用 __attribute__((visibility(\"default\")))\n- 减少符号表，加速加载，避免冲突\n\n**版本管理**\n- .so 通常带版本号：libfoo.so.1.0.0\n- 软链接：libfoo.so → libfoo.so.1 → libfoo.so.1.0.0\n- SONAME：libfoo.so.1",
+        "example": "// ===== math_plugin.h（公共接口）=====\n// int add(int a, int b);\n// const char *plugin_name(void);\n\n// ===== add_plugin.c（插件实现）=====\n#include \"math_plugin.h\"\nint add(int a, int b) { return a + b; }\nconst char *plugin_name(void) { return \"add\"; }\n// 编译: gcc -shared -fPIC -o libadd.so add_plugin.c\n\n// ===== main.c（主程序加载插件）=====\n#define _GNU_SOURCE\n#include <stdio.h>\n#include <dlfcn.h>\n\ntypedef int (*add_fn)(int, int);\ntypedef const char *(*name_fn)(void);\n\nint main() {\n    // 运行时加载动态库\n    void *handle = dlopen(\"./libadd.so\", RTLD_NOW);\n    if (!handle) {\n        fprintf(stderr, \"dlopen: %s\\n\", dlerror());\n        return 1;\n    }\n\n    // 查找符号\n    add_fn add = (add_fn)dlsym(handle, \"add\");\n    name_fn name = (name_fn)dlsym(handle, \"plugin_name\");\n\n    char *err = dlerror();\n    if (err) {\n        fprintf(stderr, \"dlsym: %s\\n\", err);\n        dlclose(handle);\n        return 1;\n    }\n\n    printf(\"%s: 3+4=%d\\n\", name(), add(3, 4));\n\n    dlclose(handle);\n    return 0;\n}\n// 编译: gcc main.c -ldl -o main\n// 运行: ./main\n\n// 查看动态库依赖\n// ldd ./main\n// LD_LIBRARY_PATH=. ./main\n\n// 符号可见性控制\n__attribute__((visibility(\"default\"))) int exported_func(void) { return 1; }\n__attribute__((visibility(\"hidden\"))) int internal_func(void) { return 2; }\n// 编译: gcc -shared -fPIC -fvisibility=hidden -o libfoo.so foo.c"
       }
     ]
   },
@@ -1410,6 +1522,62 @@ const KNOWLEDGE = {
         "level": "高级",
         "content": "**模板元编程基础**\n- 编译期计算，结果嵌入代码\n- 模板递归 + 特化终止\n- 类型计算：type traits\n- 值计算：编译期常量\n\n**模板特化**\n- 全特化：template<> class Foo<int> { ... };\n- 偏特化：template<typename T> class Foo<T*> { ... };\n- 特化改变行为，偏特化处理特定模式\n\n**SFINAE（替换失败不是错误）**\n- 模板参数替换时若失败，不报错，从重载集中移除\n- std::enable_if：条件启用模板\n- void_t：检测表达式合法性\n- 常见用途：根据类型特性选择不同实现\n\n**类型萃取（Type Traits）**\n- std::is_integral / is_pointer / is_class / is_base_of\n- std::remove_reference / remove_const / decay\n- std::conditional<bool, T, F>\n- std::is_same<T,U> / std::decay_t\n\n**变参模板（Variadic Templates）**\n- template<typename... Args> 接受任意数量参数\n- 参数包：Args... 类型包，args... 值包\n- sizeof...(Args) 参数个数\n- 折叠表达式（C++17）：(args + ...) 求和\n- 递归展开或折叠表达式展开\n\n**CRTP（奇异递归模板模式）**\n- 派生类把自己作为基类模板参数\ntemplate<typename Derived> class Base { void f() { static_cast<Derived*>(this)->impl(); } };\nclass Derived : public Base<Derived> { void impl() {...} };\n- 静态多态，无虚函数开销\n- Mixin 模式基础\n\n**模板元编程技巧**\n- 编译期 if：if constexpr\n- 编译期断言：static_assert\n- 标签分发：tag dispatch\n- 表达式模板：延迟计算（如 Eigen 库）",
         "example": "#include <iostream>\n#include <type_traits>\n\n// 模板递归：编译期阶乘\ntemplate<int N>\nstruct Factorial {\n    static constexpr int value = N * Factorial<N - 1>::value;\n};\ntemplate<>\nstruct Factorial<0> {\n    static constexpr int value = 1;\n};\n\n// SFINAE：enable_if 选择实现\ntemplate<typename T,\n         typename = std::enable_if_t<std::is_integral_v<T>>>\nT process(T x) { return x * 2; }\n\ntemplate<typename T,\n         typename = std::enable_if_t<std::is_floating_point_v<T>>>\nT process(T x, int = 0) { return x * 1.5; }\n\n// 变参模板：求和\ntemplate<typename... Args>\nauto sum(Args... args) {\n    return (args + ...);  // C++17 折叠表达式\n}\n\n// 变参模板：打印\ntemplate<typename T>\nvoid print(T t) { std::cout << t << '\\n'; }\n\ntemplate<typename T, typename... Rest>\nvoid print(T first, Rest... rest) {\n    std::cout << first << ' ';\n    print(rest...);\n}\n\n// CRTP：静态多态\ntemplate<typename Derived>\nclass Shape {\npublic:\n    double area() const {\n        return static_cast<const Derived*>(this)->area_impl();\n    }\n};\n\nclass Circle : public Shape<Circle> {\n    double r;\npublic:\n    Circle(double r) : r(r) {}\n    double area_impl() const { return 3.14159 * r * r; }\n};\n\n// 类型萃取\ntemplate<typename T>\nvoid process_type(T x) {\n    if constexpr (std::is_integral_v<T>)\n        std::cout << \"integral: \" << x << '\\n';\n    else if constexpr (std::is_floating_point_v<T>)\n        std::cout << \"float: \" << x << '\\n';\n    else\n        std::cout << \"other\\n\";\n}\n\nint main() {\n    static_assert(Factorial<5>::value == 120, \"\");\n    std::cout << Factorial<10>::value << '\\n';  // 3628800\n\n    std::cout << sum(1, 2, 3, 4, 5) << '\\n';    // 15\n    print(1, \"hello\", 3.14, 'c');\n\n    Circle c(2);\n    std::cout << c.area() << '\\n';  // 12.566\n\n    process_type(42);\n    process_type(3.14);\n    return 0;\n}"
+      },
+      {
+        "id": "cpp-compile-link",
+        "title": "C++ 编译链接过程详解",
+        "level": "进阶",
+        "content": "**编译流程四阶段**\n1. 预处理（Preprocessing）：展开宏、包含头文件、条件编译\n2. 编译（Compilation）：语法分析 → AST → 生成汇编\n3. 汇编（Assembly）：汇编代码 → 目标文件（.o/.obj）\n4. 链接（Linking）：目标文件 + 库 → 可执行文件\n\n**预处理阶段**\n- #include：头文件内容原样插入\n- #define/#undef：宏定义与取消\n- #if/#ifdef/#ifndef/#endif：条件编译\n- #pragma：编译器指令\n- g++ -E 生成预处理结果\n\n**编译阶段**\n- 词法分析 → Token\n- 语法分析 → AST\n- 语义分析 → 类型检查\n- 代码生成 → 汇编（.s）\n- g++ -S 生成汇编\n\n**汇编阶段**\n- 汇编指令 → 机器码\n- 生成目标文件（ELF/COFF 格式）\n- 包含：代码段 .text、数据段 .data/.bss、符号表、重定位表\n- g++ -c 生成目标文件\n\n**链接阶段**\n- **符号解析**：将引用绑定到定义\n- **重定位**：确定最终地址\n- 链接类型：静态链接、动态链接\n\n**链接错误**\n- undefined reference：符号未定义（未实现或未链接库）\n- multiple definition：符号重复定义\n- 解决：检查头文件声明与实现是否匹配、链接库顺序\n\n**One Definition Rule (ODR)**\n- 每个实体在整个程序中只能有一个定义\n- 内联函数/模板/constexpr 可多次定义但必须一致\n- 头文件中只放声明，定义放 cpp（除外：inline/template/constexpr）\n\n**头文件与 include 顺序**\n- 推荐顺序：自身头文件 → C 标准库 → C++ 标准库 → 第三方库 → 项目头文件\n- 自身头文件放最前可检测头文件是否自包含\n- #pragma once / include guard 防止重复包含\n\n**编译优化级别**\n- -O0：不优化（默认，调试用）\n- -O1：基本优化\n- -O2：常用优化（发布推荐）\n- -O3：激进优化（可能增加体积）\n- -Os：优化体积\n- -Og：调试友好优化",
+        "example": "// 文件结构示例\n// ===== math.h =====\n#pragma once\nint add(int a, int b);  // 声明\n\n// ===== math.cpp =====\n#include \"math.h\"\nint add(int a, int b) { return a + b; }  // 定义\n\n// ===== main.cpp =====\n#include <iostream>\n#include \"math.h\"\nint main() {\n    std::cout << add(1, 2) << std::endl;\n    return 0;\n}\n\n// 编译命令：\n// g++ -E main.cpp -o main.ii    # 预处理\n// g++ -S main.ii -o main.s       # 编译为汇编\n// g++ -c main.s -o main.o        # 汇编为目标文件\n// g++ main.o math.o -o main      # 链接\n// 或一步完成：\n// g++ -O2 main.cpp math.cpp -o main\n\n// include guard vs pragma once\n#ifndef MATH_H\n#define MATH_H\nint add(int a, int b);\n#endif\n\n// 查看符号表\n// nm main.o\n// readelf -s main.o  (ELF)\n\n// 常见链接错误解决\n// undefined reference to `add`:\n//   - 检查 math.cpp 是否编译\n//   - 检查库链接顺序（被依赖的放后面）\n// multiple definition of `foo`:\n//   - 检查是否在头文件中定义了非 inline 函数"
+      },
+      {
+        "id": "cpp-raii",
+        "title": "RAII 与资源管理深度",
+        "level": "进阶",
+        "content": "**RAII（Resource Acquisition Is Initialization）**\n- 资源获取即初始化\n- 将资源绑定到对象生命周期\n- 构造时获取资源，析构时释放\n- 利用栈对象确定性销毁保证资源释放\n\n**RAII 核心思想**\n- 用对象管理资源（内存/文件/锁/socket）\n- 异常安全：即使抛异常，栈展开也会析构已构造对象\n- 消除手动管理资源的繁琐和遗漏\n\n**RAII 经典应用**\n- 智能指针：unique_ptr/shared_ptr 管理内存\n- lock_guard/unique_lock 管理锁\n- fstream 管理文件\n- vector/string 管理动态数组\n\n**自定义 RAII 类**\n- 构造函数获取资源\n- 析构函数释放资源\n- 实现拷贝/移动语义（按需）\n- 遵循三/五法则\n\n**三法则（Rule of Three）**\n- 如果定义了析构函数、拷贝构造、拷贝赋值之一，通常需要三个都定义\n- 因为涉及资源管理时默认的浅拷贝会出错\n\n**五法则（Rule of Five）**\n- C++11 加入移动语义后扩展为五\n- 析构、拷贝构造、拷贝赋值、移动构造、移动赋值\n\n**零法则（Rule of Zero）**\n- 优先使用标准 RAII 类型管理资源\n- 类本身不需要定义任何特殊成员函数\n- 让编译器生成默认实现即可\n\n**RAII 与异常安全**\n- 构造函数抛异常：析构函数不会被调用（对象未完成构造）\n- 构造函数中获取多个资源时，成员初始化顺序保证析构逆序\n- 推荐用智能指针管理构造函数中的临时资源\n\n**资源所有权语义**\n- 独占所有权：unique_ptr\n- 共享所有权：shared_ptr\n- 弱引用：weak_ptr\n- 借用（不管理）：裸指针引用",
+        "example": "#include <memory>\n#include <mutex>\n#include <fstream>\n\n// 自定义 RAII：管理 C API 资源\nclass FileHandle {\n    FILE* fp_;\npublic:\n    explicit FileHandle(const char* path, const char* mode)\n        : fp_(fopen(path, mode)) {\n        if (!fp_) throw std::runtime_error(\"open failed\");\n    }\n    ~FileHandle() { if (fp_) fclose(fp_); }\n\n    // 禁止拷贝（资源独占）\n    FileHandle(const FileHandle&) = delete;\n    FileHandle& operator=(const FileHandle&) = delete;\n\n    // 允许移动\n    FileHandle(FileHandle&& o) noexcept : fp_(o.fp_) { o.fp_ = nullptr; }\n    FileHandle& operator=(FileHandle&& o) noexcept {\n        if (this != &o) {\n            if (fp_) fclose(fp_);\n            fp_ = o.fp_;\n            o.fp_ = nullptr;\n        }\n        return *this;\n    }\n\n    FILE* get() const { return fp_; }\n};\n\n// 使用 RAII\nvoid process() {\n    FileHandle f(\"data.txt\", \"r\");  // 构造获取资源\n    // 使用 f\n    char buf[100];\n    fgets(buf, sizeof(buf), f.get());\n}  // 析构自动 fclose，即使抛异常也安全\n\n// Rule of Zero：优先用标准类型\nclass Good {\n    std::vector<int> data_;\n    std::string name_;\n    std::unique_ptr<Connection> conn_;\npublic:\n    Good() = default;  // 无需自定义析构/拷贝/移动\n};\n\n// RAII 锁\nvoid safe_increment(int& counter, std::mutex& m) {\n    std::lock_guard<std::mutex> lk(m);  // 构造时加锁\n    counter++;\n}  // 析构时解锁，即使抛异常也解锁\n\n// unique_lock 更灵活\nvoid flexible_lock(std::mutex& m) {\n    std::unique_lock<std::mutex> lk(m);\n    // ... 可以手动 unlock/lock\n    lk.unlock();\n    // 做些不需要锁的事\n    lk.lock();\n    // ...\n}  // 析构确保最终解锁"
+      },
+      {
+        "id": "cpp-smart-ptr",
+        "title": "智能指针深度与陷阱",
+        "level": "高级",
+        "content": "**unique_ptr**\n- 独占所有权，不可拷贝，可移动\n- 零开销抽象（与裸指针相当）\n- 默认 delete，可自定义删除器\n- make_unique（C++14）创建\n- 数组特化：unique_ptr<T[]>\n\n**shared_ptr**\n- 共享所有权，引用计数\n- 引用计数原子操作，线程安全（计数本身），但对象访问需额外同步\n- 控制块包含：强引用计数、弱引用计数、删除器、分配器\n- make_shared 一次分配（对象+控制块），但内存延迟释放\n- 控制块创建时机：make_shared / shared_ptr 构造 / enable_shared_from_this\n\n**weak_ptr**\n- 不增加强引用计数，不影响对象释放\n- 用于打破循环引用、观察者模式、缓存\n- lock() 提升为 shared_ptr（若对象存活）\n- expired() 检查是否已释放\n\n**循环引用问题**\n- shared_ptr 互相引用导致引用计数永不归零\n- 内存泄漏\n- 解决：一方用 weak_ptr\n\n**enable_shared_from_this**\n- 类继承 enable_shared_from_this<T>\n- shared_from_this() 返回自身的 shared_ptr\n- 不能在构造函数中调用（此时还未纳入管理）\n- 避免用 this 构造 shared_ptr（会产生两个控制块）\n\n**自定义删除器**\n- unique_ptr<T, Deleter> 类型含删除器类型\n- shared_ptr 删除器不影响类型（存在控制块）\n- 用于管理非 new 资源（fopen/malloc/句柄）\n\n**make_shared vs new**\n- make_shared：一次分配，性能好，但内存延迟释放（weak_ptr 延长控制块生命周期）\n- shared_ptr(new T)：两次分配\n- make_shared 不支持自定义删除器和私有构造\n\n**性能考量**\n- shared_ptr 拷贝有原子操作开销\n- 传参优先 const shared_ptr<T>& 或 T&\n- 局部使用优先 unique_ptr\n\n**常见陷阱**\n- 用 this 构造多个 shared_ptr → 双重释放\n- 循环引用 → 内存泄漏\n- shared_ptr 线程安全 ≠ 对象线程安全\n- make_shared 后 weak_ptr 延迟对象内存释放",
+        "example": "#include <memory>\n#include <iostream>\n\n// unique_ptr 独占\nvoid unique_demo() {\n    auto p = std::make_unique<int>(42);\n    // auto p2 = p;  // 错：不可拷贝\n    auto p2 = std::move(p);  // 移动\n    std::cout << *p2 << std::endl;\n}  // 自动 delete\n\n// 自定义删除器\nauto deleter = [](FILE* f) {\n    if (f) { std::cout << \"closing file\\n\"; fclose(f); }\n};\nstd::unique_ptr<FILE, decltype(deleter)> fp(fopen(\"a.txt\", \"r\"), deleter);\n\n// shared_ptr 共享\nvoid shared_demo() {\n    auto p = std::make_shared<int>(100);\n    auto p2 = p;  // 引用计数 +1\n    std::cout << p.use_count() << std::endl;  // 2\n}\n\n// 循环引用问题\nstruct Node {\n    std::shared_ptr<Node> next;  // 强引用\n    ~Node() { std::cout << \"destroyed\\n\"; }\n};\n\nvoid leak() {\n    auto a = std::make_shared<Node>();\n    auto b = std::make_shared<Node>();\n    a->next = b;\n    b->next = a;  // 循环引用：内存泄漏！\n}  // 引用计数都不归零\n\n// 用 weak_ptr 打破循环\nstruct Node2 {\n    std::shared_ptr<Node2> next;\n    std::weak_ptr<Node2> prev;  // 弱引用打破循环\n};\n\nvoid no_leak() {\n    auto a = std::make_shared<Node2>();\n    auto b = std::make_shared<Node2>();\n    a->next = b;\n    b->prev = a;  // weak_ptr 不增加计数\n}  // 正常释放\n\n// enable_shared_from_this\nclass Widget : public std::enable_shared_from_this<Widget> {\npublic:\n    std::shared_ptr<Widget> get() {\n        return shared_from_this();  // 安全\n        // return shared_ptr<Widget>(this);  // 危险！多控制块\n    }\n};\n\n// weak_ptr 观察者\nvoid weak_demo() {\n    std::weak_ptr<int> wp;\n    {\n        auto sp = std::make_shared<int>(42);\n        wp = sp;\n    }\n    std::cout << wp.expired() << std::endl;  // 1 已释放\n    if (auto sp = wp.lock()) {  // 尝试提升\n        std::cout << *sp << std::endl;\n    }\n}"
+      },
+      {
+        "id": "cpp-iterator-invalidation",
+        "title": "STL 迭代器失效问题",
+        "level": "高级",
+        "content": "**迭代器失效概述**\n- 容器结构修改（插入/删除）可能导致已有迭代器失效\n- 使用失效迭代器是未定义行为\n- 不同容器失效规则不同\n\n**序列容器**\n- **vector**：\n  - 插入：若未扩容，插入点之后迭代器失效；扩容则全部失效\n  - 删除：删除点及之后失效\n  - reserve 预分配可减少扩容失效\n- **deque**：\n  - 插入/删除两端：所有迭代器失效（但引用/指针可能不失效）\n  - 中间插入/删除：所有迭代器、引用、指针失效\n- **list/forward_list**：\n  - 插入：不影响其他迭代器\n  - 删除：仅被删除元素的迭代器失效\n  - 链表节点独立，不影响其他\n\n**关联容器（红黑树）**\n- **set/map/multiset/multimap**：\n  - 插入：不影响已有迭代器\n  - 删除：仅被删除元素迭代器失效\n\n**无序容器（哈希）**\n- **unordered_set/unordered_map**：\n  - 插入：若触发 rehash 则所有迭代器失效（引用不失效）\n  - 删除：仅被删除元素失效\n  - reserve 可避免 rehash\n\n**安全删除模式**\n- erase 返回下一个有效迭代器（C++11）\n- it = container.erase(it)\n- 关联容器旧式：container.erase(it++)\n\n**vector 边遍历边删除**\n```cpp\nauto it = v.begin();\nwhile (it != v.end()) {\n    if (condition) it = v.erase(it);\n    else ++it;\n}\n```\n\n**list 边遍历边删除**\n- erase 返回下一个，或 erase(it++)\n\n**关联容器边遍历边删除**\n- C++11：it = m.erase(it)\n- C++11前：m.erase(it++)\n\n**避免失效的技巧**\n- 用 erase-remove 惯用法删除多个\n- std::remove_if + erase 批量删除\n- 先收集要删除的，再统一删除",
+        "example": "#include <vector>\n#include <list>\n#include <map>\n#include <algorithm>\n\n// vector 边遍历边删除（正确）\nvoid vector_erase(std::vector<int>& v) {\n    auto it = v.begin();\n    while (it != v.end()) {\n        if (*it % 2 == 0) {\n            it = v.erase(it);  // erase 返回下一个有效迭代器\n        } else {\n            ++it;\n        }\n    }\n}\n\n// erase-remove 惯用法（更高效）\nvoid vector_remove(std::vector<int>& v) {\n    v.erase(std::remove_if(v.begin(), v.end(),\n        [](int x){ return x % 2 == 0; }), v.end());\n}\n// C++20: std::erase_if(v, [](int x){ return x % 2 == 0; });\n\n// map 边遍历边删除\nvoid map_erase(std::map<int,int>& m) {\n    for (auto it = m.begin(); it != m.end(); ) {\n        if (it->second == 0) {\n            it = m.erase(it);  // C++11 返回下一个\n        } else {\n            ++it;\n        }\n    }\n}\n\n// 迭代器失效陷阱\nvoid pitfall() {\n    std::vector<int> v = {1,2,3,4,5};\n    auto it = v.begin();\n    v.push_back(6);  // 可能扩容，it 失效！\n    // std::cout << *it;  // 未定义行为\n}\n\n// reserve 避免扩容失效\nvoid safe_reserve() {\n    std::vector<int> v;\n    v.reserve(1000);  // 预分配\n    auto it = v.begin();\n    for (int i = 0; i < 100; i++) {\n        v.push_back(i);  // 不超过 1000 不会扩容\n    }\n    // it 仍有效\n}\n\n// list 迭代器稳定\nvoid list_stable() {\n    std::list<int> l = {1,2,3,4,5};\n    auto it = std::find(l.begin(), l.end(), 3);\n    l.push_front(0);  // 不影响 it\n    l.push_back(6);   // 不影响 it\n    std::cout << *it << std::endl;  // 3 仍有效\n    l.erase(it);  // 仅 it 失效\n}\n\n// unordered_map rehash 失效\nvoid rehash_pitfall() {\n    std::unordered_map<int,int> m;\n    m.reserve(1000);  // 避免后续 rehash\n    auto it = m.find(1);\n    m[2] = 20;  // 未 rehash 则 it 有效，rehash 则失效\n}"
+      },
+      {
+        "id": "cpp-sfinae",
+        "title": "SFINAE 与 tag dispatch",
+        "level": "高级",
+        "content": "**SFINAE（Substitution Failure Is Not An Error）**\n- 替换失败不是错误\n- 模板实例化时，某些替换失败不会报错，只是从重载集中移除\n- 用于在编译期根据类型特性选择不同实现\n\n**enable_if**\n- std::enable_if<Condition, T>::type\n- Condition 为 true 时有 type 成员，false 时无（SFINAE）\n- 经典用法：函数模板返回值/参数上 enable_if\n\n**enable_if 三种用法**\n1. 返回值：`template<class T> typename enable_if<cond, Ret>::type f()`\n2. 参数：`template<class T> void f(T, typename enable_if<cond>::type* = nullptr)`\n3. 模板参数：`template<class T, class = typename enable_if<cond>::type> void f()`\n\n**type_traits**\n- is_integral / is_floating_point / is_pointer\n- is_class / is_enum / is_union\n- is_same / is_base_of / is_convertible\n- has_member_xxx（自定义检测）\n- C++17 _v 后缀简化：is_integral_v<T>\n\n**void_t 技巧（C++17）**\n- 检测类型是否有某些成员\n- `template<class, class = void> struct has_x : false_type{};`\n- `template<class T> struct has_x<T, void_t<decltype(T::x)>> : true_type{};`\n\n**if constexpr（C++17）**\n- 编译期条件分支，不满足的分支不实例化\n- 比 SFINAE 更简洁\n- 替代许多 SFINAE 场景\n\n**tag dispatch**\n- 用空结构体作为标签类型\n- 通过重载在编译期选择实现\n- iterator_category 分发是经典案例\n\n**Concepts（C++20）**\n- 替代 SFINAE 的现代方案\n- 语法清晰，错误信息友好\n- requires 表达式\n\n**SFINAE 应用场景**\n- 根据类型选择算法（整数 vs 浮点）\n- 检测成员是否存在\n- 条件启用序列化\n- 限制模板参数类型",
+        "example": "#include <type_traits>\n#include <iostream>\n\n// enable_if：仅整数类型\ntemplate<class T>\ntypename std::enable_if<std::is_integral<T>::value, T>::type\nfoo(T x) { return x * 2; }\n\n// 仅浮点类型\ntemplate<class T>\ntypename std::enable_if<std::is_floating_point<T>::value, T>::type\nfoo(T x) { return x / 2; }\n\n// C++14 简化\ntemplate<class T>\nstd::enable_if_t<std::is_integral_v<T>, T>\nbar(T x) { return x * 2; }\n\n// if constexpr（推荐）\ntemplate<class T>\nauto process(T x) {\n    if constexpr (std::is_integral_v<T>) {\n        return x * 2;  // 整数分支\n    } else if constexpr (std::is_floating_point_v<T>) {\n        return x / 2;  // 浮点分支\n    } else {\n        return;  // 其他\n    }\n}\n\n// void_t 检测成员\ntemplate<class, class = void>\nstruct has_size : std::false_type {};\n\ntemplate<class T>\nstruct has_size<T, std::void_t<decltype(std::declval<T>().size())>>\n    : std::true_type {};\n\n// 使用\nstatic_assert(has_size<std::vector<int>>::value, \"\");\nstatic_assert(!has_size<int>::value, \"\");\n\n// tag dispatch\ntemplate<class Iter>\nvoid advance_impl(Iter& it, int n, std::random_access_iterator_tag) {\n    it += n;  // 随机访问：O(1)\n}\n\ntemplate<class Iter>\nvoid advance_impl(Iter& it, int n, std::bidirectional_iterator_tag) {\n    if (n > 0) while (n--) ++it;  // 双向：O(n)\n    else while (n++) --it;\n}\n\ntemplate<class Iter>\nvoid my_advance(Iter& it, int n) {\n    advance_impl(it, n,\n        typename std::iterator_traits<Iter>::iterator_category{});\n}\n\n// C++20 Concepts 替代 SFINAE\ntemplate<std::integral T>\nT add_concept(T a, T b) { return a + b; }  // 只接受整数\n\nint main() {\n    std::cout << foo(10) << std::endl;     // 20 (整数版本)\n    std::cout << foo(3.14) << std::endl;   // 1.57 (浮点版本)\n    std::cout << process(5) << std::endl;   // 10\n    std::cout << process(2.5) << std::endl; // 1.25\n    return 0;\n}"
+      },
+      {
+        "id": "cpp-exception-safety",
+        "title": "C++ 异常安全等级",
+        "level": "高级",
+        "content": "**异常安全四个等级**\n1. **无异常保证（No guarantee）**：最差，可能资源泄漏、数据损坏\n2. **基本保证（Basic guarantee）**：不泄漏资源，对象处于有效状态（但具体值不确定）\n3. **强保证（Strong guarantee）**：操作要么完全成功，要么回滚到调用前状态（事务语义）\n4. **不抛异常保证（Nothrow guarantee）**：绝不抛异常，用 noexcept 标记\n\n**基本保证实现**\n- RAII 管理资源（保证不泄漏）\n- 维护不变式（对象始终有效）\n- 析构函数、move 操作应 noexcept\n\n**强保证实现**\n- copy-and-swap 惯用法\n- 先在副本上操作，成功后再交换\n- 失败时不影响原对象\n\n**copy-and-swap**\n```cpp\nT& operator=(T other) noexcept {  // 值传递，自带拷贝\n    swap(other);  // 交换\n    return *this;  // other 析构释放旧资源\n}\n```\n- other 拷贝构造时可能抛异常（此时原对象未变）\n- swap 应 noexcept\n- 析构应 noexcept\n\n**noexcept**\n- C++11 关键字，声明函数不抛异常\n- noexcept(true/false) 可条件化\n- noexcept 函数若抛异常会调用 terminate\n- move 操作标记 noexcept 后，vector 扩容时用 move 而非 copy\n- 析构函数默认 noexcept（C++11）\n\n**异常安全与 STL**\n- vector 扩容：若元素 move 是 noexcept，则 move 扩容；否则 copy 扩容（强保证）\n- 因此 move 构造/赋值应标记 noexcept 以获得性能\n- is_nothrow_move_constructible 检测\n\n**异常处理原则**\n- 不要在析构函数中抛异常（栈展开时 terminate）\n- 构造函数可抛异常（但需保证已获取资源被释放）\n- 异常传播路径上的对象靠 RAII 析构清理\n\n**事务编程**\n- 多步操作要保证强安全需整体回滚\n- 复杂场景记录操作日志，失败时逆向回滚\n- 或先操作副本最后提交",
+        "example": "#include <vector>\n#include <memory>\n#include <utility>\n\n// copy-and-swap 实现强保证\nclass String {\n    char* data_;\n    size_t size_;\npublic:\n    String(const char* s = \"\") : size_(strlen(s)) {\n        data_ = new char[size_ + 1];  // 可能抛 bad_alloc\n        strcpy(data_, s);\n    }\n    ~String() noexcept { delete[] data_; }\n\n    String(const String& o) : size_(o.size_) {\n        data_ = new char[size_ + 1];\n        strcpy(data_, o.data_);\n    }\n\n    // move noexcept\n    String(String&& o) noexcept\n        : data_(o.data_), size_(o.size_) {\n        o.data_ = nullptr; o.size_ = 0;\n    }\n\n    friend void swap(String& a, String& b) noexcept {\n        using std::swap;\n        swap(a.data_, b.data_);\n        swap(a.size_, b.size_);\n    }\n\n    // copy-and-swap：值传递 + swap\n    String& operator=(String other) noexcept {\n        swap(*this, other);  // noexcept\n        return *this;  // other 析构释放旧数据\n    }\n};\n\n// noexcept 使 vector 用 move 扩容\nclass Buffer {\n    int* data_;\n    size_t n_;\npublic:\n    Buffer(size_t n) : data_(new int[n]), n_(n) {}\n    ~Buffer() noexcept { delete[] data_; }\n\n    // noexcept move：vector 扩容会用 move（快）\n    Buffer(Buffer&& o) noexcept\n        : data_(o.data_), n_(o.n_) {\n        o.data_ = nullptr; o.n_ = 0;\n    }\n\n    Buffer& operator=(Buffer&& o) noexcept {\n        if (this != &o) {\n            delete[] data_;\n            data_ = o.data_; n_ = o.n_;\n            o.data_ = nullptr; o.n_ = 0;\n        }\n        return *this;\n    }\n};\n\n// 没有 noexcept move 时 vector 用 copy 扩容（慢但强安全）\n// 有 noexcept move 时用 move 扩容（快）\n\n// 条件 noexcept\ntemplate<class T>\nvoid destroy(T* p) noexcept(std::is_nothrow_destructible_v<T>) {\n    p->~T();\n}\n\n// 异常安全的多步操作：copy-and-swap\ntemplate<class T>\nvoid strong_assign(std::vector<T>& v, const std::vector<T>& new_data) {\n    std::vector<T> tmp(new_data);  // 副本，可能抛异常但不影响 v\n    tmp.swap(v);  // noexcept swap，原子提交\n}  // 旧 v 数据随 tmp 析构"
+      },
+      {
+        "id": "cpp-object-layout",
+        "title": "C++ 对象内存布局",
+        "level": "高级",
+        "content": "**空类大小**\n- 空类 sizeof = 1（确保不同对象地址不同）\n- 空基类优化（EBO）：作为基类时不占空间\n\n**成员布局**\n- 成员按声明顺序排列\n- 可能有 padding 对齐\n- 与 C 结构体规则一致\n\n**有虚函数的类**\n- 对象首部有虚函数表指针（vptr，8字节@64位）\n- 每个对象多 8 字节开销\n- vptr 指向类的 vtable\n\n**虚继承**\n- 虚基类指针（vbptr）或 vtable 中记录偏移\n- 解决菱形继承的重复数据\n- 增加额外指针/偏移开销\n\n**多重继承布局**\n- 多个基类按声明顺序排列\n- 每个有虚函数的基类一个 vptr\n- 对象地址转型时可能需要调整指针\n\n**静态成员**\n- 不在对象内，存在全局数据段\n- sizeof 不含静态成员\n\n**对齐**\n- alignas(N) 指定对齐\n- alignof(T) 查询对齐\n- 最大对齐成员决定类对齐\n\n**位域**\n- 紧凑存储，节省空间\n- 不能取地址\n- 内存布局实现相关\n\n**指针调整**\n- 多继承下 static_cast 子对象地址可能偏移\n- Base* 指向派生类时可能不等于 Derived*\n- dynamic_cast 处理向下转型\n\n**空基类优化 EBO**\n- 空基类不占对象空间\n- 常用于策略模式/编译期多态\n- `struct Derived : EmptyPolicy { int x; };` sizeof = 4\n\n**查看布局工具**\n- clang: clang -Xclang -fdump-record-layouts\n- g++: g++ -fdump-lang-class\n- MSVC: /d1reportSingleClassLayout",
+        "example": "#include <iostream>\n\n// 空类\nstruct Empty {};\nstd::cout << sizeof(Empty) << std::endl;  // 1\n\n// 空基类优化\nstruct EBO : Empty { int x; };\nstd::cout << sizeof(EBO) << std::endl;  // 4（Empty 不占空间）\n\n// 普通类\nstruct A { char a; int b; };\n// sizeof = 8 (a + 3 padding + b)\n\n// 有虚函数\nclass V {\n    int x;\npublic:\n    virtual void f() {}\n};\n// 64位: sizeof = 16 (vptr 8 + x 4 + padding 4)\n\n// 多继承\nclass B1 { int x; public: virtual void f1() {} };\nclass B2 { int y; public: virtual void f2() {} };\nclass D : public B1, public B2 {};\n// sizeof = 32 (B1: vptr+x=16, B2: vptr+y=16)\n// D 内有两个 vptr\n\n// 虚继承（菱形）\nclass Base { int a; };\nclass Left : virtual public Base { int b; };\nclass Right : virtual public Base { int c; };\nclass Diamond : public Left, public Right { int d; };\n// Base 只存一份，但增加虚基类指针开销\n\n// static 不占对象空间\nclass WithStatic {\n    int x;\n    static int s;  // 不算入 sizeof\n};\n// sizeof = 4\n\n// 对齐控制\nstruct alignas(16) Aligned { int x; };\n// sizeof = 16, alignof = 16\n\n// 指针调整（多继承）\nclass Base1 { public: virtual ~Base1(){} int a; };\nclass Base2 { public: virtual ~Base2(){} int b; };\nclass Derived : public Base1, public Base2 { int c; };\n\nDerived* d = new Derived;\nBase1* b1 = d;  // 地址相同\nBase2* b2 = d;  // 地址可能偏移（指向第二个基类子对象）\n// b1 == d 但 b2 != d（reinterpret_cast 不同）\n\n// 查看 clang 布局：\n// clang++ -Xclang -fdump-record-layouts file.cpp"
+      },
+      {
+        "id": "cpp-lambda-internals",
+        "title": "函数对象与 lambda 底层",
+        "level": "高级",
+        "content": "**函数对象（Functor）**\n- 重载 operator() 的类\n- 可有状态（成员变量）\n- 可内联，比函数指针高效\n- STL 大量使用：比较器、谓词\n\n**lambda 表达式**\n- 编译期生成匿名函数对象（闭包类型）\n- 每个 lambda 有唯一类型\n- auto 推导闭包类型\n\n**捕获机制**\n- `[]` 不捕获\n- `[=]` 值捕获所有用到的变量（拷贝）\n- `[&]` 引用捕获所有用到的变量\n- `[x]` 值捕获 x\n- `[&x]` 引用捕获 x\n- `[=, &x]` 默认值捕获，x 引用捕获\n- `[this]` 捕获 this 指针\n- `[*this]` C++17 值捕获 *this\n\n**lambda 与闭包类**\n- `[=]` 生成的类有值成员，operator() 是 const\n- `[&]` 生成的类有引用成员\n- `mutable` 关键字使 operator() 非 const，可修改值捕获的副本\n\n**泛型 lambda（C++14）**\n- `auto` 参数\n- 相当于模板 operator()\n\n**模板 lambda（C++20）**\n- `[]<class T>(T x){}` 显式模板参数\n\n**无捕获 lambda 可转函数指针**\n- 无捕获 lambda 可隐式转为函数指针\n- 有捕获则不行\n\n**std::function**\n- 类型擦除的函数包装器\n- 可存储任意可调用对象\n- 有运行时开销（堆分配、虚调用）\n\n**std::bind**\n- 绑定参数生成可调用对象\n- 现代代码优先用 lambda\n\n**lambda 性能**\n- lambda 生成的闭包类可被编译器内联\n- 比 std::function 快（无类型擦除）\n- 传参优先模板 auto 而非 std::function\n\n**递归 lambda**\n- lambda 无法直接递归（类型未知）\n- 用 std::function 包装\n- 或用 C++14 泛型 lambda + 显式传自身",
+        "example": "#include <functional>\n#include <algorithm>\n#include <vector>\n#include <iostream>\n\n// 函数对象\ntemplate<class T>\nstruct Sum {\n    T total = 0;\n    void operator()(T x) { total += x; }  // 有状态\n};\n\n// lambda 本质是闭包类\nint x = 10;\nauto f = [x](int y) { return x + y; };\n// 等价于：\nstruct __lambda {\n    int x;\n    int operator()(int y) const { return x + y; }\n};\n__lambda f = {x};\n\n// 捕获方式\nint a = 1, b = 2, c = 3;\nauto by_val = [=]() { return a + b + c; };      // 值捕获副本\nauto by_ref = [&]() { a++; b++; c++; };          // 引用捕获\nauto mixed = [=, &c]() { return a + b + c++; };  // 混合\n\n// mutable：可修改值捕获的副本\nint counter = 0;\nauto inc = [counter]() mutable { return ++counter; };\nstd::cout << inc() << std::endl;  // 1\nstd::cout << inc() << std::endl;  // 2\nstd::cout << counter << std::endl; // 0（原变量不变）\n\n// 泛型 lambda（C++14）\nauto add = [](auto a, auto b) { return a + b; };\nadd(1, 2);      // int\nadd(1.5, 2.5);  // double\n\n// 模板 lambda（C++20）\nauto twice = []<class T>(T x) { return x * 2; };\n\n// STL 算法配合 lambda\nstd::vector<int> v = {3, 1, 4, 1, 5};\nstd::sort(v.begin(), v.end(), [](int a, int b) {\n    return a > b;  // 降序\n});\nint sum = 0;\nstd::for_each(v.begin(), v.end(), [&sum](int x) { sum += x; });\n\n// 无捕获 lambda 转函数指针\nusing Cmp = int(*)(int, int);\nCmp cmp = [](int a, int b) { return a - b; };  // 可转换\n\n// std::function（有开销）\nstd::function<int(int,int)> op = [](int a, int b) { return a + b; };\n\n// 递归 lambda（用 std::function）\nstd::function<int(int)> fib = [&](int n) -> int {\n    return n < 2 ? n : fib(n-1) + fib(n-2);\n};\n\n// 递归 lambda（泛型，无 std::function）\nauto fib2 = [](auto& self, int n) -> int {\n    return n < 2 ? n : self(self, n-1) + self(self, n-2);\n};\nfib2(fib2, 10);\n\n// 性能：模板 auto 优于 std::function\ntemplate<class F>\nvoid apply(F&& f) { f(42); }  // 可内联，零开销\n// void apply(std::function<void(int)> f) { f(42); }  // 有开销"
       }
     ]
   },
@@ -1543,6 +1711,62 @@ const KNOWLEDGE = {
         "level": "高级",
         "content": "**字节码（Bytecode）**\n- Java 源码编译为 .class 文件中的字节码指令\n- JVM 解释或 JIT 编译执行\n- 一处编译处处运行的基础\n\n**class 文件结构**\n- 魔数 0xCAFEBABE\n- 版本号（major/minor）\n- 常量池（Constant Pool）\n- 访问标志（access_flags）\n- 类/父类/接口索引\n- 字段表 / 方法表 / 属性表\n\n**字节码指令分类**\n- 加载存储：iload/istore/aload/astore/ldc\n- 算术：iadd/isub/imul/idiv\n- 类型转换：i2l/i2d\n- 对象：new/getfield/putfield/invokevirtual/invokestatic/invokespecial/invokeinterface\n- 控制流：if_icmpeq/goto/ifeq\n- 异常：athrow\n- 方法调用 invoke 动态：invokedynamic（lambda、动态语言）\n\n**操作数栈与局部变量表**\n- 字节码基于栈：操作数压栈、弹出计算、结果压栈\n- 局部变量表：this（实例方法）、参数、局部变量\n- slot：long/double 占 2 个 slot，其他占 1 个\n\n**方法调用指令**\n- invokestatic：静态方法\n- invokespecial：构造器、私有方法、super 方法\n- invokevirtual：虚方法（运行时分派）\n- invokeinterface：接口方法\n- invokedynamic：动态调用（lambda、字符串拼接）\n\n**常用工具**\n- javap -c -p Class：反汇编查看字节码\n- javap -v：完整常量池\n- ASM：字节码操作库（生成/修改 class）\n- Javassist：更简单的字节码 API\n- ByteBuddy：现代字节码生成\n- Arthas：在线诊断，查看字节码\n\n**ASM 应用场景**\n- Spring AOP：CGLIB 基于 ASM 生成代理\n- ASM：动态生成类、修改字节码\n- 性能监控：方法耗时统计（无侵入）\n- Mock 框架：Mockito、PowerMock",
         "example": "// javap -c -p HelloWorld 反汇编示例\n/* public class HelloWorld {\n   public int add(int a, int b);\n     Code:\n        0: iload_1        // 加载局部变量 1 (a) 到操作数栈\n        1: iload_2        // 加载局部变量 2 (b)\n        2: iadd           // 弹出两个 int 相加，结果压栈\n        3: ireturn        // 返回栈顶 int\n} */\n\n// ASM 生成一个简单类（生成等价于下面的类）\n/* public class Hello {\n   public void say() { System.out.println(\"Hello ASM\"); }\n} */\nimport org.objectweb.asm.*;\nimport static org.objectweb.asm.Opcodes.*;\n\nClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES);\n// 定义类\ncw.visit(V17, ACC_PUBLIC, \"Hello\", null, \"java/lang/Object\", null);\n// 生成默认构造器\nMethodVisitor ctor = cw.visitMethod(ACC_PUBLIC, \"<init>\", \"()V\", null, null);\nctor.visitCode();\nctor.visitVarInsn(ALOAD, 0);\nctor.visitMethodInsn(INVOKESPECIAL, \"java/lang/Object\", \"<init>\", \"()V\", false);\nctor.visitInsn(RETURN);\nctor.visitMaxs(1, 1);\nctor.visitEnd();\n// 生成 say 方法\nMethodVisitor say = cw.visitMethod(ACC_PUBLIC, \"say\", \"()V\", null, null);\nsay.visitCode();\nsay.visitFieldInsn(GETSTATIC, \"java/lang/System\", \"out\", \"Ljava/io/PrintStream;\");\nsay.visitLdcInsn(\"Hello ASM\");\nsay.visitMethodInsn(INVOKEVIRTUAL, \"java/io/PrintStream\", \"println\",\n    \"(Ljava/lang/String;)V\", false);\nsay.visitInsn(RETURN);\nsay.visitMaxs(2, 1);\nsay.visitEnd();\ncw.visitEnd();\nbyte[] bytes = cw.toByteArray();  // 写入 .class 文件\n\n// ASM 修改现有类：方法耗时统计\nclass TimerAdapter extends ClassVisitor {\n    public TimerAdapter(ClassVisitor cv) { super(ASM9, cv); }\n    @Override\n    public MethodVisitor visitMethod(int access, String name, String desc,\n                                     String sig, String[] excs) {\n        MethodVisitor mv = super.visitMethod(access, name, desc, sig, excs);\n        if (mv != null && !name.equals(\"<init>\")) {\n            mv = new MethodTimer(mv, access, name, desc);\n        }\n        return mv;\n    }\n}"
+      },
+      {
+        "id": "java-classloader-parent",
+        "title": "双亲委派模型与打破",
+        "level": "高级",
+        "content": "**类加载器层次（JDK 8）**\n1. **Bootstrap ClassLoader（启动类加载器）**\n   - C++ 实现，加载 rt.jar 等 JDK 核心类（java.*）\n   - 无 Java 对象表示，getParent() 返回 null\n2. **Extension ClassLoader（扩展类加载器）**\n   - 加载 jre/lib/ext 目录\n   - javax.* 等\n3. **Application ClassLoader（应用类加载器）**\n   - 加载 classpath 下的类\n   - 默认自定义类加载器的父\n\n**双亲委派模型**\n- 收到加载请求时，先委派给父加载器\n- 父加载器无法加载时，子加载器才尝试\n- 自底向上检查是否已加载，自顶向下尝试加载\n- 保证核心类不被篡改（安全）\n- 保证类的唯一性（同一类只加载一次）\n\n**类加载过程**\n1. 加载（Loading）：通过全限定名获取二进制字节流，生成 Class 对象\n2. 验证（Verification）：字节码安全检查\n3. 准备（Preparation）：静态变量分配内存并设默认值\n4. 解析（Resolution）：符号引用转直接引用\n5. 初始化（Initialization）：执行 <clinit> 静态代码块/静态变量赋值\n\n**打破双亲委派**\n- 自定义 ClassLoader 重写 loadClass（不推荐）或 findClass（推荐）\n- 经典场景：\n  - Tomcat：每个 Web 应用独立类加载器，隔离应用\n  - SPI 机制：bootstrap 加载接口，需用线程上下文类加载器加载实现\n  - OSGi：网状类加载结构\n  - 热部署/热加载\n\n**Tomcat 类加载器结构**\n- Common → WebApp1 / WebApp2\n- 每个 WebApp 独立加载自己的 class\n- 打破双亲委派：先自己加载再委派父\n\n**SPI（Service Provider Interface）**\n- java.sql.Driver 由 Bootstrap 加载接口\n- 实现在 classpath（Application 加载器）\n- 用 Thread.currentThread().getContextClassLoader() 加载实现\n- ServiceLoader.load(Driver.class)\n\n**JDK 9+ 模块化变化**\n- Extension ClassLoader 被 Platform ClassLoader 取代\n- 模块系统改变类加载方式\n- jrt:/ 协议访问模块",
+        "example": "// 自定义类加载器\nclass MyClassLoader extends ClassLoader {\n    private String classPath;\n\n    public MyClassLoader(String classPath, ClassLoader parent) {\n        super(parent);\n        this.classPath = classPath;\n    }\n\n    // 推荐重写 findClass（不破坏双亲委派）\n    @Override\n    protected Class<?> findClass(String name) throws ClassNotFoundException {\n        byte[] data = loadClassData(name);\n        return defineClass(name, data, 0, data.length);\n    }\n\n    private byte[] loadClassData(String name) {\n        String path = classPath + name.replace('.', '/') + \".class\";\n        try (FileInputStream fis = new FileInputStream(path);\n             ByteArrayOutputStream bos = new ByteArrayOutputStream()) {\n            byte[] buf = new byte[1024];\n            int len;\n            while ((len = fis.read(buf)) != -1) bos.write(buf, 0, len);\n            return bos.toByteArray();\n        } catch (IOException e) { throw new RuntimeException(e); }\n    }\n\n    // 打破双亲委派：重写 loadClass\n    @Override\n    public Class<?> loadClass(String name, boolean resolve)\n            throws ClassNotFoundException {\n        // 自定义类自己加载，其他委派父\n        if (name.startsWith(\"com.myapp.\")) {\n            Class<?> c = findLoadedClass(name);\n            if (c == null) c = findClass(name);\n            if (resolve) resolveClass(c);\n            return c;\n        }\n        return super.loadClass(name, resolve);\n    }\n}\n\n// 使用\nMyClassLoader cl = new MyClassLoader(\"/app/classes/\", \n    ClassLoader.getSystemClassLoader());\nClass<?> clazz = cl.loadClass(\"com.myapp.Hello\");\nObject obj = clazz.newInstance();\n\n// SPI 示例\nServiceLoader<Driver> loaders = ServiceLoader.load(Driver.class);\nfor (Driver d : loaders) { System.out.println(d.getClass()); }\n\n// 查看类加载器\nSystem.out.println(String.class.getClassLoader());  // null (Bootstrap)\nSystem.out.println(MyClass.class.getClassLoader());  // AppClassLoader\n\n// JDK 9+\n// ModuleLayer.boot().findModule(\"java.base\")\n// ClassLoader.getPlatformClassLoader()  // 替代 ExtClassLoader"
+      },
+      {
+        "id": "java-aqs",
+        "title": "AQS 原理与 Lock 体系",
+        "level": "高级",
+        "content": "**AQS（AbstractQueuedSynchronizer）**\n- JUC 同步器的基础框架\n- Doug Lea 设计\n- 核心思想：volatile int state 表示同步状态 + CLH FIFO 队列\n- ReentrantLock/Semaphore/CountDownLatch/ReentrantReadWriteLock 均基于 AQS\n\n**state 的含义**\n- ReentrantLock：重入次数\n- Semaphore：剩余许可数\n- CountDownLatch：剩余计数\n- ReentrantReadWriteLock：高16位读、低16位写\n\n**CLH 队列**\n- 变种的 Craig-Landin-Hagersten 队列\n- 双向链表，FIFO 等待队列\n- 节点状态：CANCELLED(1)/SIGNAL(-1)/CONDITION(-2)/PROPAGATE(-3)\n- 获取锁失败时入队，前驱节点唤醒后继\n\n**独占模式**\n- acquire(1)：tryAcquire → 入队 → 自旋/阻塞\n- release(1)：tryRelease → 唤醒后继\n- 子类实现 tryAcquire/tryRelease\n\n**共享模式**\n- acquireShared(1)：tryAcquireShared → 入队\n- releaseShared(1)：tryReleaseShared → 传播唤醒\n\n**ReentrantLock 实现**\n- 非公平（默认）：tryAcquire 先 CAS 抢占，失败再入队\n- 公平：tryAcquire 先检查队列是否有前驱，有则排队\n- 非公平吞吐量更高（减少线程切换）\n\n**ReentrantReadWriteLock**\n- 读锁共享，写锁独占\n- state 高16位读计数、低16位写计数\n- 写锁可降级为读锁（先获写再获读再释放写）\n- 读锁不能升级为写锁（死锁）\n\n**Condition**\n- 替代 Object.wait/notify\n- 一个 Lock 可创建多个 Condition（多等待队列）\n- await/signal/signalAll\n\n**Lock 接口体系**\n- Lock 接口：lock/lockInterruptibly/tryLock/unlock/newCondition\n- ReentrantLock：可重入互斥锁\n- ReentrantReadWriteLock.ReadLock / WriteLock\n- StampedLock（Java 8）：乐观读锁，高性能\n\n**synchronized vs ReentrantLock**\n- synchronized：JVM 内置，自动释放，不可中断，非公平\n- ReentrantLock：API 层，手动 unlock，可中断/超时/公平，多 Condition",
+        "example": "import java.util.concurrent.locks.*;\n\n// ReentrantLock 使用\nReentrantLock lock = new ReentrantLock();  // 非公平\n// ReentrantLock lock = new ReentrantLock(true);  // 公平\nlock.lock();\ntry {\n    // 临界区\n} finally {\n    lock.unlock();  // 必须 finally 释放\n}\n\n// 可中断锁\ntry {\n    lock.lockInterruptibly();\n    try { /* ... */ } finally { lock.unlock(); }\n} catch (InterruptedException e) {\n    Thread.currentThread().interrupt();\n}\n\n// 超时获取\nif (lock.tryLock(3, TimeUnit.SECONDS)) {\n    try { /* ... */ } finally { lock.unlock(); }\n}\n\n// Condition 多等待队列\nReentrantLock lk = new ReentrantLock();\nCondition notFull = lk.newCondition();\nCondition notEmpty = lk.newCondition();\nObject[] items = new Object[10];\nint count = 0;\n\n// 生产者\npublic void put(Object x) throws InterruptedException {\n    lk.lock();\n    try {\n        while (count == items.length) notFull.await();\n        items[count++] = x;\n        notEmpty.signal();\n    } finally { lk.unlock(); }\n}\n\n// 消费者\npublic Object take() throws InterruptedException {\n    lk.lock();\n    try {\n        while (count == 0) notEmpty.await();\n        Object x = items[--count];\n        notFull.signal();\n        return x;\n    } finally { lk.unlock(); }\n}\n\n// 读写锁\nReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();\nrwLock.readLock().lock();  // 多个读并发\n// 读数据\nrwLock.readLock().unlock();\n\nrwLock.writeLock().lock();  // 写独占\n// 写数据\nrwLock.writeLock().unlock();\n\n// 写锁降级（安全）\nrwLock.writeLock().lock();\nrwLock.readLock().lock();    // 获取读锁\nrwLock.writeLock().unlock(); // 释放写锁，降级为读\n// 读操作\nrwLock.readLock().unlock();\n\n// StampedLock 乐观读（高性能）\nStampedLock sl = new StampedLock();\nlong stamp = sl.tryOptimisticRead();  // 乐观读（不加锁）\nint x = data;\nif (!sl.validate(stamp)) {  // 校验期间是否有写\n    stamp = sl.readLock();   // 升级为悲观读锁\n    try { x = data; } finally { sl.unlockRead(stamp); }\n}\n// 读锁不阻塞写，吞吐量高\n\n// 自定义 AQS 同步器\nclass Mutex extends AbstractQueuedSynchronizer {\n    @Override protected boolean tryAcquire(int arg) {\n        return compareAndSetState(0, 1);\n    }\n    @Override protected boolean tryRelease(int arg) {\n        setState(0); return true;\n    }\n    @Override protected boolean isHeldExclusively() {\n        return getState() == 1;\n    }\n}"
+      },
+      {
+        "id": "java-concurrent-collections",
+        "title": "并发容器详解",
+        "level": "高级",
+        "content": "**ConcurrentHashMap**\n- 线程安全的 HashMap\n- JDK 7：分段锁（Segment），默认16段\n- JDK 8+：数组 + 链表/红黑树，CAS + synchronized 锁桶节点\n- 查询无锁，写锁单个桶（粒度小）\n- 不允许 null key/value\n- size() 是弱一致性的估计值\n- 迭代器弱一致性（不抛 ConcurrentModificationException）\n\n**CopyOnWriteArrayList**\n- 写时复制：修改时复制整个数组\n- 读完全无锁，性能极高\n- 写性能差（复制开销）\n- 适合读多写少场景（监听器列表、配置）\n- 最终一致性（读可能看到旧值）\n\n**CopyOnWriteArraySet**\n- 基于 CopyOnWriteArrayList 实现\n- add 时检查去重\n\n**ConcurrentLinkedQueue**\n- 无锁并发队列（CAS）\n- 基于 Michael & Scott 算法\n- 非阻塞，性能高\n- size() 是 O(n) 遍历，不保证准确\n\n**BlockingQueue 体系**\n- **ArrayBlockingQueue**：有界数组，单锁（吞吐量低但稳定）\n- **LinkedBlockingQueue**：链表，默认 Integer.MAX_VALUE，两把锁（读写分离，高吞吐）\n- **SynchronousQueue**：容量0，直接交付（每个 put 等一个 take）\n- **PriorityBlockingQueue**：优先级队列，无界\n- **DelayQueue**：延迟队列，元素到期才能取出\n- **LinkedTransferQueue**：JDK 7+，高性能无界\n\n**BlockingQueue 应用**\n- 生产者消费者模式\n- 线程池任务队列\n- 消息传递\n\n**ConcurrentSkipListMap / Set**\n- 跳表实现的并发有序 Map/Set\n- 替代 TreeMap/TreeSet 的并发版本\n- 平均 O(log n) 操作\n- 无锁读，CAS 写\n\n**选择建议**\n- 高并发读多写少：ConcurrentHashMap / CopyOnWriteArrayList\n- 生产者消费者：ArrayBlockingQueue / LinkedBlockingQueue\n- 任务延迟执行：DelayQueue\n- 并发有序：ConcurrentSkipListMap",
+        "example": "import java.util.concurrent.*;\nimport java.util.concurrent.atomic.*;\n\n// ConcurrentHashMap\nConcurrentHashMap<String, Integer> map = new ConcurrentHashMap<>();\nmap.put(\"a\", 1);\nmap.put(\"b\", 2);\n// 原子操作\nmap.compute(\"a\", (k, v) -> v == null ? 1 : v + 1);  // a -> 2\nmap.merge(\"c\", 1, Integer::sum);  // 不存在则1，存在则累加\nmap.putIfAbsent(\"d\", 4);  // 不存在才放入\n// 并发遍历（弱一致，不抛异常）\nmap.forEach((k, v) -> System.out.println(k + \"=\" + v));\n\n// CopyOnWriteArrayList（读多写少）\nCopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();\nlisteners.add(new Listener());  // 写时复制\nfor (Listener l : listeners) { l.onEvent(); }  // 读无锁\n\n// ArrayBlockingQueue（有界，生产者消费者）\nBlockingQueue<Task> queue = new ArrayBlockingQueue<>(100);\n// 生产者\nnew Thread(() -> {\n    while (true) queue.put(produceTask());  // 满了阻塞\n}).start();\n// 消费者\nnew Thread(() -> {\n    while (true) {\n        Task t = queue.take();  // 空了阻塞\n        process(t);\n    }\n}).start();\n\n// DelayQueue（延迟执行）\nclass DelayedTask implements Delayed {\n    long executeTime;\n    String name;\n    DelayedTask(long delay, String name) {\n        this.executeTime = System.currentTimeMillis() + delay;\n        this.name = name;\n    }\n    @Override public long getDelay(TimeUnit unit) {\n        return unit.convert(executeTime - System.currentTimeMillis(), TimeUnit.MILLISECONDS);\n    }\n    @Override public int compareTo(Delayed o) {\n        return Long.compare(this.executeTime, ((DelayedTask)o).executeTime);\n    }\n}\nDelayQueue<DelayedTask> dq = new DelayQueue<>();\ndq.put(new DelayedTask(5000, \"5秒后执行\"));\n// take() 会阻塞直到元素到期\nnew Thread(() -> {\n    try { DelayedTask t = dq.take(); System.out.println(t.name); }\n    catch (InterruptedException e) {}\n}).start();\n\n// ConcurrentSkipListMap（并发有序）\nConcurrentSkipListMap<Integer, String> sl = new ConcurrentSkipListMap<>();\nsl.put(3, \"c\"); sl.put(1, \"a\"); sl.put(2, \"b\");\nSystem.out.println(sl.firstKey());  // 1\nSystem.out.println(sl.subMap(1, 3));  // {1=a, 2=b}\n\n// SynchronousQueue（直接传递）\nBlockingQueue<String> sq = new SynchronousQueue<>();\nnew Thread(() -> { try { sq.put(\"data\"); } catch (Exception e) {} }).start();\n// put 会阻塞直到有消费者 take\nString s = sq.take();  // 直接获得"
+      },
+      {
+        "id": "java-threadlocal",
+        "title": "ThreadLocal 原理与内存泄漏",
+        "level": "高级",
+        "content": "**ThreadLocal 作用**\n- 线程本地变量，每个线程独立副本\n- 避免参数传递\n- 实现线程隔离\n\n**常见应用**\n- 数据库连接/会话管理\n- 用户上下文（UserContext）\n- 事务管理\n- 日期格式化（SimpleDateFormat 非线程安全）\n- MDC 日志跟踪\n\n**实现原理**\n- 每个 Thread 有 ThreadLocalMap threadLocals 字段\n- ThreadLocalMap 是 ThreadLocal 的内部类\n- key 是 ThreadLocal 对象（弱引用）\n- value 是实际值\n- set/get 时操作当前线程的 ThreadLocalMap\n\n**ThreadLocalMap 结构**\n- Entry 继承 WeakReference<ThreadLocal<?>>\n- key 弱引用 ThreadLocal，value 强引用\n- 数组实现，开放寻址法（线性探测）\n\n**内存泄漏问题**\n- ThreadLocal 被 GC 回收后，key 变 null\n- 但 value 仍被 Entry 强引用\n- Entry 被 ThreadLocalMap 引用\n- ThreadLocalMap 被 Thread 引用\n- 若线程不结束（线程池），value 无法回收\n\n**内存泄漏解决**\n- 使用后必须调用 remove() 清除\n- 尤其线程池环境，线程复用\n- try-finally 中 remove\n\n**InheritableThreadLocal**\n- 子线程可继承父线程的值\n- 创建子线程时复制\n- 线程池中失效（线程复用不会重新复制）\n\n**TransmittableThreadLocal（阿里开源）**\n- 解决线程池中 ThreadLocal 传递问题\n- 在任务提交和执行时传递\n\n**ThreadLocal vs Synchronized**\n- ThreadLocal：空间换时间，各线程独立副本\n- Synchronized：时间换空间，共享变量加锁\n\n**hash 冲突处理**\n- ThreadLocalMap 用开放寻址（线性探测）\n- 不是 HashMap 的链表法\n- 魔数 0x61c88647（黄金分割）使分布均匀",
+        "example": "import java.text.SimpleDateFormat;\n\n// 基本使用\nThreadLocal<User> userContext = ThreadLocal.withInitial(() -> new User(\"guest\"));\nuserContext.set(new User(\"alice\"));\nUser u = userContext.get();\nuserContext.remove();  // 用完必须清除\n\n// 日期格式化（SimpleDateFormat 非线程安全）\n// 错误：共享实例多线程出错\n// private static final SimpleDateFormat fmt = new SimpleDateFormat(\"yyyy-MM-dd\");\n\n// 正确：ThreadLocal 每线程独立\nprivate static final ThreadLocal<SimpleDateFormat> fmt =\n    ThreadLocal.withInitial(() -> new SimpleDateFormat(\"yyyy-MM-dd\"));\nString dateStr = fmt.get().format(new Date());\n\n// 数据库连接管理\nclass ConnectionManager {\n    private static ThreadLocal<Connection> connHolder = new ThreadLocal<>();\n\n    public static Connection getConnection() {\n        Connection conn = connHolder.get();\n        if (conn == null) {\n            conn = DriverManager.getConnection(url);\n            connHolder.set(conn);\n        }\n        return conn;\n    }\n\n    public static void close() {\n        Connection conn = connHolder.get();\n        if (conn != null) {\n            try { conn.close(); } catch (Exception e) {}\n            connHolder.remove();  // 关键：防止泄漏\n        }\n    }\n}\n\n// 正确使用模式（线程池环境）\nExecutorService pool = Executors.newFixedThreadPool(10);\npool.submit(() -> {\n    try {\n        userContext.set(getCurrentUser());\n        // 业务逻辑使用 userContext.get()\n        doBusiness();\n    } finally {\n        userContext.remove();  // 必须！线程复用会泄漏\n    }\n});\n\n// InheritableThreadLocal（子线程继承）\nThreadLocal<String> itl = new InheritableThreadLocal<>();\nitl.set(\"parent-value\");\nnew Thread(() -> {\n    System.out.println(itl.get());  // parent-value\n}).start();\n// 但线程池中失效（线程复用不重新继承）\n\n// TransmittableThreadLocal 解决线程池传递\n// TransmittableThreadLocal<String> ttl = new TransmittableThreadLocal<>();\n// TtlRunnable.get(() -> { ttl.get(); })\n// TtlExecutors.getTtlExecutorService(pool)"
+      },
+      {
+        "id": "java-threadpool-deep",
+        "title": "线程池深度与调优",
+        "level": "高级",
+        "content": "**ThreadPoolExecutor 参数**\n- corePoolSize：核心线程数\n- maximumPoolSize：最大线程数\n- keepAliveTime：空闲线程存活时间\n- unit：时间单位\n- workQueue：任务队列\n- threadFactory：线程工厂（命名、守护线程等）\n- handler：拒绝策略\n\n**任务提交流程**\n1. 线程数 < corePoolSize：创建新核心线程执行\n2. 线程数 >= corePoolSize：任务入队列\n3. 队列满：创建非核心线程（直到 maximumPoolSize）\n4. 线程数 = maximumPoolSize 且队列满：执行拒绝策略\n\n**注意**：不是先创建到最大线程数再入队列，而是先入队列再创建非核心线程\n\n**四种拒绝策略**\n- AbortPolicy（默认）：抛 RejectedExecutionException\n- CallerRunsPolicy：由提交任务的线程执行（降级/背压）\n- DiscardPolicy：静默丢弃\n- DiscardOldestPolicy：丢弃队列最老任务，重试提交\n\n**常见队列选择**\n- 无界队列（LinkedBlockingQueue 默认 Integer.MAX_VALUE）：maximumPoolSize 失效，可能 OOM\n- 有界队列（ArrayBlockingQueue）：需配合 maximumPoolSize\n- SynchronousQueue：不存储，直接交付（Executors.newCachedThreadPool 用）\n\n**Executors 工厂方法（不推荐生产使用）**\n- newFixedThreadPool：固定线程数 + 无界队列（OOM 风险）\n- newSingleThreadExecutor：单线程 + 无界队列（OOM 风险）\n- newCachedThreadPool：0~Integer.MAX_VALUE + SynchronousQueue（线程数失控）\n- newScheduledThreadPool：定时任务\n- 推荐用 ThreadPoolExecutor 显式构造\n\n**线程数设置经验**\n- CPU 密集型：N + 1（N = CPU 核数）\n- IO 密集型：2N 或 N * (1 + 等待时间/计算时间)\n- 混合型：拆分分别用不同线程池\n\n**监控指标**\n- getActiveCount()：活跃线程数\n- getQueue().size()：积压任务数\n- getCompletedTaskCount()：已完成任务数\n- getLargestPoolSize()：历史峰值\n\n**线程池调优**\n- 合理设置队列大小（防止任务丢失）\n- 监控告警（队列积压、拒绝次数）\n- 动态调整（allowCoreThreadTimeOut）\n- 自定义 ThreadFactory 命名线程（便于排查）\n- 优雅关闭（shutdown/shutdownNow）\n\n**ForkJoinPool**\n- 分治任务线程池\n- 工作窃取算法（空闲线程偷其他队列任务）\n- 适合递归分治任务\n- JDK 8 parallelStream 默认用 ForkJoinPool.commonPool",
+        "example": "import java.util.concurrent.*;\n\n// 标准线程池创建\nThreadPoolExecutor pool = new ThreadPoolExecutor(\n    4,                              // corePoolSize\n    8,                              // maximumPoolSize\n    60L, TimeUnit.SECONDS,          // keepAliveTime\n    new ArrayBlockingQueue<>(100),  // 有界队列\n    new ThreadFactory() {           // 自定义线程工厂\n        private final AtomicInteger counter = new AtomicInteger();\n        public Thread newThread(Runnable r) {\n            Thread t = new Thread(r, \"biz-pool-\" + counter.incrementAndGet());\n            t.setDaemon(false);\n            return t;\n        }\n    },\n    new ThreadPoolExecutor.CallerRunsPolicy()  // 拒绝策略：调用者执行\n);\n\n// 提交任务\nFuture<String> future = pool.submit(() -> {\n    Thread.sleep(1000);\n    return \"result\";\n});\nString result = future.get(5, TimeUnit.SECONDS);  // 超时获取\n\n// 监控\nSystem.out.println(\"活跃线程: \" + pool.getActiveCount());\nSystem.out.println(\"队列积压: \" + pool.getQueue().size());\nSystem.out.println(\"已完成: \" + pool.getCompletedTaskCount());\n\n// CPU 密集型线程数\nint cpuCores = Runtime.getRuntime().availableProcessors();\nThreadPoolExecutor cpuPool = new ThreadPoolExecutor(\n    cpuCores + 1, cpuCores + 1, 0, TimeUnit.SECONDS,\n    new LinkedBlockingQueue<>(1000));\n\n// IO 密集型\nThreadPoolExecutor ioPool = new ThreadPoolExecutor(\n    cpuCores * 2, cpuCores * 4, 60, TimeUnit.SECONDS,\n    new LinkedBlockingQueue<>(500));\n\n// ForkJoinPool 分治\nForkJoinPool fjPool = new ForkJoinPool(4);\nInteger sum = fjPool.invoke(new RecursiveTask<Integer>() {\n    @Override protected Integer compute() {\n        // 分治逻辑\n        return 0;\n    }\n});\n\n// parallelStream 默认用 ForkJoinPool.commonPool()\nIntStream.range(0, 100).parallel().sum();\n\n// 优雅关闭\npool.shutdown();  // 不接受新任务，执行完已提交\nif (!pool.awaitTermination(60, TimeUnit.SECONDS)) {\n    pool.shutdownNow();  // 停止所有任务\n}\n\n// CompletableFuture 异步编排\nCompletableFuture.supplyAsync(() -> queryUser(), pool)\n    .thenApplyAsync(user -> enrichData(user), pool)\n    .thenComposeAsync(data -> saveAsync(data), pool)\n    .exceptionally(ex -> { log.error(ex); return null; });"
+      },
+      {
+        "id": "java-jvm-troubleshoot",
+        "title": "JVM 问题排查实战",
+        "level": "高级",
+        "content": "**CPU 飙高排查**\n1. top 找出 CPU 高的 Java 进程 PID\n2. top -Hp PID 找出 CPU 高的线程 TID\n3. printf '%x\\n' TID 转十六进制\n4. jstack PID > stack.log 打印线程栈\n5. grep 十六进制TID 找到对应线程，分析代码\n\n**常见 CPU 高原因**\n- 死循环/忙等待\n- 频繁 GC\n- 加密/压缩等 CPU 密集计算\n- 正则回溯爆炸\n\n**内存溢出（OOM）排查**\n- JVM 参数：-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/path/heap.hprof\n- 工具：MAT (Memory Analyzer Tool)、JProfiler、VisualVM\n- 分析 hprof 文件找出大对象/泄漏\n\n**常见 OOM 类型**\n- java.lang.OutOfMemoryError: Java heap space：堆内存不足\n- Metaspace：元空间不足（类加载过多，如动态代理）\n- GC overhead limit exceeded：GC 耗时超过98%但回收不足2%\n- Direct buffer memory：堆外内存不足\n- unable to create new native thread：线程数超限\n\n**GC 频繁排查**\n- jstat -gc PID 1000 查看 GC 统计\n- 关注 YGC/FGC 次数和耗时\n- -Xlog:gc* (JDK 9+) 或 -XX:+PrintGCDetails\n- 分析大对象、内存泄漏、年轻代太小\n\n**常用诊断工具**\n- jps：列出 Java 进程\n- jstack：打印线程栈（死锁检测）\n- jstat：GC/类加载统计\n- jmap：堆内存分析、dump\n- jcmd（JDK 8+）：多功能命令\n- arthas（阿里）：在线诊断神器\n\n**Arthas 常用命令**\n- dashboard：实时面板\n- thread：线程信息\n- thread -b：找阻塞线程\n- jad：反编译类\n- watch：方法执行监控\n- trace：方法调用链耗时\n- profiler：火焰图\n\n**死锁排查**\n- jstack -l PID 末尾会输出死锁检测\n- 两个线程互相持有对方需要的锁\n- 避免嵌套锁、固定锁顺序\n\n**类加载泄漏**\n- Tomcat 重复部署导致旧 WebAppClassLoader 无法回收\n- 原因：静态引用、ThreadLocal、未注销的监听器\n- jmap -histo 查看类实例数",
+        "example": "# ===== CPU 飙高排查步骤 =====\n# 1. 找进程\n# top  → 找到 CPU 高的 Java PID (如 12345)\n\n# 2. 找线程\n# top -Hp 12345  → 找到 CPU 高的线程 TID (如 12356)\n\n# 3. 转十六进制\n# printf '%x\\n' 12356  → 0x3044\n\n# 4. dump 线程栈\n# jstack 12345 > /tmp/stack.log\n\n# 5. 查找线程\n# grep '3044' /tmp/stack.log -A 30\n\n# ===== OOM 排查 =====\n# JVM 启动参数加上自动 dump\n# java -XX:+HeapDumpOnOutOfMemoryError \\\n#      -XX:HeapDumpPath=/data/heap.hprof \\\n#      -Xms512m -Xmx512m MyApp\n\n# 手动 dump\n# jmap -dump:format=b,file=heap.hprof 12345\n# jcmd 12345 GC.heap_dump /tmp/heap.hprof\n\n# 查看 GC 情况\n# jstat -gcutil 12345 1000  (每秒一次)\n#  S0    S1    E     O     M    YGC  YGCT  FGC FGCT\n#  0.00 45.23 68.5  32.1  95.2  23   0.234  2  0.456\n\n# ===== Arthas 在线诊断 =====\n# 启动: java -jar arthas-boot.jar <PID>\n# dashboard          # 实时面板\n# thread             # 线程列表\n# thread -b          # 找出阻塞其他线程的线程\n# thread 15          # 查看线程15的栈\n# jad com.foo.Bar    # 反编译确认线上代码\n# watch com.foo.Bar method '{params, returnObj}' '#cost>100'\n#                    # 监控方法参数和返回，耗时>100ms\n# trace com.foo.Bar method  # 方法调用链耗时\n# profiler start; sleep 30; profiler stop  # 火焰图\n\n# ===== 死锁检测 =====\n# jstack -l 12345 | grep -A 20 'Found .* deadlock'\n\n# ===== Java 代码模拟 OOM 分析 =====\n// 大对象导致 OOM\nList<byte[]> list = new ArrayList<>();\nwhile (true) {\n    list.add(new byte[1024 * 1024]);  // 不断分配 1MB\n}\n// MAT 分析：Dominator Tree 找最大对象\n// Leak Suspects 报告自动分析泄漏点\n\n// 线程数过多 OOM\nwhile (true) {\n    new Thread(() -> { try { Thread.sleep(Long.MAX_VALUE); }\n        catch (Exception e){} }).start();\n}\n// 解决：用线程池限制线程数\n// 调整 ulimit -u / kernel 参数"
+      },
+      {
+        "id": "java-spring-ioc-aop",
+        "title": "Spring IOC/AOP 原理",
+        "level": "高级",
+        "content": "**IOC（控制反转）**\n- 对象创建和依赖注入由容器管理\n- DI（依赖注入）是 IOC 的实现方式\n- 解耦组件，便于测试\n\n**Bean 生命周期**\n1. 实例化（Instantiation）：调用构造方法创建对象\n2. 属性赋值（Populate）：注入依赖（@Autowired）\n3. Aware 接口回调：BeanNameAware/BeanFactoryAware 等\n4. BeanPostProcessor.postProcessBeforeInitialization\n5. 初始化：@PostConstruct → InitializingBean.afterPropertiesSet → init-method\n6. BeanPostProcessor.postProcessAfterInitialization（AOP 代理在此创建）\n7. 使用\n8. 销毁：@PreDestroy → DisposableBean.destroy → destroy-method\n\n**Bean 作用域**\n- singleton（默认）：单例\n- prototype：每次获取新建\n- request/session：Web 环境\n\n**循环依赖解决（三级缓存）**\n- singletonObjects（一级）：完整 Bean\n- earlySingletonObjects（二级）：早期暴露的半成品\n- singletonFactories（三级）：ObjectFactory（可生成代理）\n- 流程：A 依赖 B，B 依赖 A\n  1. 创建 A，将 A 的 ObjectFactory 放入三级缓存\n  2. 注入 B，创建 B，B 注入 A 时从三级缓存获取 A 的早期引用\n  3. B 完成注入，A 继续注入 B\n- 只能解决 setter/字段注入的单例循环依赖\n- 构造器循环依赖无法解决\n\n**AOP（面向切面编程）**\n- 横切关注点：日志/事务/权限/缓存\n- 术语：切面(Aspect)/切点(Pointcut)/通知(Advice)/织入(Weaving)\n- 通知类型：Before/After/Around/AfterReturning/AfterThrowing\n\n**AOP 实现原理**\n- **JDK 动态代理**：基于接口，Proxy.newProxyInstance\n- **CGLIB 代理**：基于继承，生成子类\n- Spring 默认：有接口用 JDK 代理，无接口用 CGLIB\n- Spring Boot 2.x+ 默认 CGLIB\n- proxy-target-class=true 强制 CGLIB\n\n**AOP 创建时机**\n- BeanPostProcessor.postProcessAfterInitialization 中\n- AnnotationAwareAspectJAutoProxyCreator 扫描 @Aspect\n- 匹配切点则创建代理替换原始 Bean\n\n**事务原理（@Transactional）**\n- 基于 AOP，代理类拦截方法\n- 开启事务 → 执行方法 → 提交/回滚\n- 事务失效场景：\n  - 自调用（this.method() 不走代理）\n  - 方法非 public\n  - 异常被 catch 未抛出\n  - 默认只回滚 RuntimeException（rollbackFor 可配置）\n  - 传播行为配置不当",
+        "example": "// ===== Bean 生命周期 =====\n@Component\npublic class MyBean implements BeanNameAware, InitializingBean, DisposableBean {\n    @Autowired\n    private Dependency dep;  // 属性赋值阶段\n\n    @PostConstruct\n    public void init() { /* 初始化 */ }\n\n    @Override\n    public void setBeanName(String name) { /* Aware 回调 */ }\n\n    @Override\n    public void afterPropertiesSet() { /* InitializingBean */ }\n\n    @PreDestroy\n    public void cleanup() { /* 销毁前 */ }\n\n    @Override\n    public void destroy() { /* DisposableBean */ }\n}\n\n// ===== 循环依赖（三级缓存）=====\n@Service\nclass A {\n    @Autowired B b;  // A 依赖 B\n}\n@Service\nclass B {\n    @Autowired A a;  // B 依赖 A（setter/字段注入可解决）\n}\n// 构造器循环依赖无法解决：\n// class A { A(B b){} }  class B { B(A a){} }  // 启动报错\n\n// ===== AOP 示例 =====\n@Aspect\n@Component\npublic class LogAspect {\n    // 切点：service 包下所有方法\n    @Pointcut(\"execution(* com.example.service.*.*(..))\")\n    public void servicePoint() {}\n\n    @Before(\"servicePoint()\")\n    public void before(JoinPoint jp) {\n        log.info(\"调用: {}.{}\", jp.getSignature().getDeclaringTypeName(),\n                 jp.getSignature().getName());\n    }\n\n    @Around(\"servicePoint()\")\n    public Object around(ProceedingJoinPoint pjp) throws Throwable {\n        long start = System.currentTimeMillis();\n        try {\n            Object result = pjp.proceed();  // 执行目标方法\n            return result;\n        } finally {\n            log.info(\"耗时: {}ms\", System.currentTimeMillis() - start);\n        }\n    }\n\n    @AfterThrowing(pointcut = \"servicePoint()\", throwing = \"ex\")\n    public void afterThrowing(JoinPoint jp, Exception ex) {\n        log.error(\"异常: {}\", ex.getMessage());\n    }\n}\n\n// ===== 事务失效示例 =====\n@Service\npublic class UserService {\n    @Transactional\n    public void outerMethod() {\n        // selfCall();  // 事务失效！this 调用不走代理\n        // 解决：注入自身代理 或 AopContext.currentProxy()\n        ((UserService) AopContext.currentProxy()).selfCall();\n    }\n\n    @Transactional(rollbackFor = Exception.class)  // 指定回滚异常\n    public void selfCall() throws Exception {\n        // 业务逻辑\n    }\n}\n\n// 强制 CGLIB 代理\n// @EnableAspectJAutoProxy(proxyTargetClass = true)\n// 暴露代理对象\n// @EnableAspectJAutoProxy(exposeProxy = true)"
+      },
+      {
+        "id": "java-springboot-autoconfig",
+        "title": "Spring Boot 自动配置原理",
+        "level": "高级",
+        "content": "**核心注解 @SpringBootApplication**\n- @SpringBootConfiguration：配置类（@Configuration）\n- @ComponentScan：组件扫描\n- @EnableAutoConfiguration：自动配置入口\n\n**自动配置原理**\n1. @EnableAutoConfiguration 通过 @Import 加载 AutoConfigurationImportSelector\n2. selectImports() 调用 SpringFactoriesLoader.loadFactoryNames\n3. 读取 META-INF/spring.factories 中 EnableAutoConfiguration 的类列表\n4. Spring Boot 2.7+ 改用 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports\n5. 过滤：@Conditional 条件决定是否生效\n\n**条件注解**\n- @ConditionalOnClass：类路径存在某类才生效\n- @ConditionalOnMissingBean：容器无某 Bean 才生效（用户可覆盖默认）\n- @ConditionalOnProperty：配置项满足条件\n- @ConditionalOnBean：容器存在某 Bean\n- @ConditionalOnWebApplication：Web 应用\n\n**自动配置类示例**\n- DataSourceAutoConfiguration：自动配置数据源\n- RedisAutoConfiguration：自动配置 RedisTemplate\n- 等等上百个\n\n**自定义 Starter**\n1. 创建自动配置类 @Configuration + @Conditional\n2. 注册到 spring.factories 或 imports 文件\n3. 打包，引入即生效\n\n**启动流程**\n1. SpringApplication.run()\n2. 创建 SpringApplication 实例（推断应用类型、加载监听器）\n3. 准备环境（读取 application.yml）\n4. 创建 ApplicationContext\n5. refreshContext：加载 BeanDefinition、实例化单例 Bean\n6. 触发自动配置\n7. 启动内嵌容器（Tomcat）\n8. 发布 ApplicationReadyEvent\n\n**内嵌容器**\n- 默认 Tomcat\n- 可换 Jetty/Undertow\n- ServletWebServerFactory 创建容器\n\n**配置文件加载顺序**\n1. 命令行参数\n2. 环境变量\n3. application-{profile}.yml\n4. application.yml\n5. 默认值\n\n**Actuator 监控**\n- /actuator/health：健康检查\n- /actuator/beans：所有 Bean\n- /actuator/configprops：配置属性\n- /actuator/metrics：指标\n- 生产需谨慎暴露端点",
+        "example": "// 启动类\n@SpringBootApplication\npublic class MyApp {\n    public static void main(String[] args) {\n        SpringApplication.run(MyApp.class, args);\n    }\n}\n\n// 自定义自动配置\n@Configuration\n@ConditionalOnClass(SmsService.class)  // 类路径有 SmsService 才生效\n@EnableConfigurationProperties(SmsProperties.class)\npublic class SmsAutoConfiguration {\n\n    @Bean\n    @ConditionalOnMissingBean  // 用户未定义则创建默认\n    @ConditionalOnProperty(prefix = \"sms\", name = \"enabled\", havingValue = \"true\")\n    public SmsService smsService(SmsProperties props) {\n        return new SmsService(props.getAccessKey(), props.getSecret());\n    }\n}\n\n@ConfigurationProperties(prefix = \"sms\")\npublic class SmsProperties {\n    private String accessKey;\n    private String secret;\n    private boolean enabled = true;\n    // getter/setter\n}\n\n// 注册自动配置\n// src/main/resources/META-INF/spring.factories:\n// org.springframework.boot.autoconfigure.EnableAutoConfiguration=\\\n//   com.example.SmsAutoConfiguration\n//\n// Spring Boot 2.7+ 用新文件:\n// src/main/resources/META-INF/spring/\n//   org.springframework.boot.autoconfigure.AutoConfiguration.imports\n// 内容: com.example.SmsAutoConfiguration\n\n// application.yml 配置\n'''\nsms:\n  enabled: true\n  access-key: AKID123\n  secret: SECRET456\n'''\n\n// 使用：引入 starter 即自动配置\n@Service\npublic class NotifyService {\n    @Autowired  // 自动注入自动配置创建的 Bean\n    private SmsService smsService;\n}\n\n// 多环境配置\n// application.yml (默认)\n// application-dev.yml (开发)\n// application-prod.yml (生产)\n// spring.profiles.active=dev 激活\n\n// 外部化配置优先级（高到低）\n// 1. 命令行: --sms.access-key=XXX\n// 2. JVM 参数: -Dsms.access-key=XXX\n// 3. 环境变量: SMS_ACCESS_KEY=XXX\n// 4. application-{profile}.yml\n// 5. application.yml"
       }
     ]
   },
@@ -1676,6 +1900,62 @@ const KNOWLEDGE = {
         "level": "进阶",
         "content": "**JSON 类型（MySQL 5.7+）**\n- 原生 JSON 类型，内部存储为二进制（高效）\n- 自动校验 JSON 合法性\n- 支持索引（通过生成列）\n- 8.0 增强性能与函数\n\n**创建与插入**\n- CREATE TABLE t (data JSON);\n- INSERT INTO t VALUES ('{\"name\":\"Alice\",\"age\":30}');\n- 支持 JSON_ARRAY / JSON_OBJECT 构造\n\n**查询函数**\n- JSON_EXTRACT(data, '$.name') 或 data->'$.name'\n- data->>'$.name'：去除引号的字符串\n- JSON_KEYS(data)：顶层键\n- JSON_LENGTH(data)：元素数\n- JSON_CONTAINS(data, '30', '$.age')：包含判断\n- JSON_CONTAINS_PATH(data, 'one', '$.name')\n\n**修改函数**\n- JSON_SET(data, '$.age', 31, '$.city', 'BJ')：设置（不存在则添加）\n- JSON_INSERT(data, '$.new', 'val')：仅插入新键\n- JSON_REPLACE(data, '$.age', 31)：仅替换已存在\n- JSON_REMOVE(data, '$.age')：删除\n- JSON_MERGE_PATCH / JSON_MERGE_PRESERVE：合并\n\n**JSON 索引**\n- 直接对 JSON 列建索引无效\n- 通过生成列提取字段建索引：\n  ALTER TABLE t ADD COLUMN name VARCHAR(50)\n    AS (JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')));\n  CREATE INDEX idx_name ON t(name);\n- 8.0+ 支持多值索引（MULTI-VALUED INDEX）\n\n**聚合函数**\n- JSON_ARRAYAGG(col)：聚合为 JSON 数组\n- JSON_OBJECTAGG(key, val)：聚合为 JSON 对象\n\n**适用场景**\n- 半结构化数据（配置、扩展属性）\n- 动态字段（schema-less 需求）\n- 嵌套数据（避免多表 JOIN）\n- 日志/事件存储\n\n**注意**\n- JSON 占用空间比关系字段大\n- 复杂查询性能不如关系设计\n- 适合辅助场景，不适合核心高频字段\n- 大量 JSON 操作考虑 MongoDB",
         "example": "-- 建表\nCREATE TABLE products (\n  id BIGINT PRIMARY KEY,\n  name VARCHAR(100),\n  attrs JSON,\n  -- 生成列提取字段建索引\n  brand VARCHAR(50) AS (JSON_UNQUOTE(JSON_EXTRACT(attrs, '$.brand'))),\n  INDEX idx_brand(brand)\n) ENGINE=InnoDB;\n\n-- 插入\nINSERT INTO products (id, name, attrs) VALUES\n(1, 'iPhone', '{\"brand\":\"Apple\",\"price\":9999,\"colors\":[\"black\",\"white\"],\"specs\":{\"cpu\":\"A16\",\"ram\":\"6GB\"}}'),\n(2, 'Galaxy', '{\"brand\":\"Samsung\",\"price\":7999,\"colors\":[\"blue\"],\"specs\":{\"cpu\":\"SD8\",\"ram\":\"8GB\"}}');\n\n-- 查询\nSELECT name, attrs->'$.brand' AS brand,\n       attrs->>'$.specs.cpu' AS cpu,\n       attrs->'$.colors[0]' AS first_color\nFROM products;\n\n-- 条件查询\nSELECT * FROM products\nWHERE attrs->'$.brand' = '\"Apple\"';\n\nSELECT * FROM products\nWHERE JSON_CONTAINS(attrs->'$.colors', '\"black\"');\n\nSELECT * FROM products\nWHERE attrs->>'$.brand' = 'Samsung';\n\n-- 修改\nUPDATE products\nSET attrs = JSON_SET(attrs, '$.price', 8999, '$.in_stock', true)\nWHERE id = 1;\n\nUPDATE products\nSET attrs = JSON_REMOVE(attrs, '$.colors')\nWHERE id = 2;\n\n-- 合并\nUPDATE products\nSET attrs = JSON_MERGE_PATCH(attrs, '{\"warranty\":2}')\nWHERE id = 1;\n\n-- 聚合\nSELECT attrs->'$.brand' AS brand,\n       JSON_ARRAYAGG(name) AS products\nFROM products\nGROUP BY attrs->'$.brand';\n\n-- 多值索引（8.0.17+）\nCREATE TABLE tags (\n  id INT PRIMARY KEY,\n  categories JSON\n);\nINSERT INTO tags VALUES (1, '[\"a\",\"b\",\"c\"]'), (2, '[\"b\",\"c\"]');\n-- 创建多值索引\nALTER TABLE tags\n  ADD INDEX idx_cat ((CAST(categories AS CHAR(20) ARRAY)));\n-- 查询：能走索引\nSELECT * FROM tags\nWHERE JSON_OVERLAPS(categories, '\"[\\\"a\\\",\\\"b\\\"]\"');"
+      },
+      {
+        "id": "mysql-repl-delay",
+        "title": "主从延迟排查与优化",
+        "level": "高级",
+        "content": "**主从延迟表现**\n- Seconds_Behind_Master 持续增大\n- 从库数据滞后，读写分离读到旧数据\n- 业务依赖强一致性时出错\n\n**延迟原因**\n1. **从库单线程重放慢**：主库多线程写入，从库 SQL 线程串行重放\n2. **大事务**：一个事务执行很久，从库需同等时间重放\n3. **DDL 操作**：ALTER TABLE 锁表且耗时长\n4. **从库硬件差**：CPU/IO/内存不如主库\n5. **网络延迟**：主从跨机房/跨地域\n6. **从库负载高**：从库承担大量查询，影响 SQL 重放\n7. **无主键/索引**：ROW 格式 binlog 重放需全表扫描定位行\n\n**排查方法**\n- SHOW REPLICA STATUS\\G 查看 Seconds_Behind_Master\n- 关注 Slave_IO_Running / Slave_SQL_Running\n- pt-heartbeat 工具精确测量延迟（基于时间戳对比）\n- 检查从库 slow log 是否有大事务\n- 检查 Relay_Log_Space 是否积压\n\n**优化方案**\n1. **多线程复制（MTS）**\n   - MySQL 5.7+ 并行复制\n   - 基于 group commit（slave_parallel_type=LOGICAL_CLOCK）\n   - MySQL 8.0 基于 WRITESET（slave_parallel_type=LOGICAL_CLOCK + binlog_transaction_dependency_tracking=WRITESET）\n   - slave_parallel_workers 设置并发数\n\n2. **减少大事务**\n   - 拆分大事务为小批次\n   - 避免一次性 DELETE/UPDATE 大量行\n   - 分批操作：DELETE ... LIMIT 1000 循环\n\n3. **从库硬件提升**\n   - SSD、更大内存、更多 CPU\n\n4. **网络优化**\n   - 主从同机房\n   - 压缩 binlog 传输（binlog_transaction_compression）\n\n5. **确保有主键**\n   - ROW 格式 binlog 重放依赖主键定位行\n   - 无主键会导致全表扫描，极慢\n\n6. **半同步复制**\n   - 至少保证数据到达从库（但不减少重放延迟）\n\n7. **读写分离策略**\n   - 关键读走主库\n   - 容忍延迟的读走从库\n   - 强制读主库的会话标记",
+        "example": "-- 查看复制状态\nSHOW REPLICA STATUS\\G\n-- 关键指标:\n--   Slave_IO_Running: Yes\n--   Slave_SQL_Running: Yes\n--   Seconds_Behind_Master: 0 (理想)\n--   Relay_Log_Space: 积压大小\n\n-- 多线程复制配置（my.cnf）\n-- MySQL 8.0 基于 WRITESET 的并行复制\n'''\n[mysqld]\nslave_parallel_type = LOGICAL_CLOCK\nslave_parallel_workers = 8\nbinlog_transaction_dependency_tracking = WRITESET\nbinlog_transaction_dependency_history_size = 25000\nslave_preserve_commit_order = ON\n'''\n\n-- 查看从库 worker 线程状态\nSELECT * FROM performance_schema.replication_applier_status_by_worker;\n\n-- pt-heartbeat 精确测量延迟\n-- 主库持续写入心跳表\n-- pt-heartbeat --master --daemonize\n-- 从库检测\n-- pt-heartbeat --check --master-server-id=1\n\n-- 拆分大事务示例\n-- 错误：一次性删除百万行\n-- DELETE FROM logs WHERE created < '2024-01-01';\n\n-- 正确：分批删除\n-- DELIMITER //\n-- CREATE PROCEDURE batch_delete()\n-- BEGIN\n--   DECLARE done INT DEFAULT 0;\n--   REPEAT\n--     DELETE FROM logs WHERE created < '2024-01-01' LIMIT 1000;\n--     SET done = ROW_COUNT();\n--     COMMIT;\n--   UNTIL done = 0 END REPEAT;\n-- END //\n-- DELIMITER ;\n\n-- 检查无主键的表\nSELECT TABLE_SCHEMA, TABLE_NAME\nFROM information_schema.TABLES t\nWHERE t.TABLE_TYPE = 'BASE TABLE'\n  AND NOT EXISTS (\n    SELECT 1 FROM information_schema.KEY_COLUMN_USAGE k\n    WHERE k.TABLE_SCHEMA = t.TABLE_SCHEMA\n      AND k.TABLE_NAME = t.TABLE_NAME\n  );\n\n-- 强制读主库（应用层）\n-- 关键业务读操作走主库连接\n-- 或使用 hint: /*MASTER*/ SELECT ..."
+      },
+      {
+        "id": "mysql-online-ddl",
+        "title": "大表 DDL 与在线变更",
+        "level": "高级",
+        "content": "**传统 DDL 的问题**\n- ALTER TABLE 可能锁表、重建全表\n- 大表 DDL 耗时数小时甚至数天\n- 阻塞业务读写\n- 主从延迟暴增\n\n**MySQL Online DDL（5.6+）**\n- INPLACE 算法：引擎内部修改，不复制全表\n- COPY 算法：创建临时表复制数据（锁表）\n- INSTANT 算法（8.0.12+）：只改元数据，瞬间完成\n- ALGORITHM/NLOCK/LOCK 控制\n\n**各操作的 Online 程度**\n- 加列（默认最后）：8.0 INSTANT，秒级\n- 加索引：INPLACE，允许 DML 但耗时\n- 修改列类型：通常 COPY，锁表\n- 删除列：INPLACE，耗时\n- 修改字符集：COPY，锁表\n- 重命名列：INSTANT（8.0+不改类型）\n- 加主键：INPLACE 但耗时\n\n**ALGORITHM 与 LOCK**\n- ALGORITHM=INSTANT：优先尝试，秒级\n- ALGORITHM=INPLACE, LOCK=NONE：不锁表，允许 DML\n- ALGORITHM=COPY, LOCK=SHARED：允许读不允许写\n- ALGORITHM=COPY, LOCK=EXCLUSIVE：完全锁表\n\n**大表变更工具**\n1. **gh-ost（GitHub 开源）**\n   - 基于 binlog 同步，无触发器\n   - 创建影子表 → 拷贝数据 → 用 binlog 增量同步 → 切换\n   - 可暂停、可回滚、限流\n   - 不影响主库负载（触发器会）\n\n2. **pt-online-schema-change（Percona Toolkit）**\n   - 基于触发器同步增量\n   - 创建影子表 → 拷贝 → 触发器同步 → rename\n   - 成熟稳定但触发器有性能影响\n\n3. **原生 INSTANT DDL（8.0.12+）**\n   - 加列、重命名列等秒级完成\n   - 不复制数据、不锁表\n   - 局限：仅部分操作支持\n\n**变更最佳实践**\n- 低峰期执行\n- 先在测试环境验证\n- 使用 ALGORITHM=INSTANT 优先\n- 大表用 gh-ost/pt-osc\n- 关注 binlog 大小和主从延迟\n- 设置超时和限流\n\n**Instant DDL 限制**\n- 只支持加列到末尾、删列（8.0.29+）等\n- 修改列类型不支持\n- 加索引不支持",
+        "example": "-- Online DDL 语法\n-- 优先 INSTANT，失败再 INPLACE\nALTER TABLE orders ADD COLUMN remark VARCHAR(100),\n  ALGORITHM=INSTANT, LOCK=NONE;\n\n-- INSTANT 不支持时用 INPLACE\nALTER TABLE orders ADD INDEX idx_user(user_id),\n  ALGORITHM=INPLACE, LOCK=NONE;\n\n-- 查看 DDL 是否支持 INSTANT\n-- MySQL 8.0: ALTER ... ALGORITHM=INSTANT 直接报错说明不支持\n\n-- gh-ost 在线加列（不锁表、无触发器）\n# gh-ost \\\n#   --host=master.db \\\n#   --user=root --password=xxx \\\n#   --database=mydb --table=orders \\\n#   --alter=\"ADD COLUMN status INT\" \\\n#   --execute\n\n# gh-ost 暂停/恢复\n# echo throttle | nc -U /tmp/gh-ost.sock\n# echo no-throttle | nc -U /tmp/gh-ost.sock\n\n# pt-online-schema-change 在线加索引\n# pt-online-schema-change \\\n#   --alter=\"ADD INDEX idx_created(created_at)\" \\\n#   D=mydb,t=orders \\\n#   --execute\n\n-- 检查 DDL 进度（8.0）\nSELECT * FROM performance_schema.events_stages_current\nWHERE EVENT_NAME LIKE 'stage/innodb/alter%';\n\n-- 查看表的 Instant DDL 历史记录\nSELECT * FROM information_schema.INNODB_TABLES\nWHERE NAME = 'mydb/orders';\n\n-- 大表分批加索引（避免长事务）\n-- 某些场景可先在影子库加索引再切换\n\n-- 扩展 VARCHAR 长度（8.0 INPLACE）\nALTER TABLE users MODIFY name VARCHAR(200),\n  ALGORITHM=INPLACE, LOCK=NONE;\n-- 注意：缩短长度需要 COPY（可能截断数据）\n\n-- 修改列类型（通常锁表）\nALTER TABLE orders MODIFY amount BIGINT,\n  ALGORITHM=COPY, LOCK=SHARED;  -- 允许读不允许写\n-- 生产环境大表建议用 gh-ost"
+      },
+      {
+        "id": "mysql-slow-governance",
+        "title": "慢查询治理方法论",
+        "level": "高级",
+        "content": "**慢查询治理流程**\n1. **采集**：开启 slow_query_log\n2. **分析**：mysqldumpslow / pt-query-digest\n3. **定位**：EXPLAIN 分析执行计划\n4. **优化**：加索引/改写 SQL/调参数\n5. **验证**：对比优化前后性能\n6. **监控**：持续跟踪防止回退\n\n**慢查询日志配置**\n- slow_query_log = ON\n- long_query_time = 1（阈值秒数）\n- log_queries_not_using_indexes = ON（记录未走索引的查询）\n- min_examined_row_limit（忽略扫描行数少的）\n\n**pt-query-digest 分析**\n- 按指纹（fingerprint）聚合相似 SQL\n- 统计：次数、总耗时、平均耗时、扫描行数\n- 按总耗时/次数/单次耗时排序\n- 重点关注：耗时占比高、扫描行数多、次数频繁\n\n**慢查询分类与对策**\n1. **未走索引**\n   - 原因：无索引、索引失效、隐式转换\n   - 对策：建索引、避免函数操作列、注意类型匹配\n\n2. **索引不合理**\n   - 索引选择度低（如状态字段）\n   - 联合索引顺序不当\n   - 对策：调整索引设计\n\n3. **返回数据量大**\n   - SELECT * 查全部字段\n   - 无分页\n   - 对策：只查需要的列、加分页\n\n4. **JOIN 低效**\n   - 驱动表选择不当\n   - JOIN 字段无索引\n   - 对策：小表驱动大表、JOIN 字段建索引\n\n5. **锁等待**\n   - 长事务持锁\n   - 对策：缩短事务、避免长事务\n\n6. **临时表/文件排序**\n   - Using temporary / Using filesort\n   - 对策：优化 ORDER BY/GROUP BY 走索引\n\n**SQL 审核机制**\n- 上线前 EXPLAIN 审核\n- 自动化审核工具（如 Yearning、Archery）\n- 禁止全表扫描的查询上线\n\n**监控指标**\n- 慢查询数量趋势\n- 平均查询响应时间\n- TOP N 慢 SQL",
+        "example": "-- 开启慢查询日志\nSET GLOBAL slow_query_log = ON;\nSET GLOBAL long_query_time = 1;\nSET GLOBAL log_queries_not_using_indexes = ON;\nSHOW VARIABLES LIKE 'slow_query_log_file';\n\n-- pt-query-digest 分析慢日志\n-- pt-query-digest /var/lib/mysql/slow.log > report.txt\n-- 输出示例:\n-- Rank  Query ID      Calls  R/Call   V/M\n-- ====  ============  =====  ======   ===\n--    1  0xABC123...      42  3.5000   0.5  <- 重点优化\n--    2  0xDEF456...     120  0.8000   0.1\n\n-- 按指纹聚合后查看具体 SQL\nSELECT * FROM mysql.slow_log ORDER BY start_time DESC LIMIT 10;\n\n-- EXPLAIN 分析\nEXPLAIN SELECT * FROM orders\nWHERE user_id = 100 AND status = 1\nORDER BY created_at DESC LIMIT 20;\n-- 关注:\n--   type: ALL(全表) -> ref/range(走索引)\n--   rows: 扫描行数\n--   Extra: Using filesort(需优化) / Using index(好)\n\n-- 优化案例1：未走索引\n-- 优化前: SELECT * FROM orders WHERE DATE(created_at)='2024-01-01';\n-- 函数导致索引失效！\n-- 优化后: SELECT * FROM orders\n--   WHERE created_at >= '2024-01-01' AND created_at < '2024-01-02';\n\n-- 优化案例2：分页深翻\n-- 优化前: SELECT * FROM orders ORDER BY id DESC LIMIT 1000000,10;\n-- 优化后(延迟关联):\nSELECT a.* FROM orders a\nINNER JOIN (\n  SELECT id FROM orders ORDER BY id DESC LIMIT 1000000,10\n) b ON a.id = b.id;\n-- 或游标分页: WHERE id < #{last_id} ORDER BY id DESC LIMIT 10\n\n-- 优化案例3：避免 SELECT *\nSELECT id, title, amount FROM orders WHERE user_id=100;\n-- 而非 SELECT *（多查无用列，无法覆盖索引）\n\n-- 优化案例4：JOIN 加索引\n-- 被驱动表 JOIN 字段必须建索引\nALTER TABLE orders ADD INDEX idx_user_id(user_id);\n-- 小表驱动大表：users(小) JOIN orders(大)\n\n-- performance_schema 监控（8.0）\nSELECT DIGEST_TEXT, COUNT_STAR, AVG_TIMER_WAIT/1000000000 AS avg_ms\nFROM performance_schema.events_statements_summary_by_digest\nORDER BY AVG_TIMER_WAIT DESC LIMIT 10;"
+      },
+      {
+        "id": "mysql-deadlock-analysis",
+        "title": "死锁分析与预防",
+        "level": "高级",
+        "content": "**死锁产生条件**\n- 两个或多个事务互相持有对方需要的锁\n- 互相等待，形成循环依赖\n- InnoDB 自动检测死锁并回滚代价较小的事务\n\n**常见死锁场景**\n1. **交叉更新**\n   - 事务A：UPDATE t SET... WHERE id=1 → UPDATE t WHERE id=2\n   - 事务B：UPDATE t SET... WHERE id=2 → UPDATE t WHERE id=1\n2. **间隙锁冲突**（RR 隔离级别）\n   - 事务A范围查询加间隙锁\n   - 事务B插入到间隙中被阻塞\n3. **唯一索引冲突**\n   - 两个事务同时 INSERT 相同唯一键\n4. **外键检查**\n5. **不同加锁顺序**\n\n**死锁排查**\n- SHOW ENGINE INNODB STATUS\\G 查看 LATEST DETECTED DEADLOCK\n- 记录两个事务的 SQL 和持有的锁\n- 开启 innodb_print_all_deadlocks 记录所有死锁到错误日志\n- performance_schema 可查锁信息\n\n**死锁日志解读**\n- TRANSACTION 1：持有锁、等待锁\n- TRANSACTION 2：持有锁、等待锁\n- 标记 ROLLING BACK 的事务是被回滚的（victim）\n- 关注 HOLDS THE LOCK(S) 和 WAITING FOR LOCK\n\n**预防死锁**\n1. **固定加锁顺序**\n   - 多表/多行更新时，所有事务按相同顺序加锁\n   - 如按主键升序更新\n\n2. **缩短事务**\n   - 事务越小持锁时间越短\n   - 避免事务中包含耗时操作（如 RPC 调用）\n\n3. **降低隔离级别**\n   - RR 改 RC，减少间隙锁\n   - 但需评估业务对一致性的要求\n\n4. **合理使用索引**\n   - 无索引会锁更多行（甚至锁表）\n   - 走索引只锁匹配行\n\n5. **批量操作分批**\n   - 大批量更新拆分为小批次\n\n6. **重试机制**\n   - 捕获 DeadlockLoserDetector 异常重试\n   - 但需找到根因而非仅重试\n\n**innodb_deadlock_detect**\n- 默认开启，自动检测死锁\n- 高并发下检测本身消耗 CPU\n- 可关闭改用 innodb_lock_wait_timeout 超时回滚\n- 但关闭后死锁会一直等到超时",
+        "example": "-- 查看最近死锁\nSHOW ENGINE INNODB STATUS\\G\n-- 找到 LATEST DETECTED DEADLOCK 段\n-- 示例日志:\n-- *** (1) TRANSACTION:\n-- UPDATE account SET balance=balance-100 WHERE id=1\n-- *** (1) HOLDS THE LOCK(S):  记录id=1的X锁\n-- *** (1) WAITING FOR THIS LOCK TO BE GRANTED: 记录id=2的X锁\n-- *** (2) TRANSACTION:\n-- UPDATE account SET balance=balance+100 WHERE id=2\n-- *** (2) HOLDS THE LOCK(S): 记录id=2的X锁\n-- *** (2) WAITING FOR THIS LOCK TO BE GRANTED: 记录id=1的X锁\n-- *** WE ROLL BACK TRANSACTION (2)  <- 事务2被回滚\n\n-- 开启所有死锁记录\nSET GLOBAL innodb_print_all_deadlocks = ON;\n-- 之后查看错误日志\n\n-- MySQL 8.0 查看锁\nSELECT * FROM performance_schema.data_locks;\nSELECT * FROM performance_schema.data_lock_waits;\n\n-- 预防：固定加锁顺序\n-- 错误：事务间加锁顺序不一致\n-- 事务A: UPDATE t WHERE id=1; UPDATE t WHERE id=2;\n-- 事务B: UPDATE t WHERE id=2; UPDATE t WHERE id=1;\n-- 正确：统一按 id 升序\n-- 事务A: UPDATE t WHERE id=1; UPDATE t WHERE id=2;\n-- 事务B: UPDATE t WHERE id=1; UPDATE t WHERE id=2;\n\n-- 应用层重试（Java 示例）\n'''\n@Retryable(value = DeadlockLoserDataAccessException.class, maxAttempts = 3)\n@Transactional\npublic void transfer(Long from, Long to, BigDecimal amount) {\n    // 按 id 排序加锁\n    Long first = Math.min(from, to);\n    Long second = Math.max(from, to);\n    accountDao.lockById(first);\n    accountDao.lockById(second);\n    accountDao.deduct(from, amount);\n    accountDao.add(to, amount);\n}\n'''\n\n-- 间隙锁死锁场景（RR）\n-- 表有 id: 1, 5, 10\n-- 事务A: SELECT * FROM t WHERE id BETWEEN 3 AND 7 FOR UPDATE;\n--   加间隙锁 (1,5) (5,10)\n-- 事务B: INSERT INTO t VALUES(4);\n--   阻塞（在间隙 (1,5) 中插入）\n-- 如果事务B也持有其他间隙锁且事务A要插入该间隙 -> 死锁\n-- 预防：改 RC 隔离级别减少间隙锁\n\n-- 查看锁等待超时\nSHOW VARIABLES LIKE 'innodb_lock_wait_timeout';  -- 默认50秒\n\n-- 高并发场景关闭死锁检测（谨慎）\n-- SET GLOBAL innodb_deadlock_detect = OFF;\n-- 改用超时回滚: SET GLOBAL innodb_lock_wait_timeout = 5;"
+      },
+      {
+        "id": "mysql-new-features",
+        "title": "MySQL 8.0/9.0 新特性",
+        "level": "高级",
+        "content": "**MySQL 8.0 核心新特性**\n1. **默认引擎 InnoDB**，移除 Query Cache\n2. **自增主键持久化**：重启不再重置（5.7 重启可能重置）\n3. **隐藏列（Invisible Index）**：索引可设为不可见，验证删除影响\n4. **降序索引**：真正支持 DESC 索引（5.7 只是语法兼容）\n5. **函数索引**：可对表达式建索引\n6. **CTE（公用表表达式）**：WITH 子句，递归查询\n7. **窗口函数**：ROW_NUMBER/RANK/LAG/LEAD 等\n8. **JSON 增强**：JSON_TABLE、部分更新\n9. **角色（Role）**：角色管理权限\n10. **原子 DDL**：DDL 操作原子化（崩溃不残留）\n11. **不可见列**：对 SELECT * 隐藏\n12. **SKIP LOCKED / NOWAIT**：跳过锁定的行\n13. **直方图统计**：优化器更准确\n\n**复制与高可用**\n- MGR（Group Replication）增强\n- 基于 WRITESET 的并行复制\n- 事件追踪增强\n\n**JSON 增强**\n- JSON_TABLE：JSON 转关系表\n- JSON_PRETTY / JSON_STORAGE_SIZE\n- 部分更新（JSON_SET 增量）\n\n**MySQL 8.0 性能提升**\n- 直方图让优化器更智能\n- WRITESET 并行复制\n- Instant DDL（8.0.12+）\n- 资源组（Resource Group）控制线程优先级\n\n**MySQL 9.0（2024）新特性**\n- **JavaScript 存储函数**（企业版）：用 JS 写存储过程\n- **向量类型 VECTOR**：AI 场景存储向量数据\n- **EXPLAIN INTO**：保存执行计划\n- **INSERT...RETURNING**：插入返回数据\n- 优化器改进\n- 注意：9.0 是 Innovation 版本，非 LTS，生产建议 8.0 LTS\n\n**MySQL 版本策略**\n- 8.0 LTS（长期支持）\n- 9.0+ Innovation（创新版，快速迭代）\n- 生产环境优先 LTS 版本\n\n**升级注意事项**\n- 5.7 → 8.0 需 mysql_upgrade（8.0.16 后自动）\n- 字符集默认 utf8mb4（5.7 是 latin1）\n- 检查 SQL 兼容性（如保留字变化）\n- 复制兼容性：低版本不能作为高版本的从库",
+        "example": "-- 1. 不可见索引（验证删除影响）\nALTER TABLE orders ALTER INDEX idx_user INVISIBLE;\n-- 观察查询性能是否受影响\n-- 如果没问题再删除：\nALTER TABLE orders DROP INDEX idx_user;\n-- 恢复：ALTER INDEX idx_user VISIBLE;\n\n-- 2. 降序索引（8.0 真正生效）\nCREATE INDEX idx_time ON orders(created_at DESC, user_id ASC);\n-- 8.0 会按降序存储，加速 ORDER BY created_at DESC\n\n-- 3. 函数索引\nCREATE INDEX idx_lower_email ON users((LOWER(email)));\nSELECT * FROM users WHERE LOWER(email) = 'alice@test.com';  -- 走索引\n\n-- 4. CTE 递归查询\nWITH RECURSIVE org_tree AS (\n  SELECT id, name, parent_id, 1 AS level\n  FROM departments WHERE parent_id IS NULL\n  UNION ALL\n  SELECT d.id, d.name, d.parent_id, t.level+1\n  FROM departments d JOIN org_tree t ON d.parent_id = t.id\n)\nSELECT * FROM org_tree;\n\n-- 5. 窗口函数\nSELECT user_id, created_at, amount,\n  ROW_NUMBER() OVER(PARTITION BY user_id ORDER BY created_at DESC) AS rn,\n  LAG(amount) OVER(PARTITION BY user_id ORDER BY created_at) AS prev_amount\nFROM orders;\n\n-- 6. JSON_TABLE\nSELECT * FROM JSON_TABLE('[{\"name\":\"Alice\",\"age\":25},{\"name\":\"Bob\",\"age\":30}]',\n  '$[*]' COLUMNS (\n    name VARCHAR(50) PATH '$.name',\n    age INT PATH '$.age'\n  )\n) AS jt;\n\n-- 7. SKIP LOCKED（跳过锁定的行，适合任务队列）\nSELECT * FROM task_queue WHERE status='pending'\n  ORDER BY id LIMIT 10 FOR UPDATE SKIP LOCKED;\n-- 不阻塞，直接跳过被其他事务锁定的任务\n\n-- 8. 直方图统计\nANALYZE TABLE orders UPDATE HISTOGRAM ON status WITH 100 BUCKETS;\n-- 优化器利用直方图更准确估算行数\n\n-- 9. 角色（权限管理）\nCREATE ROLE 'app_read', 'app_write';\nGRANT SELECT ON mydb.* TO 'app_read';\nGRANT INSERT, UPDATE, DELETE ON mydb.* TO 'app_write';\nGRANT 'app_read', 'app_write' TO 'user1'@'%';\nSET DEFAULT ROLE 'app_read', 'app_write' TO 'user1'@'%';\n\n-- 10. INSERT...RETURNING（9.0+）\nINSERT INTO users(name) VALUES('Alice') RETURNING id, name;\n\n-- 11. 向量类型（9.0+）\nCREATE TABLE embeddings (id INT, vec VECTOR(4));\nINSERT INTO embeddings VALUES(1, '[1.0,2.0,3.0,4.0]');\n-- DISTANCE 函数计算向量距离（AI 场景）"
+      },
+      {
+        "id": "mysql-primary-key-design",
+        "title": "主键设计与 ID 生成方案",
+        "level": "进阶",
+        "content": "**主键的作用**\n- InnoDB 聚簇索引按主键组织数据\n- 主键影响数据物理存储顺序\n- 影响插入性能、索引大小、页分裂\n\n**主键选择原则**\n1. **自增（推荐）**：顺序插入，页不分裂，性能好\n2. **越小越好**：BIGINT(8) > INT(4) > UUID(16)\n3. **非空 NOT NULL**：主键不允许 NULL\n4. **不可变**：主键值不应修改（导致数据移动）\n5. **无业务含义**：避免业务变化影响主键\n\n**自增主键优势**\n- 顺序写入，避免页分裂\n- 主键索引紧凑\n- 占用空间小（INT/BIGINT）\n- 简单可靠\n\n**UUID 的问题**\n- 随机无序，导致页分裂频繁\n- 16字节，索引体积大\n- 可读性差\n- 优势：全局唯一、无需中心化\n\n**UUID 优化**\n- UUID v7/v8（时间有序）：减少页分裂\n- 把 UUID 前 8 字节时间戳反转：变有序\n- 存储 BINARY(16) 而非 CHAR(36)：省空间\n\n**雪花算法 Snowflake**\n- 64位 = 1位符号 + 41位时间戳 + 10位机器ID + 12位序列号\n- 趋势递增（时间有序）\n- 分布式唯一\n- 时钟回拨问题\n- 可存为 BIGINT\n\n**号段模式（Leaf-Segment）**\n- 数据库批量分配 ID（如每次取 1000 个）\n- 应用内存缓存号段\n- 减少数据库压力\n- 步长可配置\n\n**Redis INCR**\n- 简单，高性能\n- 依赖 Redis 可用性\n- 持久化需考虑（RDB 可能丢）\n\n**多主自增**\n- 不同实例设置不同 auto_increment_offset 和 step\n- 如两台：A 奇数 B 偶数\n- 缺点：扩容困难\n\n**分库分表 ID 方案**\n- 雪花算法（主流）\n- 号段模式\n- 数据库多主自增\n- 避免 UUID（无序导致数据倾斜）\n\n**主键与二级索引关系**\n- 二级索引叶子存储主键值\n- 主键越大，所有二级索引都变大\n- 因此主键要小",
+        "example": "-- 自增主键（推荐）\nCREATE TABLE orders (\n  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  user_id BIGINT NOT NULL,\n  amount DECIMAL(10,2),\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n  INDEX idx_user(user_id)\n) ENGINE=InnoDB;\n\n-- 无主键的后果\n-- InnoDB 会选唯一非空索引或生成隐藏 6 字节 ROWID\n-- 隐藏 ROWID 全局共享，可能导致数据竞争\n-- ROW 格式 binlog 重放极慢（无主键定位行）\n\n-- UUID 存储（如必须用）\nCREATE TABLE sessions (\n  id BINARY(16) PRIMARY KEY,  -- 用 BINARY(16) 而非 CHAR(36)\n  data TEXT\n);\n-- 插入: INSERT INTO sessions VALUES(UNHEX(REPLACE(UUID(),'-','')), '...');\n\n-- 时间有序 UUID（MySQL 8.0 UUID_TO_BIN）\n-- UUID v1 含时间戳但顺序不对\n-- UUID_TO_BIN(uuid, swap_flag) 将时间部分前置，变有序\nINSERT INTO sessions VALUES(UUID_TO_BIN(UUID(), 1), '...');\n\n-- 雪花算法生成 BIGINT（应用层）\n-- 64位: 1符号 + 41时间戳 + 10机器 + 12序列\n-- 存为 BIGINT\nCREATE TABLE distributed_data (\n  id BIGINT PRIMARY KEY,  -- 雪花算法生成\n  ...\n);\n\n-- 号段模式表结构\nCREATE TABLE id_segment (\n  biz_tag VARCHAR(64) PRIMARY KEY,\n  max_id BIGINT NOT NULL DEFAULT 1,\n  step INT NOT NULL DEFAULT 1000,\n  version INT NOT NULL DEFAULT 0\n);\n-- 业务取号: UPDATE id_segment SET max_id=max_id+step WHERE biz_tag='order';\n-- 然后取 max_id 到 max_id+step 作为本批次 ID\n\n-- 多主自增（双主防冲突）\n-- 主库A: auto_increment_offset=1, auto_increment_increment=2  (1,3,5,7...)\n-- 主库B: auto_increment_offset=2, auto_increment_increment=2  (2,4,6,8...)\n\n-- 主键越小二级索引越小\n-- BIGINT 主键: 每个二级索引叶子多存 8 字节\n-- UUID 主键: 每个二级索引叶子多存 16 字节\n-- 千万行表，10个二级索引，差距: (16-8)*10*10000000 = 800MB\n\n-- 复合主键（某些场景）\nCREATE TABLE order_items (\n  order_id BIGINT NOT NULL,\n  item_id INT NOT NULL,\n  quantity INT,\n  PRIMARY KEY (order_id, item_id)  -- 复合主键\n);\n-- 注意：二级索引会引用整个复合主键，体积更大"
+      },
+      {
+        "id": "mysql-read-write-split",
+        "title": "读写分离实现方案",
+        "level": "进阶",
+        "content": "**为什么要读写分离**\n- 主库承担写压力，从库分担读压力\n- 提升整体并发能力\n- 读多写少场景效果显著\n\n**实现层次**\n1. **应用层**\n   - 应用代码中手动选择数据源\n   - 写操作走主库，读操作走从库\n   - 灵活但侵入性强\n\n2. **中间件层**\n   - ShardingSphere-JDBC / Proxy\n   - MyCat\n   - ProxySQL\n   - 对应用透明\n   - SQL 自动路由\n\n3. **驱动层**\n   - MySQL Router\n   - 连接代理\n\n**ShardingSphere 读写分离**\n- 配置主库和从库列表\n- 写 SQL 路由主库\n- 读 SQL 路由从库（负载均衡）\n- 支持强制走主库（Hint）\n- 支持从库健康检查\n\n**负载均衡策略**\n- 轮询（Round Robin）\n- 随机（Random）\n- 权重（Weight）\n- 最少连接\n\n**主从延迟带来的问题**\n- 写主库后立即读从库，可能读到旧数据\n- 用户感知数据不一致\n\n**解决延迟读不一致**\n1. **强制读主库**\n   - 关键业务（如写后立即读）走主库\n   - Hint: /*MASTER*/ SELECT ...\n   - ShardingSphere: HintManager.getInstance().setMasterRouteOnly()\n\n2. **会话粘连**\n   - 写操作后在一定时间内读走主库\n   - 基于线程变量/Session 标记\n\n3. **半同步复制 + 等待**\n   - 写后等待从库同步完成再读\n   - 降低性能\n\n4. **缓存过渡**\n   - 写后先写缓存，读优先缓存\n   - 缓存过期后读从库\n\n**ShardingSphere 配置示例**\n```yaml\nrules:\n  - !READWRITE_SPLITTING\n    dataSources:\n      readwrite_ds:\n        writeDataSourceName: master_ds\n        readDataSourceNames:\n          - slave_ds_0\n          - slave_ds_1\n        transactionalReadQueryStrategy: PRIMARY\n        loadBalancerName: round_robin\n    loadBalancers:\n      round_robin:\n        type: ROUND_ROBIN\n```\n\n**ProxySQL**\n- 数据库代理，MySQL 协议\n- 自动路由读写\n- 查询规则（Query Rules）灵活配置\n- 连接池管理\n- 监控统计",
+        "example": "-- ProxySQL 配置读写分离\n-- 1. 添加后端服务器\n'''\nINSERT INTO mysql_servers(hostgroup_id,hostname,port)\nVALUES (0,'master.db',3306), (1,'slave1.db',3306), (1,'slave2.db',3306);\n-- hostgroup 0=写组, 1=读组\n'''\n\n-- 2. 配置路由规则\n'''\n-- SELECT 走读组\nINSERT INTO mysql_query_rules(rule_id,active,match_digest,destination_hostgroup)\nVALUES (1,1,'^SELECT.*',1);\n-- 其他走写组（默认）\n'''\n\n-- 3. 强制读主库（规则例外）\n-- SELECT /*MASTER*/ * FROM users ...\n-- INSERT INTO mysql_query_rules(rule_id,active,match_digest,destination_hostgroup)\n-- VALUES (2,1,'^SELECT.*MASTER.*',0);\n\n-- ShardingSphere-JDBC 强制主库\n'''\n// Java 代码\ntry (HintManager hint = HintManager.getInstance()) {\n    hint.setWriteRouteOnly();  // 强制走主库\n    List<User> users = userDao.selectAfterWrite();\n}\n'''\n\n-- 应用层手动选择数据源\n'''\n// Spring 多数据源\n@TargetDataSource(\"master\")\npublic void createUser(User u) { ... write ... }\n\n@TargetDataSource(\"slave\")\npublic User getUser(Long id) { ... read ... }\n\n// 写后立即读的关键操作走主库\n@TargetDataSource(\"master\")\npublic User createAndGet(User u) {\n    userMapper.insert(u);\n    return userMapper.selectById(u.getId());\n}\n'''\n\n-- 从库健康检查\n-- ShardingSphere 自动剔除不可用从库\n-- ProxySQL 定期检测\n-- SELECT * FROM mysql_servers;  查看状态\n\n-- 监控读写比例\nSELECT hostgroup, COUNT(*), SUM(duration)\nFROM stats_mysql_query_digest\nGROUP BY hostgroup;\n-- 评估读写比例是否合理，调整从库数量"
+      },
+      {
+        "id": "mysql-monitoring",
+        "title": "MySQL 监控与告警",
+        "level": "进阶",
+        "content": "**监控维度**\n1. **可用性**：服务是否存活、能否连接\n2. **性能**：QPS/TPS、响应时间、慢查询\n3. **资源**：CPU/内存/磁盘/IO/网络\n4. **复制**：主从状态、延迟\n5. **连接**：连接数、活跃连接、连接拒绝\n6. **锁**：锁等待、死锁\n7. **容量**：表空间、增长趋势\n\n**关键监控指标**\n- Threads_connected：当前连接数\n- Threads_running：活跃线程数\n- QPS（Questions/s）、TPS（Com_commit+Com_rollback）/s\n- Slow_queries：慢查询数\n- Innodb_rows_read/written：行读写数\n- Innodb_buffer_pool_read_requests / reads：缓冲池命中率\n- Seconds_Behind_Master：主从延迟\n- Aborted_clients/connections：异常断开\n\n**监控工具**\n1. **Prometheus + mysqld_exporter + Grafana**\n   - 业界主流方案\n   - mysqld_exporter 采集 MySQL 指标\n   - Grafana 可视化\n\n2. **Percona PMM**\n   - 基于 Prometheus 的 MySQL 监控平台\n   - 含查询分析\n\n3. **MySQL Enterprise Monitor**\n   - 官方商业产品\n\n4. **Zabbix**\n   - 传统监控方案\n\n**告警规则**\n- 连接数 > 80% max_connections\n- 慢查询数突增\n- 主从延迟 > 60s\n- 缓冲池命中率 < 95%\n- 磁盘使用率 > 80%\n- 复制中断\n- 死锁频繁\n\n**SHOW STATUS / SHOW GLOBAL STATUS**\n- 实时查看各项状态\n- SHOW STATUS LIKE 'Threads%'\n- SHOW STATUS LIKE 'Innodb%'\n\n**performance_schema**\n- MySQL 内置性能监控\n- 事件统计、锁监控、内存监控\n- sys 库提供友好视图\n\n**常用 sys 库视图**\n- sys.processlist：进程列表\n- sys.innodb_lock_waits：锁等待\n- sys.schema_index_statistics：索引使用统计\n- sys.statements_with_errors_or_warnings：错误SQL\n- sys.statements_with_full_table_scans：全表扫描SQL\n\n**日志监控**\n- error log：错误日志\n- slow query log：慢查询\n- general log：全量查询（慎用，影响性能）\n- binlog：数据变更\n\n**容量规划**\n- 监控数据增长趋势\n- 预测何时达到容量瓶颈\n- 提前规划扩容/分库分表",
+        "example": "-- 关键状态查询\nSHOW GLOBAL STATUS LIKE 'Threads_connected';  -- 当前连接数\nSHOW GLOBAL STATUS LIKE 'Threads_running';    -- 活跃线程\nSHOW GLOBAL STATUS LIKE 'Slow_queries';        -- 慢查询总数\nSHOW GLOBAL STATUS LIKE 'Questions';           -- 总查询数\nSHOW GLOBAL STATUS LIKE 'Uptime';              -- 运行时间\n-- QPS = Questions / Uptime\n\n-- 缓冲池命中率\nSHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_read_requests';\nSHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_reads';\n-- 命中率 = 1 - reads/read_requests\n\n-- InnoDB 行操作\nSHOW GLOBAL STATUS LIKE 'Innodb_rows%';\n-- rows_read/read, inserted, updated, deleted\n\n-- 连接相关\nSHOW GLOBAL STATUS LIKE 'Aborted%';\nSHOW GLOBAL STATUS LIKE 'Connections';\nSHOW VARIABLES LIKE 'max_connections';\nSHOW STATUS LIKE 'Max_used_connections';\n\n-- 复制状态\nSHOW REPLICA STATUS\\G\n-- 关注 Seconds_Behind_Master, Slave_IO_Running, Slave_SQL_Running\n\n-- performance_schema 锁监控\nSELECT * FROM performance_schema.data_lock_waits;\n\n-- sys 库友好视图\n-- 谁在等待锁\nSELECT * FROM sys.innodb_lock_waits;\n\n-- 全表扫描的 SQL\nSELECT * FROM sys.statements_with_full_table_scans\nLIMIT 10;\n\n-- 冗余索引\nSELECT * FROM sys.schema_redundant_indexes;\n\n-- 未使用的索引\nSELECT * FROM sys.schema_unused_indexes;\n\n-- mysqld_exporter 配置（Prometheus）\n'''\n[client]\nuser=exporter\npassword=xxx\n\n[mysqld]\n# exporter 连接配置\n'''\n# 启动: mysqld_exporter --config.my-cnf=.my.cnf\n# Prometheus 抓取:\n#   - job_name: mysql\n#     static_configs:\n#       - targets: ['localhost:9104']\n\n-- Grafana 常用 PromQL\n-- QPS: rate(mysql_global_status_questions[1m])\n-- 连接数: mysql_global_status_threads_connected\n-- 缓冲池命中率:\n--   1 - rate(mysql_global_status_innodb_buffer_pool_reads[1m])\n--   / rate(mysql_global_status_innodb_buffer_pool_read_requests[1m])\n-- 主从延迟: mysql_global_status_seconds_behind_master\n\n-- 告警示例（Prometheus alerting rules）\n'''\n- alert: MysqlHighConnections\n  expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections > 0.8\n  for: 5m\n  labels: { severity: warning }\n  annotations: { summary: \"MySQL 连接数超80%\" }\n\n- alert: MysqlReplicationLag\n  expr: mysql_global_status_seconds_behind_master > 60\n  for: 5m\n  labels: { severity: critical }\n  annotations: { summary: \"主从延迟超60秒\" }\n'''"
       }
     ]
   },
@@ -1809,6 +2089,62 @@ const KNOWLEDGE = {
         "level": "高级",
         "content": "**1. INSERT ... ON DUPLICATE KEY UPDATE**\n- 存在则更新，不存在则插入（UPSERT）\n- 基于主键/唯一键判断\n- VALUES(col) 引用插入值\n\n**2. REPLACE INTO**\n- 存在则先 DELETE 再 INSERT（注意自增 ID 变化、外键级联）\n- 不如 INSERT ON DUPLICATE\n\n**3. INSERT IGNORE**\n- 唯一键冲突时忽略错误\n- 静默跳过，返回受影响行数为 0\n\n**4. 批量插入**\n- INSERT INTO t VALUES (...), (...), (...) 多值\n- 比循环单条快数十倍\n- LOAD DATA INFILE 更快（大文件）\n\n**5. GROUP_CONCAT**\n- 将分组多行拼接为一个字符串\n- GROUP_CONCAT(col SEPARATOR ',')\n- 可去重 DISTINCT、排序、限制长度\n\n**6. 生成行号**\n- 8.0+ 用 ROW_NUMBER() OVER()\n- 旧版用变量：@rn := @rn + 1\n\n**7. 去重保留最新**\n- 用 ROW_NUMBER 取 rn=1\n- 或 NOT EXISTS 自连接\n- 或 GROUP BY + MAX(id)\n\n**8. EXISTS vs IN**\n- EXISTS 通常更快（索引存在即停）\n- IN 子查询小结果集时可能更快\n- NOT IN 注意 NULL 问题\n\n**9. 自连接**\n- 同表多次引用，用别名区分\n- 场景：找上级、连续事件、对比\n\n**10. 临时表与派生表**\n- 派生表：FROM (SELECT ...) t\n- CTE：WITH t AS (SELECT ...)\n- 临时表：CREATE TEMPORARY TABLE\n- 多次引用用 CTE 或临时表\n\n**11. 字符串分割**\n- SUBSTRING_INDEX(str, delim, n)\n- FIND_IN_SET(str, list)\n- 8.0+ REGEXP_SUBSTR / REGEXP_REPLACE\n\n**12. 任意深度分组**\n- ROLLUP：分组小计 + 总计\n- GROUPING(col) 判断是否为 ROLLUP 汇总行\n\n**13. 条件聚合**\n- SUM(CASE WHEN ... THEN 1 ELSE 0 END)\n- 一条 SQL 多维度统计",
         "example": "-- 1. UPSERT\nINSERT INTO users (id, name, age) VALUES (1, 'Alice', 30)\nON DUPLICATE KEY UPDATE age = VALUES(age), name = VALUES(name);\n\n-- 2. 批量插入\nINSERT INTO products (name, price) VALUES\n  ('A', 10), ('B', 20), ('C', 30), ('D', 40);\n\n-- LOAD DATA（最快）\nLOAD DATA INFILE '/data/products.csv'\nINTO TABLE products\nFIELDS TERMINATED BY ','\nLINES TERMINATED BY '\\n'\nIGNORE 1 ROWS\n(name, price);\n\n-- 3. GROUP_CONCAT\nSELECT department,\n  GROUP_CONCAT(name ORDER BY salary DESC SEPARATOR ', ') AS members,\n  COUNT(*) AS cnt\nFROM employees\nGROUP BY department;\n\n-- 4. 生成行号（去重保留最新）\n-- 每个用户保留最新一条订单\nSELECT * FROM (\n  SELECT *,\n    ROW_NUMBER() OVER(PARTITION BY user_id ORDER BY create_time DESC) AS rn\n  FROM orders\n) t WHERE rn = 1;\n\n-- 5. EXISTS 找有订单的用户\nSELECT u.* FROM users u\nWHERE EXISTS (\n  SELECT 1 FROM orders o WHERE o.user_id = u.id\n);\n-- 比 IN 快（外层大内层小用 IN，外层小内层大用 EXISTS）\n\n-- 6. 自连接：找工资比经理高的员工\nSELECT e.name AS employee, m.name AS manager, e.salary\nFROM employees e\nJOIN employees m ON e.manager_id = m.id\nWHERE e.salary > m.salary;\n\n-- 7. 连续登录 N 天的用户\nSELECT DISTINCT uid FROM (\n  SELECT uid, dt,\n    dt - INTERVAL ROW_NUMBER() OVER(PARTITION BY uid ORDER BY dt) DAY AS grp\n  FROM login_log\n) t GROUP BY uid, grp HAVING COUNT(*) >= 7;\n\n-- 8. ROLLUP 多级汇总\nSELECT\n  COALESCE(country, 'ALL') AS country,\n  COALESCE(city, 'ALL') AS city,\n  SUM(amount) AS total\nFROM sales\nGROUP BY country, city WITH ROLLUP;\n-- 最后一行是总计，每组末行是小计\n\n-- 9. 条件聚合（一次查询多维度）\nSELECT\n  DATE(create_time) AS dt,\n  COUNT(*) AS total,\n  SUM(CASE WHEN status='SUCCESS' THEN 1 ELSE 0 END) AS success,\n  SUM(CASE WHEN status='FAIL' THEN 1 ELSE 0 END) AS fail,\n  ROUND(SUM(CASE WHEN status='SUCCESS' THEN 1 ELSE 0 END) / COUNT(*) * 100, 2) AS success_rate\nFROM orders\nGROUP BY DATE(create_time);\n\n-- 10. 字符串分割\nSELECT\n  SUBSTRING_INDEX('a,b,c,d', ',', 2) AS first_two,  -- a,b\n  SUBSTRING_INDEX('a,b,c,d', ',', -2) AS last_two;  -- c,d\n\n-- 11. FIND_IN_SET（逗号分隔查找）\nSELECT * FROM users\nWHERE FIND_IN_SET('admin', roles) > 0;\n\n-- 12. 派生表与 CTE\nWITH high_value_users AS (\n  SELECT user_id, SUM(amount) AS total\n  FROM orders GROUP BY user_id\n  HAVING total > 10000\n)\nSELECT u.name, h.total\nFROM users u JOIN high_value_users h ON u.id = h.user_id;\n\n-- 13. 跨行计算：前一行后一行\nSELECT dt, amount,\n  LAG(amount, 1) OVER(ORDER BY dt) AS prev,\n  LEAD(amount, 1) OVER(ORDER BY dt) AS next,\n  (amount - LAG(amount, 1) OVER(ORDER BY dt))\n    / LAG(amount, 1) OVER(ORDER BY dt) * 100 AS growth_pct\nFROM daily_sales;"
+      },
+      {
+        "id": "sql-dialects",
+        "title": "SQL 标准与各数据库方言差异",
+        "level": "进阶",
+        "content": "**SQL 标准**\n- ANSI SQL / ISO/IEC 9075\n- SQL-86 / SQL-89 / SQL-92 / SQL:1999 / SQL:2003 / SQL:2008 / SQL:2011 / SQL:2016 / SQL:2023\n- 各数据库遵循标准程度不同，均有扩展\n\n**各数据库方言差异**\n\n| 功能 | MySQL | PostgreSQL | Oracle | SQL Server |\n|------|-------|------------|--------|------------|\n| 字符串拼接 | CONCAT() | \\|\\| 或 CONCAT | \\|\\| | + |\n| 分页 | LIMIT n OFFSET m | LIMIT/OFFSET | ROWNUM/OFFSET FETCH | OFFSET FETCH |\n| 自增 | AUTO_INCREMENT | SERIAL/IDENTITY | SEQUENCE | IDENTITY |\n| 字符串引号 | ' 或 \" | ' | ' | ' |\n| 标识符引号 | ` | \" | \" | [] |\n| 布尔类型 | 无(用TINYINT) | BOOLEAN | 无(用NUMBER) | BIT |\n| 日期函数 | NOW()/CURDATE() | NOW()/CURRENT_DATE | SYSDATE | GETDATE() |\n| IF函数 | IF() | 无(用CASE) | 无(用CASE) | IIF() |\n| LIMIT限制 | LIMIT | LIMIT | FETCH FIRST | TOP |\n\n**数据类型差异**\n- 自增主键：MySQL AUTO_INCREMENT / PG SERIAL / Oracle SEQUENCE.nextval\n- 大文本：MySQL TEXT / PG TEXT / Oracle CLOB / SQL Server VARCHAR(MAX)\n- 二进制：MySQL BLOB / PG BYTEA / Oracle BLOB / SQL Server VARBINARY(MAX)\n- 时间戳：MySQL DATETIME/TIMESTAMP / PG TIMESTAMP / Oracle DATE/TIMESTAMP\n\n**函数差异**\n- 取子串：SUBSTRING(s, pos, len) 标准，MySQL 也用 SUBSTR\n- 日期差：MySQL DATEDIFF / PG 减法 / Oracle - / SQL Server DATEDIFF\n- 空值替换：COALESCE（标准）/ IFNULL(MySQL) / NVL(Oracle) / ISNULL(SQL Server)\n- 类型转换：CAST（标准）/ CONVERT\n\n**分页写法对比**\n- MySQL: `SELECT * FROM t LIMIT 10 OFFSET 20`\n- PostgreSQL: `SELECT * FROM t LIMIT 10 OFFSET 20`\n- Oracle 12c+: `SELECT * FROM t OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY`\n- SQL Server: `SELECT * FROM t ORDER BY id OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY`\n\n**可移植性建议**\n- 优先用 ANSI SQL 标准语法\n- 用 COALESCE 替代 IFNULL/NVL\n- 用 CAST 替代数据库特有转换\n- 用 || 或 CONCAT 拼接（注意 MySQL 默认 || 是 OR）\n- 用 LIMIT/OFFSET 或 FETCH（取决于支持）\n- 避免 MySQL 的反引号，用双引号（标准）",
+        "example": "-- 分页（标准 SQL:2008 FETCH）\nSELECT id, name FROM users\nORDER BY id\nOFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY;\n-- MySQL/PostgreSQL 也支持:\n-- SELECT id, name FROM users ORDER BY id LIMIT 10 OFFSET 20;\n\n-- 空值替换（标准 COALESCE）\nSELECT COALESCE(nickname, name, 'anonymous') AS display_name FROM users;\n-- MySQL: IFNULL(nickname, name)\n-- Oracle: NVL(nickname, name)\n\n-- 字符串拼接\nSELECT first_name || ' ' || last_name AS full_name FROM users;\n-- PostgreSQL/Oracle/SQLite 支持 ||\n-- MySQL 需启用 ANSI_QUOTES 模式或用 CONCAT(first_name,' ',last_name)\n-- SQL Server 用 first_name + ' ' + last_name\n\n-- 日期差（标准做法用 EXTRACT 计算）\n-- MySQL: DATEDIFF(d1, d2) 返回天数\nSELECT DATEDIFF('2024-12-31', '2024-01-01');  -- 365\n-- PostgreSQL: 直接相减\n-- SELECT '2024-12-31'::date - '2024-01-01'::date;\n-- SQL Server: DATEDIFF(day, '2024-01-01', '2024-12-31')\n\n-- 类型转换（标准 CAST）\nSELECT CAST('123' AS INTEGER);\nSELECT CAST(price AS DECIMAL(10,2));\n-- MySQL 也可用 CONVERT('123', SIGNED)\n\n-- 条件表达式（标准 CASE）\nSELECT name,\n  CASE\n    WHEN score >= 90 THEN 'A'\n    WHEN score >= 80 THEN 'B'\n    WHEN score >= 60 THEN 'C'\n    ELSE 'F'\n  END AS grade\nFROM students;\n-- MySQL 也可用 IF(score>=90,'A',...)\n-- SQL Server 也可用 IIF(score>=90,'A',...)\n\n-- 自增主键各数据库\n-- MySQL:\nCREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY);\n-- PostgreSQL:\n-- CREATE TABLE t (id SERIAL PRIMARY KEY);\n-- Oracle:\n-- CREATE TABLE t (id NUMBER PRIMARY KEY);\n-- CREATE SEQUENCE t_seq;\n-- INSERT INTO t VALUES(t_seq.nextval);\n-- SQL Server:\n-- CREATE TABLE t (id INT IDENTITY(1,1) PRIMARY KEY);"
+      },
+      {
+        "id": "sql-merge-upsert",
+        "title": "MERGE 语句与 UPSERT",
+        "level": "进阶",
+        "content": "**UPSERT 概念**\n- UPDATE or INSERT\n- 存在则更新，不存在则插入\n- 避免先 SELECT 判断再 INSERT/UPDATE 的竞态\n- 原子操作，并发安全\n\n**各数据库 UPSERT 语法**\n\n**MySQL: ON DUPLICATE KEY UPDATE**\n```sql\nINSERT INTO t(id, name, val) VALUES(1,'a',10)\nON DUPLICATE KEY UPDATE val=VALUES(val), name=VALUES(name);\n```\n- 基于唯一键/主键冲突判断\n- VALUES(col) 引用 INSERT 的值\n- MySQL 8.0.19+ 可用 INSERT ... AS new ON DUPLICATE KEY UPDATE val=new.val\n\n**MySQL: REPLACE INTO**\n```sql\nREPLACE INTO t(id, name, val) VALUES(1,'a',10);\n```\n- 冲突时先 DELETE 再 INSERT\n- 会改变自增ID、触发器、外键级联\n- 不推荐（副作用大）\n\n**PostgreSQL: ON CONFLICT**\n```sql\nINSERT INTO t(id, name, val) VALUES(1,'a',10)\nON CONFLICT (id) DO UPDATE SET val=EXCLUDED.val, name=EXCLUDED.name;\n```\n- ON CONFLICT (列) 指定冲突列\n- DO NOTHING 或 DO UPDATE\n- EXCLUDED 引用 INSERT 的值\n\n**Oracle: MERGE**\n```sql\nMERGE INTO t USING (SELECT 1 AS id, 'a' AS name, 10 AS val FROM dual) src\nON (t.id = src.id)\nWHEN MATCHED THEN UPDATE SET t.val = src.val\nWHEN NOT MATCHED THEN INSERT (id, name, val) VALUES (src.id, src.name, src.val);\n```\n\n**SQL Server: MERGE**\n```sql\nMERGE INTO t USING (VALUES(1,'a',10)) AS src(id,name,val)\nON (t.id = src.id)\nWHEN MATCHED THEN UPDATE SET t.val = src.val\nWHEN NOT MATCHED THEN INSERT (id,name,val) VALUES(src.id,src.name,src.val);\n```\n\n**SQL:2003 标准 MERGE**\n- MERGE INTO target USING source ON condition\n- WHEN MATCHED THEN UPDATE/DELETE\n- WHEN NOT MATCHED THEN INSERT\n- Oracle/SQL Server 支持标准 MERGE\n- MySQL 不支持 MERGE（用 ON DUPLICATE KEY UPDATE）\n\n**批量 UPSERT**\n- INSERT INTO t VALUES (...),(...),(...) ON DUPLICATE KEY UPDATE ...\n- 批量高效同步数据\n\n**应用场景**\n- 数据同步（ETL 增量更新）\n- 缓存回写\n- 幂等写入\n- 计数器更新",
+        "example": "-- MySQL UPSERT\n-- 方式1: ON DUPLICATE KEY UPDATE（推荐）\nINSERT INTO user_stats(user_id, login_count, last_login)\nVALUES(100, 1, NOW())\nON DUPLICATE KEY UPDATE\n  login_count = login_count + 1,\n  last_login = NOW();\n-- 基于主键 user_id 冲突判断\n\n-- MySQL 8.0+ 用别名引用\nINSERT INTO user_stats(user_id, login_count)\nVALUES(100, 1) AS new\nON DUPLICATE KEY UPDATE\n  login_count = user_stats.login_count + new.login_count;\n\n-- 方式2: REPLACE INTO（不推荐，有副作用）\n-- REPLACE INTO user_stats VALUES(100, 1, NOW());\n-- 冲突时 DELETE + INSERT，自增ID变化，触发器异常\n\n-- 批量 UPSERT\nINSERT INTO products(id, name, price, stock)\nVALUES\n  (1, 'A', 10.0, 100),\n  (2, 'B', 20.0, 200),\n  (3, 'C', 30.0, 300)\nON DUPLICATE KEY UPDATE\n  price = VALUES(price),\n  stock = VALUES(stock);\n\n-- PostgreSQL UPSERT\n'''\nINSERT INTO user_stats(user_id, login_count, last_login)\nVALUES(100, 1, NOW())\nON CONFLICT (user_id) DO UPDATE\n  SET login_count = user_stats.login_count + 1,\n      last_login = NOW();\n-- ON CONFLICT DO NOTHING 表示冲突就忽略\n'''\n\n-- Oracle / SQL Server MERGE\n'''\nMERGE INTO user_stats t\nUSING (SELECT 100 AS user_id, 1 AS login_count, SYSDATE AS last_login FROM dual) src\nON (t.user_id = src.user_id)\nWHEN MATCHED THEN\n  UPDATE SET t.login_count = t.login_count + 1, t.last_login = src.last_login\nWHEN NOT MATCHED THEN\n  INSERT (user_id, login_count, last_login) VALUES (src.user_id, src.login_count, src.last_login);\n'''\n\n-- 计数器场景：浏览量累加\nINSERT INTO page_views(page_id, view_count, view_date)\nVALUES(1, 1, CURDATE())\nON DUPLICATE KEY UPDATE\n  view_count = view_count + 1;\n-- 每次访问原子累加，无需先查再判断\n\n-- 幂等写入：消息去重\nINSERT INTO processed_msgs(msg_id, processed_at)\nVALUES('msg-001', NOW())\nON DUPLICATE KEY UPDATE msg_id = msg_id;\n-- 唯一键冲突则什么都不做（利用 UPDATE 无变化）\n-- MySQL 8.0+: ON DUPLICATE KEY UPDATE msg_id = msg_id\n-- 或 PostgreSQL: ON CONFLICT DO NOTHING"
+      },
+      {
+        "id": "sql-materialized-view",
+        "title": "物化视图与查询优化",
+        "level": "高级",
+        "content": "**普通视图（View）**\n- 虚拟表，只存定义不存数据\n- 每次查询展开为底层 SQL\n- 不提升性能（除非优化器合并）\n- 作用：简化查询、权限控制、抽象\n\n**物化视图（Materialized View）**\n- 实际存储查询结果\n- 查询直接读结果，极快\n- 需要维护（数据可能过期）\n- 适合报表、聚合、昂贵计算\n\n**物化视图支持**\n- Oracle：原生支持 CREATE MATERIALIZED VIEW\n- PostgreSQL：CREATE MATERIALIZED VIEW + REFRESH\n- SQL Server：索引视图（WITH SCHEMABINDING）\n- MySQL：不原生支持，可用表 + 定时任务模拟\n\n**刷新策略**\n1. **ON DEMAND**：手动 REFRESH\n2. **ON COMMIT**：基表提交时自动刷新（Oracle）\n3. **定时刷新**：定时任务 REFRESH\n4. **增量刷新**：FAST REFRESH 只更新变化部分（需物化视图日志）\n\n**PostgreSQL 物化视图**\n```sql\nCREATE MATERIALIZED VIEW mv_sales_summary AS\nSELECT product_id, SUM(qty) AS total_qty, SUM(amount) AS total_amt\nFROM sales GROUP BY product_id;\n\nREFRESH MATERIALIZED VIEW mv_sales_summary;\nREFRESH MATERIALIZED VIEW CONCURRENTLY mv_sales_summary;  -- 不锁（需唯一索引）\n```\n\n**MySQL 模拟物化视图**\n- 创建汇总表\n- 触发器维护（INSERT/UPDATE/DELETE 同步）\n- 或定时任务（事件调度器/定时脚本）\n\n**查询改写（Query Rewrite）**\n- Oracle 支持自动查询改写：用户查原表，优化器自动用物化视图\n- PostgreSQL 需手动查物化视图\n- SQL Server 索引视图自动匹配\n\n**适用场景**\n- 报表聚合（日/月/年汇总）\n- 昂贵 JOIN 预计算\n- 数据仓库星型模型\n- 实时性要求不高的统计\n\n**权衡**\n- 空间换时间\n- 数据延迟 vs 查询速度\n- 维护成本（刷新开销）",
+        "example": "-- PostgreSQL 物化视图\nCREATE MATERIALIZED VIEW mv_daily_sales AS\nSELECT\n  DATE(created_at) AS sale_date,\n  product_id,\n  COUNT(*) AS order_count,\n  SUM(qty) AS total_qty,\n  SUM(amount) AS total_amount\nFROM sales\nGROUP BY DATE(created_at), product_id\nWITH DATA;  -- WITH DATA 立即填充，WITH NO DATA 延迟填充\n\n-- 创建唯一索引（支持 CONCURRENTLY 刷新）\nCREATE UNIQUE INDEX idx_mv_daily ON mv_daily_sales(sale_date, product_id);\n\n-- 手动刷新（完全重建，锁表）\nREFRESH MATERIALIZED VIEW mv_daily_sales;\n\n-- 并发刷新（不阻塞查询，需唯一索引）\nREFRESH MATERIALIZED VIEW CONCURRENTLY mv_daily_sales;\n\n-- 查询（直接读结果，极快）\nSELECT * FROM mv_daily_sales\nWHERE sale_date = '2024-01-15' ORDER BY total_amount DESC;\n\n-- 定时刷新（pg_cron 扩展）\n-- SELECT cron.schedule('refresh_mv', '0 * * * *',\n--   'REFRESH MATERIALIZED VIEW CONCURRENTLY mv_daily_sales');\n\n-- MySQL 模拟物化视图：汇总表 + 触发器\nCREATE TABLE daily_sales_summary (\n  sale_date DATE,\n  product_id BIGINT,\n  order_count INT,\n  total_qty INT,\n  total_amount DECIMAL(12,2),\n  PRIMARY KEY (sale_date, product_id)\n);\n\n-- 触发器维护（INSERT 时累加）\nDELIMITER //\nCREATE TRIGGER trg_sales_after_insert\nAFTER INSERT ON sales\nFOR EACH ROW\nBEGIN\n  INSERT INTO daily_sales_summary(sale_date, product_id, order_count, total_qty, total_amount)\n  VALUES(DATE(NEW.created_at), NEW.product_id, 1, NEW.qty, NEW.amount)\n  ON DUPLICATE KEY UPDATE\n    order_count = order_count + 1,\n    total_qty = total_qty + NEW.qty,\n    total_amount = total_amount + NEW.amount;\nEND //\nDELIMITER ;\n\n-- 查询汇总表（快）\nSELECT * FROM daily_sales_summary\nWHERE sale_date = '2024-01-15';\n\n-- Oracle 物化视图 + 查询改写\n'''\nCREATE MATERIALIZED VIEW mv_sales\nREFRESH FAST ON COMMIT\nENABLE QUERY REWRITE  -- 允许自动改写\nAS SELECT product_id, SUM(qty) FROM sales GROUP BY product_id;\n-- 用户查 SELECT product_id, SUM(qty) FROM sales GROUP BY product_id\n-- 优化器自动改写为查 mv_sales\n'''\n\n-- SQL Server 索引视图\n'''\nCREATE VIEW dbo.v_sales WITH SCHEMABINDING AS\n  SELECT product_id, COUNT_BIG(*) AS cnt, SUM(qty) AS total\n  FROM dbo.sales GROUP BY product_id;\nGO\nCREATE UNIQUE CLUSTERED INDEX idx_v_sales ON dbo.v_sales(product_id);\n-- 查询原表时优化器可能自动使用索引视图\n'''"
+      },
+      {
+        "id": "sql-injection-defense",
+        "title": "SQL 注入防御深度",
+        "level": "进阶",
+        "content": "**SQL 注入原理**\n- 用户输入被拼接到 SQL 中执行\n- 攻击者构造恶意输入篡改 SQL 语义\n- 可导致数据泄露/篡改/删除/提权\n\n**注入类型**\n1. **联合查询注入（UNION）**：UNION SELECT 读取其他表\n2. **布尔盲注**：根据页面返回真假推断数据\n3. **时间盲注**：SLEEP/BENCHMARK 根据响应时间推断\n4. **报错注入**：利用错误信息回显数据\n5. **堆叠注入**：分号执行多条 SQL\n6. **二阶注入**：数据先存储，使用时触发\n\n**经典攻击示例**\n```\n-- 登录 SQL: SELECT * FROM users WHERE name='输入' AND pwd='输入'\n-- 输入 name: ' OR '1'='1\n-- 结果: SELECT * FROM users WHERE name='' OR '1'='1' -- 永真\n```\n\n**防御措施**\n\n1. **参数化查询（最有效）**\n   - 使用占位符 ? 或命名参数\n   - 预编译 + 参数绑定\n   - 参数作为数据而非代码执行\n   - JDBC PreparedStatement / Python 参数化 / PDO\n\n2. **ORM 框架**\n   - 默认参数化\n   - 注意原生 SQL 拼接（raw query）\n\n3. **输入验证与过滤**\n   - 白名单优于黑名单\n   - 类型/长度/格式校验\n   - 但不能依赖过滤防注入\n\n4. **最小权限原则**\n   - 应用数据库账号不给 DDL/DROP 权限\n   - 只授权必要的表和操作\n\n5. **WAF（Web 应用防火墙）**\n   - 拦截常见注入特征\n   - 补充而非替代参数化\n\n6. **转义特殊字符**\n   - 不推荐（容易遗漏、编码绕过）\n   - 参数化优先\n\n**参数化查询示例**\n- JDBC: `PreparedStatement ps = conn.prepareStatement(\"SELECT * FROM users WHERE id=?\"); ps.setInt(1, id);`\n- Python: `cursor.execute(\"SELECT * FROM users WHERE id=%s\", (id,))`\n- PHP PDO: `$stmt = $pdo->prepare(\"SELECT * FROM users WHERE id=:id\"); $stmt->execute([':id'=>$id]);`\n\n**LIKE 查询的注入**\n- LIKE 中 % 和 _ 是通配符\n- 用户输入的 % 需转义\n- `WHERE name LIKE CONCAT('%', ?, '%')` 参数化通配符内的内容\n\n**ORDER BY 注入**\n- ORDER BY 后不能参数化（是列名/SQL 标识符）\n- 用白名单校验列名\n- `if (!in_array($col, ['name','date','id'])) die();`\n\n**防御纵深**\n- 参数化 + 输入校验 + 最小权限 + WAF + 日志审计",
+        "example": "-- ===== 危险：字符串拼接（易注入）=====\n-- Java 错误写法\n-- String sql = \"SELECT * FROM users WHERE name='\" + name + \"'\";\n-- Statement stmt = conn.createStatement();\n-- ResultSet rs = stmt.executeQuery(sql);\n-- 攻击: name = \"' OR '1'='1\"\n-- 实际执行: SELECT * FROM users WHERE name='' OR '1'='1'\n\n-- ===== 正确：参数化查询 =====\n-- Java JDBC\n-- PreparedStatement ps = conn.prepareStatement(\n--     \"SELECT * FROM users WHERE name = ? AND status = ?\");\n-- ps.setString(1, name);\n-- ps.setInt(2, status);\n-- ResultSet rs = ps.executeQuery();\n\n-- Python (pymysql)\n-- cursor.execute(\"SELECT * FROM users WHERE name=%s AND status=%s\", (name, status))\n-- 参数作为数据绑定，不会被解释为 SQL\n\n-- PHP PDO\n-- $stmt = $pdo->prepare(\"SELECT * FROM users WHERE name = :name\");\n-- $stmt->execute([':name' => $name]);\n\n-- LIKE 查询参数化\n-- 错误: \"WHERE name LIKE '%\" + keyword + \"%'\"\n-- 正确: \"WHERE name LIKE CONCAT('%', ?, '%')\"\n-- PreparedStatement: ps.setString(1, keyword);\n-- 注意: 用户输入的 % 仍会作为通配符\n-- 如需转义: ESCAPE 子句\nSELECT * FROM users WHERE name LIKE CONCAT('%', ?, '%') ESCAPE '\\\\';\n-- 应用层先把输入中的 % _ \\\\ 转义为 \\\\% \\\\_ \\\\\\\\\n\n-- ORDER BY 白名单校验\n-- 错误: \"ORDER BY \" + sortField  (可注入)\n-- 正确: 白名单\n'''\n// Java\nSet<String> allowed = Set.of(\"name\", \"created_at\", \"id\");\nif (!allowed.contains(sortField)) {\n    throw new IllegalArgumentException(\"invalid sort field\");\n}\nString sql = \"SELECT * FROM users ORDER BY \" + sortField + \" \" +\n    (\"DESC\".equalsIgnoreCase(dir) ? \"DESC\" : \"ASC\");\n'''\n\n-- IN 子句参数化\n-- 错误: \"WHERE id IN (\" + ids + \")\"\n-- 正确: 动态构建占位符\n-- String placeholders = String.join(\",\", Collections.nCopies(ids.size(), \"?\"));\n-- String sql = \"SELECT * FROM users WHERE id IN (\" + placeholders + \")\";\n-- for (int i = 0; i < ids.size(); i++) ps.setInt(i+1, ids.get(i));\n\n-- 最小权限：应用账号不给危险权限\n-- CREATE USER 'app'@'%' IDENTIFIED BY 'pwd';\n-- GRANT SELECT, INSERT, UPDATE, DELETE ON mydb.* TO 'app'@'%';\n-- 不授予 DROP, ALTER, CREATE, FILE, SUPER 等\n\n-- 检测注入：慢查询日志/审计日志\n-- 异常 SQL 如 SLEEP(5)、UNION SELECT、information_schema 查询"
+      },
+      {
+        "id": "sql-data-types",
+        "title": "数据类型选择最佳实践",
+        "level": "进阶",
+        "content": "**选择原则**\n1. 够用即可：最小够用类型\n2. 避免 NULL：用 NOT NULL DEFAULT\n3. 整数优于字符串\n4. 定长优于变长（某些场景）\n5. DECIMAL 存金额\n6. 合适字符集\n\n**整数类型**\n| 类型 | 字节 | 范围(有符号) | 范围(无符号) |\n|------|------|-------------|-------------|\n| TINYINT | 1 | -128~127 | 0~255 |\n| SMALLINT | 2 | -32768~32767 | 0~65535 |\n| MEDIUMINT | 3 | ±838万 | 0~1677万 |\n| INT | 4 | ±21亿 | 0~42亿 |\n| BIGINT | 8 | ±922亿亿 | 0~1844亿亿 |\n\n- 优先用 UNSIGNED（如状态、计数）\n- 主键推荐 BIGINT UNSIGNED\n- 布尔用 TINYINT(1)（MySQL 无 BOOLEAN）\n\n**字符串类型**\n| 类型 | 说明 |\n|------|------|\n| CHAR(n) | 定长，n字符，补空格，0-255 |\n| VARCHAR(n) | 变长，n字符，0-65535 |\n| TEXT | 大文本，无默认值 |\n| MEDIUMTEXT | 16MB |\n| LONGTEXT | 4GB |\n\n- CHAR vs VARCHAR：定长存储/查询快但费空间；变长省空间\n- VARCHAR(n) 的 n 是字符数不是字节（utf8mb4 一字符最多4字节）\n- VARCHAR 需 1-2 字节记录长度\n- 短固定长度用 CHAR（如状态码 CHAR(2)）\n- 变长用 VARCHAR\n- 大文本用 TEXT（但注意 TEXT 不能有默认值且影响行格式）\n\n**字符集**\n- utf8mb4：支持完整 Unicode（含 emoji），推荐\n- utf8（MySQL）：3字节，不支持 emoji，已弃用\n- utf8mb4_general_ci：校对速度快但不精确\n- utf8mb4_unicode_ci：基于 Unicode 规则，更精确\n- utf8mb4_0900_ai_ci（8.0默认）：Unicode 9.0\n\n**时间类型**\n| 类型 | 字节 | 范围 |\n|------|------|------|\n| DATE | 3 | 1000-9999年 |\n| TIME | 3 | ±838小时 |\n| DATETIME | 8 | 1000-9999年 |\n| TIMESTAMP | 4 | 1970-2038年 |\n\n- DATETIME：不受时区影响，范围大\n- TIMESTAMP：自动时区转换，范围小（2038问题），4字节省空间\n- 存创建时间用 DATETIME 或 TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n- 存金额、精确时间用 DECIMAL 或 BIGINT(毫秒)\n\n**DECIMAL 类型**\n- DECIMAL(p, s)：p 总位数(1-65)，s 小数位(0-30)\n- DECIMAL(10,2)：存金额，最大 99999999.99\n- 精确计算，不丢精度\n- FLOAT/DOUBLE 浮点不精确，禁止存金额\n\n**枚举类型**\n- MySQL ENUM('a','b','c')：存索引（1字节）\n- 省空间，但修改枚举值需 ALTER\n- PostgreSQL 有原生 ENUM\n- 也可用 TINYINT + 应用层映射（更灵活）\n\n**JSON 类型**\n- MySQL 5.7+ / PostgreSQL 原生支持\n- 适合半结构化数据\n- 可建函数索引\n- 不适合频繁更新的字段\n\n**BLOB 类型**\n- 二进制大对象\n- 不建议在数据库存大文件（用对象存储 + 路径）\n- 影响表性能",
+        "example": "-- 整数类型选择\nCREATE TABLE example (\n  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,\n  status TINYINT UNSIGNED NOT NULL DEFAULT 0,  -- 0-255 足够\n  age TINYINT UNSIGNED,  -- 0-255\n  view_count INT UNSIGNED DEFAULT 0,  -- 0-42亿\n  user_count BIGINT UNSIGNED  -- 超大计数\n);\n\n-- 字符串选择\nCREATE TABLE products (\n  id BIGINT PRIMARY KEY,\n  sku CHAR(10) NOT NULL,        -- 固定长度编码\n  name VARCHAR(100) NOT NULL,   -- 变长名称\n  description TEXT,             -- 长文本\n  specs JSON                    -- 半结构化规格\n);\n\n-- 字符集设置（推荐 utf8mb4）\nCREATE DATABASE mydb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\nCREATE TABLE t (\n  name VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci\n);\n-- utf8mb4 一字符最多4字节，VARCHAR(50) 最多占 200+2 字节\n\n-- 时间类型\nCREATE TABLE orders (\n  id BIGINT PRIMARY KEY,\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,  -- 创建时间\n  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  expire_at TIMESTAMP NULL  -- 可为空的时间戳\n);\n-- TIMESTAMP 范围到 2038 年，超出用 DATETIME\n\n-- 金额用 DECIMAL\nCREATE TABLE transactions (\n  id BIGINT PRIMARY KEY,\n  amount DECIMAL(18,2) NOT NULL,  -- 精确金额\n  rate DECIMAL(8,6) DEFAULT 0.000000  -- 汇率6位小数\n);\n-- 错误: amount FLOAT  (浮点不精确，0.1+0.2 != 0.3)\n\n-- 布尔值\nCREATE TABLE users (\n  is_active TINYINT(1) DEFAULT 1,  -- MySQL 用 TINYINT 模拟\n  is_admin BOOLEAN DEFAULT FALSE   -- BOOLEAN 是 TINYINT(1) 别名\n);\n\n-- 枚举\nCREATE TABLE tickets (\n  priority ENUM('low','medium','high','urgent') DEFAULT 'medium',\n  -- ENUM 存索引省空间，但加值需 ALTER\n  -- 替代: priority TINYINT + 应用层映射\n  status TINYINT COMMENT '0=new 1=open 2=closed'\n);\n\n-- NOT NULL 原则\nCREATE TABLE t (\n  name VARCHAR(50) NOT NULL DEFAULT '',  -- 避免 NULL\n  age INT NOT NULL DEFAULT 0,\n  nickname VARCHAR(50)  -- 允许 NULL 的才不设\n);\n-- NULL 占空间且影响索引、查询需 IS NULL 判断、聚合忽略\n\n-- 查看 utf8mb4 字节数\nSELECT CHAR_LENGTH('你好'), LENGTH('你好');\n-- utf8mb4: CHAR_LENGTH=2, LENGTH=6 (每中文3字节)\n-- emoji: LENGTH('😀')=4\n\n-- 检查表字符集\nSELECT TABLE_NAME, TABLE_COLLATION\nFROM information_schema.TABLES\nWHERE TABLE_SCHEMA='mydb';"
+      },
+      {
+        "id": "sql-tree-query",
+        "title": "树形结构查询方案",
+        "level": "高级",
+        "content": "**树形结构存储模型**\n1. **邻接表（Adjacency List）**：parent_id 指向父节点\n2. **路径枚举（Path Enumeration）**：存完整路径如 /1/4/7/\n3. **嵌套集（Nested Set）**：left/right 值表示区间\n4. **闭包表（Closure Table）**：单独表存所有祖先-后代关系\n\n**邻接表（最常用）**\n```sql\nCREATE TABLE categories (\n  id INT PRIMARY KEY,\n  name VARCHAR(50),\n  parent_id INT,\n  FOREIGN KEY (parent_id) REFERENCES categories(id)\n);\n```\n- 优点：简单、修改容易\n- 缺点：查子树需多次查询或递归\n\n**递归 CTE 查询子树（SQL标准 / MySQL 8.0+ / PG / Oracle）**\n```sql\nWITH RECURSIVE subtree AS (\n  SELECT id, name, parent_id, 0 AS depth\n  FROM categories WHERE id = 1  -- 起点\n  UNION ALL\n  SELECT c.id, c.name, c.parent_id, s.depth+1\n  FROM categories c JOIN subtree s ON c.parent_id = s.id\n)\nSELECT * FROM subtree ORDER BY depth;\n```\n\n**查祖先链**\n```sql\nWITH RECURSIVE ancestors AS (\n  SELECT id, name, parent_id FROM categories WHERE id = 7\n  UNION ALL\n  SELECT c.id, c.name, c.parent_id\n  FROM categories c JOIN ancestors a ON c.id = a.parent_id\n)\nSELECT * FROM ancestors;\n```\n\n**路径枚举**\n- path 字段存 /1/4/7/\n- 查子树：WHERE path LIKE '/1/%'\n- 查祖先：path 分割\n- 优点：查询简单\n- 缺点：路径更新麻烦、长度限制\n\n**嵌套集**\n- 每节点有 lft 和 rgt\n- 子节点 lft/rgt 在父节点区间内\n- 查子树：WHERE lft BETWEEN parent.lft AND parent.rgt\n- 优点：查子树快\n- 缺点：插入/移动需更新大量节点\n\n**闭包表**\n- 单独表 closure(ancestor, descendant, depth)\n- 存所有祖先-后代对\n- 查子树：SELECT descendant FROM closure WHERE ancestor=1\n- 查祖先：SELECT ancestor FROM closure WHERE descendant=7\n- 优点：查询极快\n- 缺点：空间开销大（O(n²)）\n\n**方案选择**\n- 层级浅、更新多：邻接表 + 递归 CTE\n- 查子树频繁：闭包表\n- 树稳定少变：嵌套集\n- 简单场景：路径枚举",
+        "example": "-- 邻接表 + 递归 CTE（MySQL 8.0+）\nCREATE TABLE org (\n  id INT PRIMARY KEY,\n  name VARCHAR(50),\n  parent_id INT\n);\nINSERT INTO org VALUES\n  (1,'CEO',NULL),(2,'CTO',1),(3,'CFO',1),\n  (4,'研发总监',2),(5,'前端经理',4),(6,'后端经理',4),\n  (7,'财务经理',3);\n\n-- 查询某节点的所有子孙（向下）\nWITH RECURSIVE subtree AS (\n  SELECT id, name, parent_id, 0 AS depth, CAST(name AS CHAR(500)) AS path\n  FROM org WHERE id = 2  -- CTO 子树\n  UNION ALL\n  SELECT c.id, c.name, c.parent_id, s.depth+1,\n         CONCAT(s.path, ' > ', c.name)\n  FROM org c JOIN subtree s ON c.parent_id = s.id\n)\nSELECT id, name, depth, path FROM subtree ORDER BY depth, id;\n-- 结果:\n-- 2  研发总监  0  CTO\n-- 4  研发总监  1  CTO > 研发总监\n-- 5  前端经理  2  CTO > 研发总监 > 前端经理\n-- 6  后端经理  2  CTO > 研发总监 > 后端经理\n\n-- 查询某节点的所有祖先（向上）\nWITH RECURSIVE ancestors AS (\n  SELECT id, name, parent_id FROM org WHERE id = 6\n  UNION ALL\n  SELECT o.id, o.name, o.parent_id\n  FROM org o JOIN ancestors a ON o.id = a.parent_id\n)\nSELECT * FROM ancestors;\n-- 后端经理 -> 研发总监 -> CTO -> CEO\n\n-- 闭包表\nCREATE TABLE org_closure (\n  ancestor INT,\n  descendant INT,\n  depth INT,\n  PRIMARY KEY (ancestor, descendant)\n);\n-- 插入节点 6(后端经理) 时，同时插入:\n-- (6,6,0) 自身\n-- (4,6,1) 父->子\n-- (2,6,2) 祖父->孙\n-- (1,6,3) 曾祖->曾孙\n\n-- 查 2 的所有后代\nSELECT descendant, depth FROM org_closure\nWHERE ancestor = 2 ORDER BY depth;\n\n-- 查 6 的所有祖先\nSELECT ancestor, depth FROM org_closure\nWHERE descendant = 6 ORDER BY depth DESC;\n\n-- 路径枚举\nCREATE TABLE org_path (\n  id INT PRIMARY KEY,\n  name VARCHAR(50),\n  path VARCHAR(500)  -- 如 /1/2/4/6/\n);\n-- 查 2 的子树\nSELECT * FROM org_path WHERE path LIKE '/1/2/%';\n-- 查 6 的祖先（分割 path）\n\n-- 嵌套集\nCREATE TABLE org_nested (\n  id INT PRIMARY KEY, name VARCHAR(50),\n  lft INT, rgt INT\n);\n-- CEO: lft=1, rgt=14\n-- CTO: lft=2, rgt=7\n-- 研发总监: lft=3, rgt=6\n-- 前端经理: lft=4, rgt=5\n-- 查 CTO 子树\nSELECT * FROM org_nested\nWHERE lft BETWEEN 2 AND 7 ORDER BY lft;\n-- 查节点深度（计算外层区间数）"
+      },
+      {
+        "id": "sql-timeseries",
+        "title": "时间序列数据处理",
+        "level": "高级",
+        "content": "**时间序列场景**\n- 监控指标（CPU/内存/QPS）\n- 日志数据\n- 股票行情\n- IoT 传感器数据\n- 订单流水\n\n**时间序列表设计**\n- 时间分区（按天/月）\n- 时间列索引\n- 老数据归档（DROP PARTITION）\n\n**常用时间函数**\n- DATE_FORMAT(date, fmt)：格式化\n- DATE_ADD/DATE_SUB：加减时间\n- DATEDIFF/TIMESTAMPDIFF：差值\n- EXTRACT(unit FROM date)：提取部分\n- UNIX_TIMESTAMP/FROM_UNIXTIME：时间戳转换\n\n**按时间聚合**\n- 按小时/天/周/月统计\n- GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')\n- GROUP BY DATE(created_at)\n\n**填补空时间段**\n- 时间序列可能有缺失点\n- 用日历表或递归 CTE 生成连续时间\n- LEFT JOIN 填补空值为 0\n\n**同比环比**\n- 同比：与去年同期对比\n- 环比：与上一期对比\n- 用 LAG 窗口函数或 JOIN 自身偏移\n\n**移动平均**\n- AVG() OVER(ORDER BY time ROWS BETWEEN N PRECEDING AND CURRENT ROW)\n\n**累计求和**\n- SUM() OVER(ORDER BY time)\n\n**采样与降采样**\n- 高频数据降为低频（1分钟→1小时）\n- GROUP BY 时间桶 + 聚合\n\n**时序数据库对比**\n- TimescaleDB（PostgreSQL 扩展）：SQL 兼容\n- InfluxDB：专用时序数据库\n- ClickHouse：列式分析\n- MySQL：通用，大数据量性能不如专用时序库",
+        "example": "-- 按小时统计\nSELECT\n  DATE_FORMAT(created_at, '%Y-%m-%d %H:00') AS hour,\n  COUNT(*) AS cnt,\n  AVG(value) AS avg_val\nFROM metrics\nWHERE created_at >= '2024-01-01'\nGROUP BY DATE_FORMAT(created_at, '%Y-%m-%d %H:00')\nORDER BY hour;\n\n-- 按天统计\nSELECT DATE(created_at) AS day, COUNT(*) AS cnt\nFROM orders\nGROUP BY DATE(created_at)\nORDER BY day;\n\n-- 填补空时间段（生成连续小时序列）\n-- MySQL 8.0 递归 CTE 生成时间序列\nWITH RECURSIVE hours AS (\n  SELECT '2024-01-01 00:00:00' AS h\n  UNION ALL\n  SELECT h + INTERVAL 1 HOUR FROM hours WHERE h < '2024-01-01 23:00:00'\n)\nSELECT\n  DATE_FORMAT(h.h, '%Y-%m-%d %H:00') AS hour,\n  COALESCE(COUNT(m.id), 0) AS cnt\nFROM hours h\nLEFT JOIN metrics m\n  ON DATE_FORMAT(m.created_at, '%Y-%m-%d %H:00') = DATE_FORMAT(h.h, '%Y-%m-%d %H:00')\nGROUP BY h.h\nORDER BY h.h;\n\n-- 移动平均（3小时窗口）\nSELECT\n  created_at,\n  value,\n  AVG(value) OVER (\n    ORDER BY created_at\n    ROWS BETWEEN 2 PRECEDING AND CURRENT ROW\n  ) AS moving_avg\nFROM metrics\nORDER BY created_at;\n\n-- 累计求和\nSELECT\n  DATE(created_at) AS day,\n  SUM(amount) AS daily_amount,\n  SUM(SUM(amount)) OVER (ORDER BY DATE(created_at)) AS cumulative\nFROM orders\nGROUP BY DATE(created_at)\nORDER BY day;\n\n-- 同比环比（用 LAG）\nSELECT\n  DATE_FORMAT(created_at, '%Y-%m') AS month,\n  SUM(amount) AS total,\n  LAG(SUM(amount), 1) OVER (ORDER BY DATE_FORMAT(created_at,'%Y-%m')) AS prev_month,  -- 环比\n  LAG(SUM(amount), 12) OVER (ORDER BY DATE_FORMAT(created_at,'%Y-%m')) AS prev_year   -- 同比\nFROM orders\nGROUP BY DATE_FORMAT(created_at, '%Y-%m')\nORDER BY month;\n\n-- 环比增长率\nWITH monthly AS (\n  SELECT DATE_FORMAT(created_at,'%Y-%m') AS m, SUM(amount) AS total\n  FROM orders GROUP BY DATE_FORMAT(created_at,'%Y-%m')\n)\nSELECT m, total,\n  LAG(total,1) OVER (ORDER BY m) AS prev,\n  ROUND((total - LAG(total,1) OVER (ORDER BY m)) /\n        LAG(total,1) OVER (ORDER BY m) * 100, 2) AS growth_rate_pct\nFROM monthly;\n\n-- 降采样：1分钟数据聚合为1小时\nSELECT\n  DATE_FORMAT(created_at, '%Y-%m-%d %H:00') AS hour,\n  AVG(value) AS avg_val,\n  MAX(value) AS max_val,\n  MIN(value) AS min_val\nFROM metrics_1min\nWHERE created_at >= '2024-01-01'\nGROUP BY DATE_FORMAT(created_at, '%Y-%m-%d %H:00');\n\n-- 时间分区表（按月，便于归档）\nCREATE TABLE metrics (\n  id BIGINT AUTO_INCREMENT,\n  created_at DATETIME NOT NULL,\n  value DOUBLE,\n  PRIMARY KEY (id, created_at)\n) PARTITION BY RANGE (TO_DAYS(created_at)) (\n  PARTITION p202401 VALUES LESS THAN (TO_DAYS('2024-02-01')),\n  PARTITION p202402 VALUES LESS THAN (TO_DAYS('2024-03-01')),\n  PARTITION pmax VALUES LESS THAN MAXVALUE\n);\n-- 清理历史: ALTER TABLE metrics DROP PARTITION p202401;  -- 瞬间完成"
+      },
+      {
+        "id": "sql-dedup-cleanup",
+        "title": "数据去重与清洗 SQL",
+        "level": "进阶",
+        "content": "**常见去重场景**\n- 完全重复行\n- 业务键重复（如同用户多条记录）\n- 近似重复（大小写/空格差异）\n\n**查找重复**\n```sql\n-- 找重复的键\nSELECT email, COUNT(*) AS cnt\nFROM users\nGROUP BY email\nHAVING COUNT(*) > 1;\n```\n\n**删除重复保留一条**\n\n**方法1：ROW_NUMBER（推荐，8.0+）**\n```sql\nDELETE FROM users\nWHERE id NOT IN (\n  SELECT id FROM (\n    SELECT id, ROW_NUMBER() OVER(PARTITION BY email ORDER BY id) AS rn\n    FROM users\n  ) t WHERE rn = 1\n);\n```\n\n**方法2：GROUP BY + MIN(id)**\n```sql\nDELETE FROM users\nWHERE id NOT IN (\n  SELECT MIN(id) FROM users GROUP BY email\n);\n```\n\n**方法3：自连接**\n```sql\nDELETE u1 FROM users u1\nJOIN users u2 ON u1.email = u2.email AND u1.id > u2.id;\n-- 保留 id 最小的\n```\n\n**方法4：临时表**\n- 创建临时表存去重结果\n- TRUNCATE 原表\n- 插回\n- 适合大量重复\n\n**DISTINCT vs GROUP BY**\n- DISTINCT：去重显示\n- GROUP BY：去重 + 聚合\n- 性能相近\n\n**数据清洗**\n- 去除空格：TRIM/LTRIM/RTRIM\n- 大小写统一：UPPER/LOWER\n- NULL 处理：COALESCE/IFNULL\n- 异常值过滤：WHERE 条件\n- 类型转换：CAST\n\n**字符串清洗**\n- TRIM(name)：去首尾空格\n- REPLACE(name, '  ', ' ')：多个空格变一个\n- REGEXP_REPLACE：正则替换\n\n**数据校验**\n- 邮箱格式：REGEXP\n- 手机号长度\n- 日期有效性\n\n**批量更新清洗**\n- UPDATE ... SET name = TRIM(name) WHERE name != TRIM(name)\n- 分批避免大事务",
+        "example": "-- 查找重复\nSELECT email, COUNT(*) AS cnt, GROUP_CONCAT(id) AS dup_ids\nFROM users\nGROUP BY email\nHAVING COUNT(*) > 1;\n\n-- 删除重复保留 id 最小（ROW_NUMBER 方式，推荐）\n-- MySQL 8.0+\nWITH dups AS (\n  SELECT id,\n    ROW_NUMBER() OVER(PARTITION BY email ORDER BY id) AS rn\n  FROM users\n)\nDELETE FROM users\nWHERE id IN (SELECT id FROM dups WHERE rn > 1);\n\n-- 方法2：自连接（保留最小 id）\nDELETE u1 FROM users u1\nINNER JOIN users u2\n  ON u1.email = u2.email AND u1.id > u2.id;\n\n-- 方法3：临时表（适合大量重复）\nCREATE TABLE users_dedup AS\nSELECT * FROM users WHERE id IN (\n  SELECT MIN(id) FROM users GROUP BY email\n);\nTRUNCATE TABLE users;\nINSERT INTO users SELECT * FROM users_dedup;\nDROP TABLE users_dedup;\n\n-- DISTINCT 去重显示\nSELECT DISTINCT department FROM employees ORDER BY department;\nSELECT DISTINCT city, country FROM users;\n\n-- 字符串清洗\n-- 去首尾空格\nUPDATE users SET name = TRIM(name) WHERE name != TRIM(name);\n-- 多空格变单空格\nUPDATE articles SET content = REGEXP_REPLACE(content, ' +', ' ');\n-- 统一大小写\nUPDATE users SET email = LOWER(TRIM(email));\n-- 去除不可见字符\nUPDATE users SET name = TRIM(BOTH '\\\\n' FROM name);\n\n-- NULL 处理\n-- 填充默认值\nUPDATE users SET nickname = '匿名' WHERE nickname IS NULL;\n-- 查询时替换\nSELECT COALESCE(nickname, name, 'unknown') AS display FROM users;\n\n-- 异常值过滤\nSELECT * FROM orders\nWHERE amount > 0\n  AND amount < 1000000  -- 过滤异常金额\n  AND created_at <= NOW()\n  AND user_id IS NOT NULL;\n\n-- 邮箱格式校验\nSELECT * FROM users\nWHERE email NOT REGEXP '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\\\.[A-Za-z]{2,}$';\n-- 手机号校验\nSELECT * FROM users\nWHERE phone NOT REGEXP '^1[3-9][0-9]{9}$';\n\n-- 找出可能重复的近似数据（大小写/空格差异）\nSELECT LOWER(TRIM(email)) AS normalized, COUNT(*) AS cnt\nFROM users\nGROUP BY LOWER(TRIM(email))\nHAVING COUNT(*) > 1;\n\n-- 合并重复用户数据（保留主记录，合并附属信息）\n-- 把重复账号的订单转移到保留账号\nUPDATE orders SET user_id = (\n  SELECT MIN(id) FROM users u2 WHERE u2.email = (\n    SELECT email FROM users WHERE id = orders.user_id\n  )\n)\nWHERE user_id IN (\n  SELECT id FROM users WHERE id NOT IN (\n    SELECT MIN(id) FROM users GROUP BY email\n  )\n);\n-- 然后删除重复用户\n\n-- 数据采样检查\nSELECT * FROM users ORDER BY RAND() LIMIT 100;  -- 随机抽样\n-- 注意 RAND() 性能差，大表用：\nSELECT * FROM users WHERE id >= (\n  SELECT FLOOR(RAND() * (SELECT MAX(id) FROM users))\n) LIMIT 100;"
       }
     ]
   }
@@ -16609,6 +16945,390 @@ const QUESTIONS = {
       ],
       "answer": 0,
       "explain": "级别顺序 DEBUG(10) < INFO(20) < WARNING(30) < ERROR(40) < CRITICAL(50)，设置某级别后只输出该级别及以上的日志。"
+    },
+    {
+      "q": "Python GIL 的主要作用是？",
+      "level": "高级",
+      "options": [
+        "加密代码",
+        "保护解释器内部数据结构不被并发破坏",
+        "限制内存使用",
+        "加速执行"
+      ],
+      "answer": 1,
+      "explain": "GIL 保护 CPython 引用计数等内部数据结构，同一时刻只允许一个线程执行字节码，避免并发访问导致数据损坏。"
+    },
+    {
+      "q": "以下哪种场景多线程能有效提升性能？",
+      "level": "高级",
+      "options": [
+        "CPU 密集型计算",
+        "纯数学运算",
+        "IO 密集型（网络/文件）",
+        "矩阵相乘"
+      ],
+      "answer": 2,
+      "explain": "IO 操作会释放 GIL，因此 IO 密集型任务多线程有效；CPU 密集型受 GIL 限制应用多进程。"
+    },
+    {
+      "q": "绕过 GIL 利用多核的最佳方案是？",
+      "level": "高级",
+      "options": [
+        "增加线程数",
+        "用 multiprocessing 多进程",
+        "用 asyncio",
+        "调大 setswitchinterval"
+      ],
+      "answer": 1,
+      "explain": "multiprocessing 每个进程有独立解释器和 GIL，可真正并行利用多核。"
+    },
+    {
+      "q": "Python 3.13 的 free-threaded 模式指的是？",
+      "level": "高级",
+      "options": [
+        "协程优化",
+        "实验性移除 GIL 支持真正的多线程并行",
+        "更快的 GC",
+        "无锁数据结构"
+      ],
+      "answer": 1,
+      "explain": "PEP 703 在 Python 3.13 引入实验性无 GIL 模式（free-threaded），允许多线程真正并行执行字节码。"
+    },
+    {
+      "q": "Python 内存回收的主要机制是？",
+      "level": "高级",
+      "options": [
+        "标记清除",
+        "引用计数为主 + 分代 GC 处理循环引用",
+        "复制算法",
+        "只用 GC"
+      ],
+      "answer": 1,
+      "explain": "CPython 以引用计数为主（实时回收），辅以分代垃圾回收处理引用计数无法解决的循环引用。"
+    },
+    {
+      "q": "小整数缓存的范围是？",
+      "level": "进阶",
+      "options": [
+        "-1~100",
+        "-5~256",
+        "0~256",
+        "任意整数"
+      ],
+      "answer": 1,
+      "explain": "CPython 缓存 -5 到 256 的整数对象，这些整数全局共享，is 比较为 True。"
+    },
+    {
+      "q": "分代 GC 的作用是？",
+      "level": "高级",
+      "options": [
+        "加速对象创建",
+        "检测并回收循环引用",
+        "管理内存分配",
+        "优化字符串"
+      ],
+      "answer": 1,
+      "explain": "引用计数无法处理循环引用（a 引用 b，b 引用 a），分代 GC 通过遍历容器对象检测循环引用组并回收。"
+    },
+    {
+      "q": "weakref 弱引用的作用是？",
+      "level": "高级",
+      "options": [
+        "加速访问",
+        "不增加引用计数，对象可被回收，用于缓存",
+        "加密引用",
+        "线程安全"
+      ],
+      "answer": 1,
+      "explain": "weakref 不增加目标对象的引用计数，目标对象可被正常回收，适合实现缓存、观察者等场景避免内存泄漏。"
+    },
+    {
+      "q": "__slots__ 的主要好处是？",
+      "level": "进阶",
+      "options": [
+        "加速属性访问",
+        "节省内存（省去 __dict__）",
+        "线程安全",
+        "支持继承"
+      ],
+      "answer": 1,
+      "explain": "__slots__ 固定属性集合，实例不创建 __dict__，显著节省内存，同时属性访问也略快。"
+    },
+    {
+      "q": "上下文管理器需要实现的两个方法是？",
+      "level": "进阶",
+      "options": [
+        "__enter__ 和 __exit__",
+        "__init__ 和 __del__",
+        "__open__ 和 __close__",
+        "__start__ 和 __stop__"
+      ],
+      "answer": 0,
+      "explain": "with 语句要求对象实现 __enter__（进入返回资源）和 __exit__（退出执行清理，即使异常也会调用）。"
+    },
+    {
+      "q": "contextmanager 装饰器中 yield 的作用是？",
+      "level": "进阶",
+      "options": [
+        "生成器",
+        "yield 前是 __enter__，yield 值是 as 变量，yield 后是 __exit__",
+        "暂停执行",
+        "返回多个值"
+      ],
+      "answer": 1,
+      "explain": "@contextmanager 将生成器转为上下文管理器：yield 之前对应 __enter__，yield 的值赋给 as 变量，yield 之后（在 finally 中）对应 __exit__。"
+    },
+    {
+      "q": "ExitStack 的用途是？",
+      "level": "高级",
+      "options": [
+        "栈数据结构",
+        "动态管理多个上下文管理器",
+        "异常堆栈",
+        "调用栈分析"
+      ],
+      "answer": 1,
+      "explain": "ExitStack 可动态注册多个上下文管理器，按 LIFO 顺序退出，适合运行时才能确定数量的资源管理。"
+    },
+    {
+      "q": "dataclass 中可变默认值应使用？",
+      "level": "进阶",
+      "options": [
+        "default=[]",
+        "default_factory=list",
+        "default=None",
+        "直接赋值"
+      ],
+      "answer": 1,
+      "explain": "可变对象（list/dict）作为默认值会导致所有实例共享同一对象（经典陷阱），必须用 default_factory 每次创建新实例。"
+    },
+    {
+      "q": "@dataclass(frozen=True) 的效果是？",
+      "level": "进阶",
+      "options": [
+        "冻结属性不可修改，可哈希",
+        "性能优化",
+        "内存优化",
+        "线程安全"
+      ],
+      "answer": 0,
+      "explain": "frozen=True 使实例不可变，修改属性抛 FrozenInstanceError，同时实例可哈希（可作 dict key 或集合元素）。"
+    },
+    {
+      "q": "Python 3.10+ 表示 Optional[int] 的简写是？",
+      "level": "基础",
+      "options": [
+        "int?",
+        "int | None",
+        "Option[int]",
+        "Maybe[int]"
+      ],
+      "answer": 1,
+      "explain": "PEP 604 允许用 | 表示联合类型，Optional[int] 等价于 int | None，Union[int, str] 等价于 int | str。"
+    },
+    {
+      "q": "Pydantic 与 dataclass 的核心区别是？",
+      "level": "进阶",
+      "options": [
+        "无区别",
+        "Pydantic 运行时校验并转换数据类型，dataclass 不校验",
+        "Pydantic 更慢",
+        "dataclass 支持继承"
+      ],
+      "answer": 1,
+      "explain": "Pydantic 基于类型注解在运行时校验并转换数据，类型不匹配抛 ValidationError；dataclass 不做运行时校验。"
+    },
+    {
+      "q": "FastAPI 性能高的主要原因是？",
+      "level": "进阶",
+      "options": [
+        "用 C 编写",
+        "基于 Starlette(ASGI) 异步 + Pydantic",
+        "编译执行",
+        "多线程"
+      ],
+      "answer": 1,
+      "explain": "FastAPI 基于 Starlette ASGI 异步框架和 Pydantic，原生 async/await 支持，可高效处理高并发 IO。"
+    },
+    {
+      "q": "FastAPI Depends 依赖注入的用途不包括？",
+      "level": "高级",
+      "options": [
+        "数据库会话管理",
+        "认证鉴权",
+        "共享逻辑复用",
+        "前端渲染"
+      ],
+      "answer": 3,
+      "explain": "Depends 用于后端逻辑复用（DB 会话、认证、权限等），与前端渲染无关。"
+    },
+    {
+      "q": "functools.reduce 的作用是？",
+      "level": "进阶",
+      "options": [
+        "过滤",
+        "映射",
+        "累积计算",
+        "排序"
+      ],
+      "answer": 2,
+      "explain": "reduce 对序列元素反复应用二元函数累积出单个值，如 reduce(operator.add, [1,2,3,4]) 得 10。"
+    },
+    {
+      "q": "itertools.chain 的作用是？",
+      "level": "进阶",
+      "options": [
+        "拉链配对",
+        "串联多个可迭代对象",
+        "循环迭代",
+        "笛卡尔积"
+      ],
+      "answer": 1,
+      "explain": "chain(*iterables) 将多个可迭代对象串联成一个，逐个遍历；zip 才是配对。"
+    },
+    {
+      "q": "itertools.product 的作用是？",
+      "level": "进阶",
+      "options": [
+        "乘积运算",
+        "笛卡尔积",
+        "排列",
+        "组合"
+      ],
+      "answer": 1,
+      "explain": "product(*iterables) 计算多个序列的笛卡尔积，如 product('AB','12') 得 A1 A2 B1 B2。"
+    },
+    {
+      "q": "以下哪个不是 itertools 的函数？",
+      "level": "基础",
+      "options": [
+        "permutations",
+        "combinations",
+        "zip_longest",
+        "flatten"
+      ],
+      "answer": 3,
+      "explain": "itertools 没有 flatten 函数，可用 chain.from_iterable 展平嵌套。permutations/combinations/zip_longest 都是 itertools 成员。"
+    },
+    {
+      "q": "singledispatch 的作用是？",
+      "level": "高级",
+      "options": [
+        "单例模式",
+        "基于第一个参数类型分发不同实现",
+        "单线程调度",
+        "信号分发"
+      ],
+      "answer": 1,
+      "explain": "@singledispatch 实现单分派泛型函数，根据第一个参数的类型调用对应的注册实现，类似方法重载。"
+    },
+    {
+      "q": ".pyc 文件的作用是？",
+      "level": "进阶",
+      "options": [
+        "加密源码",
+        "缓存编译后的字节码加速加载",
+        "打包发布",
+        "配置文件"
+      ],
+      "answer": 1,
+      "explain": ".pyc 是源码编译后的字节码缓存，存于 __pycache__，首次导入时生成，后续直接加载避免重复编译。"
+    },
+    {
+      "q": "dis 模块的用途是？",
+      "level": "高级",
+      "options": [
+        "磁盘操作",
+        "反汇编 Python 字节码",
+        "调试器",
+        "分布式计算"
+      ],
+      "answer": 1,
+      "explain": "dis.dis(func) 反汇编函数显示其字节码指令，帮助理解 Python 内部执行机制和性能优化。"
+    },
+    {
+      "q": "局部变量比全局变量访问快的原因是？",
+      "level": "高级",
+      "options": [
+        "局部变量更小",
+        "局部变量用 LOAD_FAST 指令（索引访问），全局用 LOAD_GLOBAL（字典查找）",
+        "局部变量在寄存器",
+        "全局变量加密"
+      ],
+      "answer": 1,
+      "explain": "局部变量通过索引快速访问（LOAD_FAST），全局变量需要字典查找（LOAD_GLOBAL），因此局部变量更快。"
+    },
+    {
+      "q": "Python 虚拟机属于哪种类型？",
+      "level": "高级",
+      "options": [
+        "寄存器式",
+        "栈式",
+        "寄存器分配式",
+        "混合式"
+      ],
+      "answer": 1,
+      "explain": "CPython 是栈式虚拟机，操作数压栈出栈执行运算，如 BINARY_ADD 弹出栈顶两数相加压回。"
+    },
+    {
+      "q": "元类的本质是？",
+      "level": "高级",
+      "options": [
+        "类的父类",
+        "类的类，负责创建类",
+        "类的实例",
+        "类的装饰器"
+      ],
+      "answer": 1,
+      "explain": "元类是类的类，type 是默认元类。class Foo 等价于 Foo = type('Foo', (), {})，自定义元类可控制类的创建过程。"
+    },
+    {
+      "q": "__init_subclass__ 相比元类的优势是？",
+      "level": "高级",
+      "options": [
+        "性能更高",
+        "更简单，不需要自定义元类即可在子类创建时执行逻辑",
+        "支持多继承",
+        "线程安全"
+      ],
+      "answer": 1,
+      "explain": "__init_subclass__（3.6+）是轻量替代方案，在父类定义即可，子类创建时自动调用，避免元类的复杂性。"
+    },
+    {
+      "q": "数据描述符与非数据描述符的区别是？",
+      "level": "高级",
+      "options": [
+        "数据描述符有 __set__，优先级高于实例 __dict__",
+        "数据描述符更快",
+        "非数据描述符不支持继承",
+        "无区别"
+      ],
+      "answer": 0,
+      "explain": "数据描述符同时定义 __get__ 和 __set__，查找优先级高于实例 __dict__；非数据描述符只有 __get__，优先级低于实例 __dict__。"
+    },
+    {
+      "q": "描述符协议中 __set_name__ 的作用是？",
+      "level": "高级",
+      "options": [
+        "设置类名",
+        "在类创建时告知描述符其属性名，便于存储",
+        "重命名属性",
+        "设置类型"
+      ],
+      "answer": 1,
+      "explain": "__set_name__(self, owner, name) 在类创建时自动调用，让描述符知道自己绑定的属性名，便于在实例 __dict__ 中存取。"
+    },
+    {
+      "q": "property 本质上是？",
+      "level": "进阶",
+      "options": [
+        "内置函数",
+        "数据描述符的简化形式",
+        "装饰器语法糖",
+        "类方法"
+      ],
+      "answer": 1,
+      "explain": "property 是数据描述符的封装，实现了 __get__/__set__/__delete__，提供更简洁的属性访问控制语法。"
     }
   ],
   "c": [
@@ -17693,6 +18413,378 @@ const QUESTIONS = {
       ],
       "answer": 2,
       "explain": "未初始化全局变量是弱符号（common 符号），多个文件定义同名不报错，链接器任选一个。但若一个是初始化（强符号）一个未初始化（弱符号），强符号覆盖弱符号。"
+    },
+    {
+      "q": "int *p[10] 的正确解读是？",
+      "level": "高级",
+      "options": [
+        "指向含10个int数组的指针",
+        "含10个元素的数组，每个是指向int的指针（指针数组）",
+        "指向int的指针，值为10",
+        "10个int的数组"
+      ],
+      "answer": 1,
+      "explain": "[] 优先级高于 *，p 先与 [] 结合是数组，元素类型是 int*，所以是指针数组（10个指针）。int (*p)[10] 才是数组指针。"
+    },
+    {
+      "q": "int (*fp)(int, int) 表示？",
+      "level": "高级",
+      "options": [
+        "返回函数指针的函数",
+        "指向返回int、参数两个int的函数的指针（函数指针）",
+        "函数名为 fp",
+        "int 类型的指针"
+      ],
+      "answer": 1,
+      "explain": "括号让 * 先结合，fp 是指针，指向 int(int,int) 类型的函数，即函数指针。"
+    },
+    {
+      "q": "函数指针数组（跳转表）的优势是？",
+      "level": "高级",
+      "options": [
+        "节省内存",
+        "O(1) 分发，替代 switch-case，可扩展",
+        "线程安全",
+        "类型安全"
+      ],
+      "answer": 1,
+      "explain": "函数指针数组通过索引直接调用，O(1) 时间分发，比 switch-case 更灵活，新增操作只需扩展数组，常用于解释器指令分发。"
+    },
+    {
+      "q": "const int *p 中 const 修饰的是？",
+      "level": "进阶",
+      "options": [
+        "指针 p 本身",
+        "p 指向的数据（不能通过 p 修改值）",
+        "p 的地址",
+        "p 的类型"
+      ],
+      "answer": 1,
+      "explain": "const 在 * 左边修饰指向的数据，不能通过 p 修改值但可改 p 的指向；int * const p 才是修饰指针本身。"
+    },
+    {
+      "q": "volatile 关键字的主要作用是？",
+      "level": "进阶",
+      "options": [
+        "变量不可修改",
+        "告诉编译器变量可能被意外修改，禁止优化",
+        "线程安全",
+        "常量优化"
+      ],
+      "answer": 1,
+      "explain": "volatile 告诉编译器变量可能被硬件/中断/其他线程修改，每次访问都从内存读取，禁止缓存到寄存器或消除冗余访问。"
+    },
+    {
+      "q": "以下哪个场景必须用 volatile？",
+      "level": "高级",
+      "options": [
+        "普通局部变量",
+        "内存映射的硬件寄存器",
+        "全局配置",
+        "函数参数"
+      ],
+      "answer": 1,
+      "explain": "内存映射 IO 寄存器的值可能被硬件修改，必须用 volatile 确保每次都从真实地址读取，否则编译器可能优化掉读取。"
+    },
+    {
+      "q": "const volatile int *p 表示？",
+      "level": "高级",
+      "options": [
+        "矛盾，无意义",
+        "程序不能通过 p 修改（const），但值会被外部改变（volatile）",
+        "只读常量",
+        "可变指针"
+      ],
+      "answer": 1,
+      "explain": "const volatile 组合：程序不能写（const）但硬件会更新（volatile），典型用于只读硬件状态寄存器。"
+    },
+    {
+      "q": "结构体内存对齐的目的是？",
+      "level": "进阶",
+      "options": [
+        "节省内存",
+        "提高 CPU 访问效率",
+        "加密数据",
+        "对齐网络传输"
+      ],
+      "answer": 1,
+      "explain": "CPU 访问对齐数据通常只需一次内存读取，非对齐可能需要多次或触发异常，编译器自动填充 padding 以对齐。"
+    },
+    {
+      "q": "#pragma pack(1) 的作用是？",
+      "level": "进阶",
+      "options": [
+        "优化性能",
+        "取消对齐，1字节对齐（紧凑结构）",
+        "限制大小为1",
+        "对齐到页"
+      ],
+      "answer": 1,
+      "explain": "#pragma pack(1) 设置1字节对齐，取消填充，节省空间但可能降低访问性能，常用于网络协议和文件格式。"
+    },
+    {
+      "q": "小端序（Little-Endian）的特点是？",
+      "level": "进阶",
+      "options": [
+        "高字节存低地址",
+        "低字节存低地址",
+        "只有1字节",
+        "网络字节序"
+      ],
+      "answer": 1,
+      "explain": "小端序低字节存低地址，如 0x12345678 在内存为 78 56 34 12。x86 和 ARM（默认）是小端。"
+    },
+    {
+      "q": "网络字节序采用的是？",
+      "level": "进阶",
+      "options": [
+        "小端",
+        "大端",
+        "主机序",
+        "可配置"
+      ],
+      "answer": 1,
+      "explain": "网络协议规定使用大端序传输，htonl/htons 将主机序转网络序，ntohl/ntohs 反向转换。"
+    },
+    {
+      "q": "sizeof(结构体{char a; int b; char c;}) 在默认对齐下通常是？",
+      "level": "进阶",
+      "options": [
+        "6",
+        "8",
+        "12",
+        "16"
+      ],
+      "answer": 2,
+      "explain": "a(1)+3填充+b(4)+c(1)+3填充=12。调整顺序为 {int b; char a; char c;} 可减到8，这是结构体优化的常见手法。"
+    },
+    {
+      "q": "va_arg 取 float 参数时应使用什么类型？",
+      "level": "进阶",
+      "options": [
+        "float",
+        "double",
+        "int",
+        "long"
+      ],
+      "answer": 1,
+      "explain": "可变参数会发生默认参数提升，float 自动提升为 double，char/short 提升为 int，因此 va_arg 必须用提升后的类型。"
+    },
+    {
+      "q": "可变参数函数如何知道参数个数？",
+      "level": "进阶",
+      "options": [
+        "编译器自动检测",
+        "通过命名参数（如 printf 的格式串）或哨兵值",
+        "无法知道",
+        "运行时反射"
+      ],
+      "answer": 1,
+      "explain": "va_arg 无法自动知道个数，调用者必须提供信息：printf 用格式串的占位符数量，execl 用 NULL 哨兵结尾。"
+    },
+    {
+      "q": "信号处理函数中可以安全调用？",
+      "level": "高级",
+      "options": [
+        "printf",
+        "malloc",
+        "write",
+        "fopen"
+      ],
+      "answer": 2,
+      "explain": "信号处理是异步的，只能调用异步信号安全函数。printf/malloc/fopen 可能持锁导致死锁，write 是安全的。"
+    },
+    {
+      "q": "volatile sig_atomic_t 用于？",
+      "level": "高级",
+      "options": [
+        "原子计数器",
+        "信号处理中修改的标志变量，防止优化并保证读写原子",
+        "线程同步",
+        "大整数"
+      ],
+      "answer": 1,
+      "explain": "sig_atomic_t 保证读写原子性，volatile 防止编译器优化，两者结合用于信号处理函数中修改、主循环中检查的标志变量。"
+    },
+    {
+      "q": "以下哪个信号不能被捕获或忽略？",
+      "level": "进阶",
+      "options": [
+        "SIGINT",
+        "SIGTERM",
+        "SIGKILL",
+        "SIGSEGV"
+      ],
+      "answer": 2,
+      "explain": "SIGKILL(9) 和 SIGSTOP(19) 不可捕获/忽略/屏蔽，是系统保留的强制手段。其他信号都可被 signal/sigaction 捕获。"
+    },
+    {
+      "q": "sigaction 相比 signal 的优势是？",
+      "level": "高级",
+      "options": [
+        "更快",
+        "可设置标志（如 SA_RESTART）、获取信号信息、行为更可控",
+        "更简单",
+        "跨平台"
+      ],
+      "answer": 1,
+      "explain": "sigaction 是 POSIX 标准，可控制信号处理行为（SA_RESTART 自动重启中断的系统调用、SA_SIGINFO 获取发送者信息等），而 signal 行为跨平台不一致。"
+    },
+    {
+      "q": "匿名管道（pipe）的限制是？",
+      "level": "进阶",
+      "options": [
+        "只能单向",
+        "只能用于有亲缘关系进程（如父子）",
+        "缓冲区有限",
+        "以上都是"
+      ],
+      "answer": 3,
+      "explain": "pipe 是半双工单向、只能在有亲缘关系进程间使用、内核缓冲区有限（通常64KB）。命名管道 FIFO 可用于任意进程。"
+    },
+    {
+      "q": "最快的进程间通信方式是？",
+      "level": "高级",
+      "options": [
+        "管道",
+        "消息队列",
+        "共享内存",
+        "套接字"
+      ],
+      "answer": 2,
+      "explain": "共享内存零拷贝，进程直接读写同一物理内存，无需内核中转，速度最快。但需要信号量等同步机制配合。"
+    },
+    {
+      "q": "共享内存需要配合什么机制？",
+      "level": "高级",
+      "options": [
+        "管道",
+        "信号量",
+        "消息队列",
+        "信号"
+      ],
+      "answer": 1,
+      "explain": "共享内存本身无同步机制，多进程并发读写会竞争，需配合信号量或互斥锁实现同步与互斥。"
+    },
+    {
+      "q": "pthread_mutex_lock 与 pthread_cond_wait 的关系是？",
+      "level": "高级",
+      "options": [
+        "无关",
+        "cond_wait 会原子地释放 mutex 并等待，被唤醒时重新加锁",
+        "cond_wait 不需要 mutex",
+        "lock 等待 cond"
+      ],
+      "answer": 1,
+      "explain": "pthread_cond_wait 原子地释放 mutex 并阻塞等待信号，被唤醒时自动重新加锁，这避免了等待与加锁之间的竞态窗口。"
+    },
+    {
+      "q": "条件变量 wait 为什么要用 while 循环检查条件？",
+      "level": "高级",
+      "options": [
+        "性能考虑",
+        "防止虚假唤醒（spurious wakeup）",
+        "避免死锁",
+        "简化代码"
+      ],
+      "answer": 1,
+      "explain": "pthread_cond_wait 可能被虚假唤醒（无 signal 也返回），必须用 while 重新检查条件，if 检查会导致虚假唤醒时错误继续。"
+    },
+    {
+      "q": "读写锁适用于什么场景？",
+      "level": "高级",
+      "options": [
+        "写多读少",
+        "读多写少",
+        "读写均衡",
+        "只读"
+      ],
+      "answer": 1,
+      "explain": "读写锁允许多个读并发但写独占，读多写少时能显著提高并发度；写多时退化为互斥锁，无优势。"
+    },
+    {
+      "q": "死锁的四个必要条件不包括？",
+      "level": "高级",
+      "options": [
+        "互斥",
+        "持有并等待",
+        "不可剥夺",
+        "优先级反转"
+      ],
+      "answer": 3,
+      "explain": "死锁四个必要条件是：互斥、持有并等待、不可剥夺、循环等待。优先级反转是另一问题（可导致死锁但不是必要条件）。"
+    },
+    {
+      "q": "__thread 关键字的作用是？",
+      "level": "高级",
+      "options": [
+        "线程同步",
+        "线程局部存储，每线程独立副本",
+        "创建线程",
+        "线程优先级"
+      ],
+      "answer": 1,
+      "explain": "__thread（GCC）声明线程局部存储变量，每个线程有独立副本，互不干扰，避免加锁。C11 用 _Thread_local。"
+    },
+    {
+      "q": "静态库与动态库的主要区别是？",
+      "level": "进阶",
+      "options": [
+        "无区别",
+        "静态库编译时链接代码拷入可执行文件，动态库运行时加载共享",
+        "静态库更快",
+        "动态库不能更新"
+      ],
+      "answer": 1,
+      "explain": "静态库在编译时拷贝进可执行文件，独立但体积大；动态库运行时加载，多进程共享内存，可独立更新。"
+    },
+    {
+      "q": "编译动态库需要的选项是？",
+      "level": "进阶",
+      "options": [
+        "-static",
+        "-shared -fPIC",
+        "-dynamic",
+        "-lib"
+      ],
+      "answer": 1,
+      "explain": "-shared 生成共享库，-fPIC 生成位置无关代码（动态库必须，因为加载地址不确定）。"
+    },
+    {
+      "q": "dlopen 的 RTLD_LAZY 含义是？",
+      "level": "高级",
+      "options": [
+        "立即解析所有符号",
+        "延迟解析，用到符号时才解析",
+        "懒加载不解析",
+        "快速模式"
+      ],
+      "answer": 1,
+      "explain": "RTLD_LAZY 延迟绑定，函数被调用时才解析符号，启动快但可能运行时报错；RTLD_NOW 立即解析所有符号，启动慢但能提前发现错误。"
+    },
+    {
+      "q": "dlsym 的返回值需要？",
+      "level": "高级",
+      "options": [
+        "直接使用",
+        "强制转换为正确的函数指针类型",
+        "转成 int",
+        "释放"
+      ],
+      "answer": 1,
+      "explain": "dlsym 返回 void*，必须强制转换为正确的函数指针类型才能调用，否则无法通过类型检查。"
+    },
+    {
+      "q": "符号可见性 hidden 的好处是？",
+      "level": "高级",
+      "options": [
+        "加速运行",
+        "减少导出符号，加速加载并避免符号冲突",
+        "加密代码",
+        "节省内存"
+      ],
+      "answer": 1,
+      "explain": "visibility(hidden) 隐藏符号不导出，减小符号表加速动态加载，避免与其他库的符号冲突，只显式导出必要接口。"
     }
   ],
   "cpp": [
@@ -18499,6 +19591,390 @@ const QUESTIONS = {
       ],
       "answer": 1,
       "explain": "static_assert(常量表达式, 消息) 在编译期判断条件，false 时编译失败并输出消息。常用于模板约束、类型检查、编译期验证。"
+    },
+    {
+      "q": "C++ 编译的四个阶段正确顺序是？",
+      "level": "进阶",
+      "options": [
+        "编译→预处理→汇编→链接",
+        "预处理→编译→汇编→链接",
+        "预处理→汇编→编译→链接",
+        "编译→汇编→预处理→链接"
+      ],
+      "answer": 1,
+      "explain": "四阶段：预处理（展开宏/头文件）→编译（生成汇编）→汇编（生成目标文件）→链接（合并目标文件和库）。"
+    },
+    {
+      "q": "undefined reference 错误发生在哪个阶段？",
+      "level": "进阶",
+      "options": [
+        "预处理",
+        "编译",
+        "汇编",
+        "链接"
+      ],
+      "answer": 3,
+      "explain": "undefined reference 是符号未定义，发生在链接阶段。通常因未实现函数、未链接库、库顺序错误导致。"
+    },
+    {
+      "q": "ODR（One Definition Rule）规定？",
+      "level": "高级",
+      "options": [
+        "每个函数只能调用一次",
+        "每个实体在整个程序中只能有一个定义",
+        "头文件只能包含一次",
+        "变量只能定义一次"
+      ],
+      "answer": 1,
+      "explain": "ODR 要求每个实体（函数/变量/类）在整个程序中只能有一个定义，但 inline/模板/constexpr 可多次定义（必须一致）。"
+    },
+    {
+      "q": "#pragma once 的作用是？",
+      "level": "基础",
+      "options": [
+        "只编译一次",
+        "防止头文件被重复包含",
+        "优化代码",
+        "只运行一次"
+      ],
+      "answer": 1,
+      "explain": "#pragma once 告诉编译器当前文件只包含一次，等效于 include guard，更简洁但非标准（被主流编译器支持）。"
+    },
+    {
+      "q": "RAII 的核心思想是？",
+      "level": "进阶",
+      "options": [
+        "运行时分配内存",
+        "将资源绑定到对象生命周期，构造获取析构释放",
+        "引用计数",
+        "垃圾回收"
+      ],
+      "answer": 1,
+      "explain": "RAII 利用对象生命周期管理资源：构造函数获取资源，析构函数自动释放，借助栈对象确定性销毁和异常安全保证资源不泄漏。"
+    },
+    {
+      "q": "RAII 保证异常安全的关键是？",
+      "level": "高级",
+      "options": [
+        "异常处理快",
+        "栈展开时已构造的局部对象会被析构",
+        "try-catch",
+        "noexcept"
+      ],
+      "answer": 1,
+      "explain": "抛异常时栈展开会析构所有已构造的局部对象，RAII 对象的析构函数释放资源，因此即使异常也能保证资源不泄漏。"
+    },
+    {
+      "q": "Rule of Five 指？",
+      "level": "高级",
+      "options": [
+        "五个设计原则",
+        "需要定义析构、拷贝构造、拷贝赋值、移动构造、移动赋值五个",
+        "五个虚函数",
+        "五层继承"
+      ],
+      "answer": 1,
+      "explain": "Rule of Five：涉及资源管理的类通常需要定义析构函数、拷贝构造、拷贝赋值、移动构造、移动赋值五个特殊成员函数。"
+    },
+    {
+      "q": "Rule of Zero 建议的是？",
+      "level": "高级",
+      "options": [
+        "不写任何函数",
+        "优先用标准 RAII 类型管理资源，类无需自定义特殊成员函数",
+        "不用类",
+        "零个成员"
+      ],
+      "answer": 1,
+      "explain": "Rule of Zero：优先用 vector/string/智能指针等标准 RAII 类型，类本身不需要定义析构/拷贝/移动，让编译器生成默认实现。"
+    },
+    {
+      "q": "unique_ptr 和 shared_ptr 的核心区别是？",
+      "level": "进阶",
+      "options": [
+        "性能不同",
+        "unique_ptr 独占所有权不可拷贝，shared_ptr 共享所有权引用计数",
+        "内存位置不同",
+        "接口不同"
+      ],
+      "answer": 1,
+      "explain": "unique_ptr 独占资源不可拷贝（可移动），零开销；shared_ptr 共享资源通过引用计数管理，可拷贝但有原子操作开销。"
+    },
+    {
+      "q": "shared_ptr 循环引用会导致？",
+      "level": "高级",
+      "options": [
+        "编译错误",
+        "内存泄漏（引用计数永不归零）",
+        "段错误",
+        "死锁"
+      ],
+      "answer": 1,
+      "explain": "两个 shared_ptr 互相引用，引用计数各为1永远不归零，析构不触发，导致内存泄漏。用 weak_ptr 打破循环。"
+    },
+    {
+      "q": "weak_ptr 的主要用途是？",
+      "level": "高级",
+      "options": [
+        "加速访问",
+        "打破 shared_ptr 循环引用、观察者模式、缓存",
+        "独占所有权",
+        "替代裸指针"
+      ],
+      "answer": 1,
+      "explain": "weak_ptr 不增加强引用计数，不影响对象释放，用于打破循环引用、实现观察者（观察对象是否存活）和缓存。"
+    },
+    {
+      "q": "enable_shared_from_this 的 shared_from_this() 用于？",
+      "level": "高级",
+      "options": [
+        "创建自身副本",
+        "安全获取指向自身的 shared_ptr",
+        "判断是否被管理",
+        "克隆"
+      ],
+      "answer": 1,
+      "explain": "shared_from_this() 返回与现有管理一致的 shared_ptr，避免用 this 构造 shared_ptr 产生多个控制块导致双重释放。"
+    },
+    {
+      "q": "make_shared 相比 shared_ptr(new T) 的优势是？",
+      "level": "高级",
+      "options": [
+        "更快",
+        "一次分配（对象+控制块），减少内存碎片和分配次数",
+        "更安全",
+        "功能更多"
+      ],
+      "answer": 1,
+      "explain": "make_shared 一次分配对象和控制块，shared_ptr(new T) 分两次。make_shared 性能更好但 weak_ptr 会延迟对象内存释放。"
+    },
+    {
+      "q": "vector push_back 导致迭代器失效的原因是？",
+      "level": "高级",
+      "options": [
+        "内存重新分配",
+        "元素移动",
+        "容量变化",
+        "以上都是"
+      ],
+      "answer": 3,
+      "explain": "push_back 可能触发扩容，内存重新分配后所有迭代器/指针/引用失效。reserve 预分配可避免扩容导致的失效。"
+    },
+    {
+      "q": "list 删除元素后其他迭代器？",
+      "level": "高级",
+      "options": [
+        "全部失效",
+        "仅被删除元素的迭代器失效",
+        "不影响",
+        "不确定"
+      ],
+      "answer": 1,
+      "explain": "list 是链表，节点独立，删除某节点只使该节点的迭代器失效，其他迭代器仍有效（这是链表相对数组的优势）。"
+    },
+    {
+      "q": "erase-remove 惯用法删除 vector 中满足条件的元素正确写法是？",
+      "level": "高级",
+      "options": [
+        "v.erase(remove_if(...))",
+        "v.erase(remove_if(begin,end,pred), end)",
+        "v.remove_if(pred)",
+        "v.delete(pred)"
+      ],
+      "answer": 1,
+      "explain": "v.erase(std::remove_if(v.begin(), v.end(), pred), v.end())。remove_if 将不删除元素前移，erase 删除尾部多余元素。C++20 可用 std::erase_if。"
+    },
+    {
+      "q": "map 边遍历边删除的正确方式是？",
+      "level": "高级",
+      "options": [
+        "m.erase(it++)",
+        "it = m.erase(it)（C++11）",
+        "直接 erase",
+        "先收集再删"
+      ],
+      "answer": 1,
+      "explain": "C++11 起 erase 返回下一个迭代器：it = m.erase(it);。旧式 m.erase(it++) 在 C++03 用，但新标准推荐返回值方式。"
+    },
+    {
+      "q": "SFINAE 的含义是？",
+      "level": "高级",
+      "options": [
+        "替换失败导致错误",
+        "替换失败不是错误，从重载集中移除",
+        "模板失败报错",
+        "实例化失败"
+      ],
+      "answer": 1,
+      "explain": "SFINAE（Substitution Failure Is Not An Error）：模板替换时某些失败不报错，只是将该重载从候选集中移除，用于编译期条件选择。"
+    },
+    {
+      "q": "C++17 替代 SFINAE 的更简洁方案是？",
+      "level": "高级",
+      "options": [
+        "if constexpr",
+        "static_assert",
+        "constexpr if",
+        "concept"
+      ],
+      "answer": 0,
+      "explain": "if constexpr 在编译期分支，不满足的分支不实例化，比 SFINAE 更直观易读，替代了许多 enable_if 场景。"
+    },
+    {
+      "q": "C++20 替代 SFINAE 的现代方案是？",
+      "level": "高级",
+      "options": [
+        "Concepts（requires）",
+        "if constexpr",
+        "static_assert",
+        "macro"
+      ],
+      "answer": 0,
+      "explain": "Concepts 用 requires 表达式约束模板参数，语法清晰、错误信息友好，是替代 SFINAE 的现代标准方案。"
+    },
+    {
+      "q": "异常安全的强保证（Strong guarantee）指？",
+      "level": "高级",
+      "options": [
+        "不泄漏资源",
+        "操作要么完全成功要么回滚到调用前状态",
+        "不抛异常",
+        "基本可用"
+      ],
+      "answer": 1,
+      "explain": "强保证是事务语义：操作失败时对象状态回滚到操作前，如同从未调用。通常用 copy-and-swap 实现。"
+    },
+    {
+      "q": "copy-and-swap 惯用法实现强保证的关键是？",
+      "level": "高级",
+      "options": [
+        "值传递参数（自带拷贝），再 noexcept swap",
+        "用 try-catch",
+        "用 noexcept",
+        "深拷贝"
+      ],
+      "answer": 0,
+      "explain": "operator=(T other) 值传递触发拷贝（可能抛异常但不影响原对象），拷贝成功后 noexcept swap 交换，实现原子提交的强保证。"
+    },
+    {
+      "q": "move 操作标记 noexcept 的性能意义是？",
+      "level": "高级",
+      "options": [
+        "更快",
+        "vector 扩容时用 move 而非 copy，性能大幅提升",
+        "线程安全",
+        "省内存"
+      ],
+      "answer": 1,
+      "explain": "vector 扩容时若元素 move 是 noexcept，则 move 扩容（快）；否则为强保证用 copy 扩容（慢）。因此 move 操作应标记 noexcept。"
+    },
+    {
+      "q": "析构函数为什么应该 noexcept？",
+      "level": "高级",
+      "options": [
+        "性能",
+        "栈展开时抛异常会 terminate，析构必须可靠",
+        "线程安全",
+        "内存安全"
+      ],
+      "answer": 1,
+      "explain": "异常栈展开时会调用析构函数，若析构再抛异常会导致 terminate。C++11 起析构函数默认 noexcept。"
+    },
+    {
+      "q": "空类的 sizeof 通常是？",
+      "level": "进阶",
+      "options": [
+        "0",
+        "1",
+        "4",
+        "8"
+      ],
+      "answer": 1,
+      "explain": "空类 sizeof 为1，确保不同对象地址不同。但作为空基类时触发 EBO 不占空间。"
+    },
+    {
+      "q": "有虚函数的类每个对象额外的开销是？",
+      "level": "高级",
+      "options": [
+        "无",
+        "虚函数表指针 vptr（64位8字节）",
+        "函数指针数组",
+        "虚函数表"
+      ],
+      "answer": 1,
+      "explain": "有虚函数的类每个对象首部有 vptr 指向虚函数表，64位系统占8字节。vtable 本身是类共享的，不占对象空间。"
+    },
+    {
+      "q": "空基类优化（EBO）的好处是？",
+      "level": "高级",
+      "options": [
+        "加速",
+        "空基类不占派生类空间，常用于策略模式",
+        "节省内存",
+        "线程安全"
+      ],
+      "answer": 1,
+      "explain": "EBO 使空基类在派生类中不占空间，常用于策略模式/编译期多态，如 struct Derived : EmptyPolicy { int x; } sizeof=4。"
+    },
+    {
+      "q": "lambda 表达式的本质是？",
+      "level": "高级",
+      "options": [
+        "函数指针",
+        "编译期生成的匿名闭包类（函数对象）",
+        "宏展开",
+        "内联函数"
+      ],
+      "answer": 1,
+      "explain": "lambda 编译期生成唯一的闭包类，捕获的变量成为成员，operator() 执行函数体。每个 lambda 有唯一类型。"
+    },
+    {
+      "q": "[=] 捕获方式是？",
+      "level": "进阶",
+      "options": [
+        "引用捕获所有变量",
+        "值捕获所有用到的变量（拷贝副本）",
+        "捕获 this",
+        "不捕获"
+      ],
+      "answer": 1,
+      "explain": "[=] 值捕获所有用到的外部变量（拷贝副本），[&] 引用捕获。operator() 默认 const，值捕获的副本不可修改（除非 mutable）。"
+    },
+    {
+      "q": "lambda 的 mutable 关键字作用是？",
+      "level": "高级",
+      "options": [
+        "可变参数",
+        "使 operator() 非 const，可修改值捕获的副本",
+        "线程安全",
+        "性能优化"
+      ],
+      "answer": 1,
+      "explain": "默认 lambda 的 operator() 是 const，不能修改值捕获的副本。mutable 使其非 const，可修改副本（但不影响原变量）。"
+    },
+    {
+      "q": "无捕获 lambda 的特殊能力是？",
+      "level": "高级",
+      "options": [
+        "更快",
+        "可隐式转换为函数指针",
+        "可递归",
+        "可内联"
+      ],
+      "answer": 1,
+      "explain": "无捕获 lambda 没有状态，可隐式转换为对应类型的函数指针，可与 C API 交互。有捕获则不行。"
+    },
+    {
+      "q": "std::function 相比模板 auto 的缺点是？",
+      "level": "高级",
+      "options": [
+        "不能存储 lambda",
+        "有运行时开销（类型擦除、可能的堆分配、虚调用）",
+        "不安全",
+        "类型不安全"
+      ],
+      "answer": 1,
+      "explain": "std::function 用类型擦除存储任意可调用对象，有运行时开销（堆分配、间接调用）。模板 auto 在编译期确定类型可内联，零开销。"
     }
   ],
   "java": [
@@ -19269,6 +20745,390 @@ const QUESTIONS = {
       ],
       "answer": 1,
       "explain": "实例方法的局部变量表第 0 个 slot 是 this 引用，之后是参数和局部变量。long/double 占 2 个 slot，其他占 1 个。静态方法没有 this。"
+    },
+    {
+      "q": "双亲委派模型中，类加载请求首先委派给？",
+      "level": "高级",
+      "options": [
+        "子加载器",
+        "父加载器",
+        "自身",
+        "随机"
+      ],
+      "answer": 1,
+      "explain": "双亲委派：收到加载请求先委派给父加载器，父加载器无法加载时子加载器才尝试，保证核心类安全和类的唯一性。"
+    },
+    {
+      "q": "双亲委派模型的主要目的是？",
+      "level": "高级",
+      "options": [
+        "提高性能",
+        "保证核心类不被篡改和类的唯一性",
+        "节省内存",
+        "简化加载"
+      ],
+      "answer": 1,
+      "explain": "双亲委派保证 java.lang.String 等核心类由 Bootstrap 加载，自定义同名类无法覆盖，防止安全隐患；同时保证同一类只加载一次。"
+    },
+    {
+      "q": "Tomcat 打破双亲委派的原因是？",
+      "level": "高级",
+      "options": [
+        "性能优化",
+        "隔离不同 Web 应用，各自加载自己的类",
+        "节省内存",
+        "热部署"
+      ],
+      "answer": 1,
+      "explain": "Tomcat 每个 Web 应用有独立类加载器，优先自己加载（打破双亲委派），实现应用间类隔离，避免冲突。"
+    },
+    {
+      "q": "SPI 机制（如 JDBC Driver）加载实现类用的是？",
+      "level": "高级",
+      "options": [
+        "Bootstrap ClassLoader",
+        "线程上下文类加载器",
+        "Extension ClassLoader",
+        "自定义"
+      ],
+      "answer": 1,
+      "explain": "SPI 接口由 Bootstrap 加载，实现在 classpath 需 Application 加载器。用 Thread.currentThread().getContextClassLoader() 打破双亲委派加载实现。"
+    },
+    {
+      "q": "AQS 的核心组成是？",
+      "level": "高级",
+      "options": [
+        "volatile state + CLH 队列",
+        "synchronized + 队列",
+        "CAS + 锁",
+        "volatile + 链表"
+      ],
+      "answer": 0,
+      "explain": "AQS 用 volatile int state 表示同步状态 + CLH FIFO 双向队列管理等待线程，是 ReentrantLock/Semaphore/CountDownLatch 的基础。"
+    },
+    {
+      "q": "ReentrantLock 中非公平锁与公平锁的区别是？",
+      "level": "高级",
+      "options": [
+        "性能不同",
+        "非公平锁先 CAS 抢占，公平锁先检查队列是否有前驱",
+        "公平锁更快",
+        "无区别"
+      ],
+      "answer": 1,
+      "explain": "非公平锁 tryAcquire 先 CAS 抢占（可能插队），吞吐量高；公平锁先检查队列有无前驱线程，按 FIFO 顺序，不会饥饿。"
+    },
+    {
+      "q": "ReentrantReadWriteLock 中 state 的设计是？",
+      "level": "高级",
+      "options": [
+        "单独字段",
+        "高16位读锁计数，低16位写锁计数",
+        "两个 state",
+        "数组"
+      ],
+      "answer": 1,
+      "explain": "读写锁用一个 int 的 state：高16位表示读锁持有数（共享），低16位表示写锁重入数（独占），巧妙复用。"
+    },
+    {
+      "q": "写锁可以降级为读锁吗？",
+      "level": "高级",
+      "options": [
+        "可以，持有写锁时获取读锁再释放写锁",
+        "不可以",
+        "只能升级",
+        "视情况"
+      ],
+      "answer": 0,
+      "explain": "写锁可降级：持有写锁时获取读锁，再释放写锁。但读锁不能升级为写锁（会导致死锁）。"
+    },
+    {
+      "q": "Condition 相比 Object.wait/notify 的优势是？",
+      "level": "高级",
+      "options": [
+        "更快",
+        "一个 Lock 可创建多个 Condition（多等待队列），精确唤醒",
+        "线程安全",
+        "无死锁"
+      ],
+      "answer": 1,
+      "explain": "Condition 允许一个 Lock 关联多个等待队列，可以按条件分组等待并精确唤醒，比 Object 的单等待队列更灵活。"
+    },
+    {
+      "q": "JDK 8 的 ConcurrentHashMap 实现方式是？",
+      "level": "高级",
+      "options": [
+        "分段锁 Segment",
+        "CAS + synchronized 锁桶节点",
+        "全局锁",
+        "无锁"
+      ],
+      "answer": 1,
+      "explain": "JDK 8 ConcurrentHashMap 用数组+链表/红黑树，查询无锁，写操作用 CAS + synchronized 锁单个桶节点，粒度比 JDK7 的分段锁更细。"
+    },
+    {
+      "q": "CopyOnWriteArrayList 适合的场景是？",
+      "level": "高级",
+      "options": [
+        "写多读少",
+        "读多写少（如监听器列表、配置）",
+        "高并发写",
+        "频繁修改"
+      ],
+      "answer": 1,
+      "explain": "写时复制整个数组开销大，但读完全无锁性能极高，适合读远多于写的场景，如事件监听器列表、配置缓存。"
+    },
+    {
+      "q": "ArrayBlockingQueue 和 LinkedBlockingQueue 的区别是？",
+      "level": "高级",
+      "options": [
+        "无区别",
+        "Array 有界单锁，Linked 默认无界双锁（读写分离吞吐高）",
+        "Array 更快",
+        "Linked 更安全"
+      ],
+      "answer": 1,
+      "explain": "ArrayBlockingQueue 有界单锁（put/take 互斥）；LinkedBlockingQueue 默认 Integer.MAX_VALUE 近似无界，put/take 两把锁分离，吞吐量更高但有 OOM 风险。"
+    },
+    {
+      "q": "SynchronousQueue 的特点是？",
+      "level": "高级",
+      "options": [
+        "无界队列",
+        "容量为0，每个 put 必须等待一个 take",
+        "有界队列",
+        "性能最低"
+      ],
+      "answer": 1,
+      "explain": "SynchronousQueue 不存储元素，容量为0，每个 put 阻塞直到有 take 接收，直接交付。Executors.newCachedThreadPool 用它实现即时线程创建。"
+    },
+    {
+      "q": "DelayQueue 取出元素的条件是？",
+      "level": "高级",
+      "options": [
+        "队列非空",
+        "元素到期（getDelay <= 0）",
+        "先进先出",
+        "优先级最高"
+      ],
+      "answer": 1,
+      "explain": "DelayQueue 元素必须实现 Delayed 接口，take() 阻塞直到队首元素到期（延迟时间归零），用于定时任务、延迟消息。"
+    },
+    {
+      "q": "ThreadLocal 的实现原理是？",
+      "level": "高级",
+      "options": [
+        "共享变量加锁",
+        "每个 Thread 有 ThreadLocalMap，key 是 ThreadLocal（弱引用）",
+        "全局 Map",
+        "线程局部栈"
+      ],
+      "answer": 1,
+      "explain": "ThreadLocal 的值存在每个 Thread 的 ThreadLocalMap 中，key 是 ThreadLocal 对象（弱引用），value 是实际值，实现线程隔离。"
+    },
+    {
+      "q": "ThreadLocal 内存泄漏的原因是？",
+      "level": "高级",
+      "options": [
+        "ThreadLocal 被回收",
+        "key 弱引用回收后变 null，但 value 被 Entry 强引用且 Thread 存活（线程池）",
+        "GC 不工作",
+        "value 弱引用"
+      ],
+      "answer": 1,
+      "explain": "ThreadLocal 被回收后 key 变 null，但 value 仍被 Entry 强引用，Entry 被 ThreadLocalMap 引用，Thread 不结束（线程池复用）则 value 无法回收，导致泄漏。"
+    },
+    {
+      "q": "ThreadLocal 正确使用方式是？",
+      "level": "高级",
+      "options": [
+        "用完不管",
+        "用完必须调用 remove()，尤其线程池环境",
+        "手动 GC",
+        "用弱引用 value"
+      ],
+      "answer": 1,
+      "explain": "线程池中线程复用，ThreadLocal 不清除会导致数据串号和内存泄漏。必须 try-finally 中 remove()。"
+    },
+    {
+      "q": "InheritableThreadLocal 在线程池中失效的原因是？",
+      "level": "高级",
+      "options": [
+        "线程池不支持",
+        "子线程创建时才复制，线程池复用线程不重新创建",
+        "性能问题",
+        "安全限制"
+      ],
+      "answer": 1,
+      "explain": "InheritableThreadLocal 在子线程创建时复制父线程的值，但线程池复用已有线程（不创建新线程），不会重新复制。需用 TransmittableThreadLocal 解决。"
+    },
+    {
+      "q": "ThreadPoolExecutor 任务提交流程正确的是？",
+      "level": "高级",
+      "options": [
+        "先创建到最大线程再入队列",
+        "先入队列，队列满再创建非核心线程",
+        "先创建核心线程，满了入队列，队列满创建非核心线程到最大，再满执行拒绝",
+        "直接拒绝"
+      ],
+      "answer": 2,
+      "explain": "流程：核心线程未满→创建核心线程；已满→入队列；队列满→创建非核心线程到 maximumPoolSize；都满→执行拒绝策略。注意是先入队列再创建非核心线程。"
+    },
+    {
+      "q": "ThreadPoolExecutor 默认拒绝策略是？",
+      "level": "高级",
+      "options": [
+        "CallerRunsPolicy",
+        "AbortPolicy（抛异常）",
+        "DiscardPolicy",
+        "DiscardOldestPolicy"
+      ],
+      "answer": 1,
+      "explain": "默认 AbortPolicy 抛出 RejectedExecutionException。CallerRunsPolicy 由提交线程执行（背压降级），DiscardPolicy 丢弃，DiscardOldestPolicy 丢最老的。"
+    },
+    {
+      "q": "Executors.newFixedThreadPool 的潜在问题是？",
+      "level": "高级",
+      "options": [
+        "线程数太少",
+        "使用无界队列 LinkedBlockingQueue，可能 OOM",
+        "拒绝策略不当",
+        "无问题"
+      ],
+      "answer": 1,
+      "explain": "newFixedThreadPool 用 LinkedBlockingQueue（默认 Integer.MAX_VALUE 无界），任务积压可能导致 OOM。生产环境应显式用 ThreadPoolExecutor + 有界队列。"
+    },
+    {
+      "q": "CPU 密集型任务的线程数建议设为？",
+      "level": "高级",
+      "options": [
+        "N×2",
+        "N+1（N=CPU核数）",
+        "N×10",
+        "越多越好"
+      ],
+      "answer": 1,
+      "explain": "CPU 密集型线程数设为 N+1（N=CPU核数），多出的1个用于在偶发阻塞（如缺页中断）时保持 CPU 利用率。过多线程反而增加切换开销。"
+    },
+    {
+      "q": "CPU 飙高排查时 jstack 输出中线程 TID 需要？",
+      "level": "高级",
+      "options": [
+        "直接查找",
+        "转十六进制后 grep 匹配 nid",
+        "转八进制",
+        "不需要转换"
+      ],
+      "answer": 1,
+      "explain": "jstack 中线程 nid 是十六进制，top -Hp 得到的 TID 是十进制，需 printf '%x\\n' 转十六进制后 grep 匹配定位线程。"
+    },
+    {
+      "q": "OOM 排查应开启的 JVM 参数是？",
+      "level": "高级",
+      "options": [
+        "-Xmx",
+        "-XX:+HeapDumpOnOutOfMemoryError",
+        "-verbose:gc",
+        "-XX:+UseG1GC"
+      ],
+      "answer": 1,
+      "explain": "-XX:+HeapDumpOnOutOfMemoryError 在 OOM 时自动 dump 堆到 -XX:HeapDumpPath 指定路径，便于用 MAT 等工具分析大对象和泄漏。"
+    },
+    {
+      "q": "GC overhead limit exceeded 表示？",
+      "level": "高级",
+      "options": [
+        "堆内存不足",
+        "GC 耗时超 98% 但回收不足 2%，连续多次",
+        "GC 停顿太长",
+        "Full GC 太多"
+      ],
+      "answer": 1,
+      "explain": "GC overhead limit exceeded：GC 占用超过 98% CPU 时间但回收不到 2% 堆，连续发生时抛出，说明堆几乎满且 GC 无法有效回收。"
+    },
+    {
+      "q": "Spring Bean 生命周期中 AOP 代理创建的时机是？",
+      "level": "高级",
+      "options": [
+        "实例化时",
+        "BeanPostProcessor.postProcessAfterInitialization",
+        "初始化后",
+        "销毁前"
+      ],
+      "answer": 1,
+      "explain": "AOP 代理在 BeanPostProcessor 的 postProcessAfterInitialization 阶段创建，此时 Bean 已完成初始化，AnnotationAwareAspectJAutoProxyCreator 匹配切点后生成代理。"
+    },
+    {
+      "q": "Spring 三级缓存解决循环依赖，存的是？",
+      "level": "高级",
+      "options": [
+        "完整 Bean / 半成品 Bean / ObjectFactory",
+        "三个完整 Bean",
+        "三个 Map",
+        "无意义"
+      ],
+      "answer": 0,
+      "explain": "一级 singletonObjects 存完整 Bean，二级 earlySingletonObjects 存早期半成品，三级 singletonFactories 存 ObjectFactory（可生成代理），三级缓存是为了处理 AOP 代理的循环依赖。"
+    },
+    {
+      "q": "构造器注入的循环依赖能否被 Spring 解决？",
+      "level": "高级",
+      "options": [
+        "能",
+        "不能，启动报错",
+        "能但需配置",
+        "视情况"
+      ],
+      "answer": 1,
+      "explain": "构造器循环依赖无法解决，因为实例化阶段就需要依赖，而此时还未放入缓存。只能解决 setter/字段注入的单例循环依赖。"
+    },
+    {
+      "q": "@Transactional 事务失效的常见原因不包括？",
+      "level": "高级",
+      "options": [
+        "自调用（this.method 不走代理）",
+        "方法非 public",
+        "异常被 catch 未抛出",
+        "使用 @Autowired"
+      ],
+      "answer": 3,
+      "explain": "事务失效原因：自调用不走代理、非 public 方法、异常被吞、回滚异常类型不匹配、传播行为不当等。@Autowired 是正常依赖注入不影响事务。"
+    },
+    {
+      "q": "Spring AOP 默认代理方式（有接口时）是？",
+      "level": "高级",
+      "options": [
+        "CGLIB",
+        "JDK 动态代理（基于接口）",
+        "ASM 字节码",
+        "无代理"
+      ],
+      "answer": 1,
+      "explain": "Spring 默认：目标类有接口时用 JDK 动态代理（基于接口），无接口时用 CGLIB（基于继承）。Spring Boot 2.x+ 默认用 CGLIB。"
+    },
+    {
+      "q": "Spring Boot 自动配置的加载机制是？",
+      "level": "高级",
+      "options": [
+        "扫描注解",
+        "读取 spring.factories / imports 文件中的类列表并按 @Conditional 过滤",
+        "反射",
+        "配置文件"
+      ],
+      "answer": 1,
+      "explain": "@EnableAutoConfiguration 通过 AutoConfigurationImportSelector 读取 META-INF/spring.factories（2.7+ 用 AutoConfiguration.imports），加载自动配置类列表，再经 @Conditional 条件过滤决定是否生效。"
+    },
+    {
+      "q": "@ConditionalOnMissingBean 的作用是？",
+      "level": "高级",
+      "options": [
+        "容器无此 Bean 才创建默认配置",
+        "容器有此 Bean 才创建",
+        "缺少 Bean 报错",
+        "删除 Bean"
+      ],
+      "answer": 0,
+      "explain": "@ConditionalOnMissingBean 表示容器中不存在该类型 Bean 时才创建，允许用户自定义 Bean 覆盖 Spring Boot 的默认自动配置，实现可扩展性。"
     }
   ],
   "mysql": [
@@ -20183,6 +22043,330 @@ const QUESTIONS = {
       ],
       "answer": 2,
       "explain": "MySQL 8.0 默认 utf8mb4_0900_ai_ci，基于 UCA 9.0 标准，ai=不区分重音，ci=不区分大小写。比 5.7 的 general_ci 更精确，比 unicode_ci 更现代。"
+    },
+    {
+      "q": "主从延迟 Seconds_Behind_Master 持续增大的常见原因是？",
+      "level": "高级",
+      "options": [
+        "网络慢",
+        "从库单线程串行重放 binlog、大事务、DDL",
+        "主库写入太快",
+        "从库内存大"
+      ],
+      "answer": 1,
+      "explain": "从库 SQL 线程串行重放 binlog，主库多线程写入时从库跟不上；大事务和 DDL 也需同等时间重放，导致延迟累积。"
+    },
+    {
+      "q": "MySQL 多线程复制（MTS）基于哪种并行机制（8.0最优）？",
+      "level": "高级",
+      "options": [
+        "基于表",
+        "基于行",
+        "基于 WRITESET（分析无冲突事务并行）",
+        "随机并行"
+      ],
+      "answer": 2,
+      "explain": "MySQL 8.0 基于 WRITESET 的并行复制（binlog_transaction_dependency_tracking=WRITESET），分析事务修改的行是否冲突，无冲突则可并行重放，效果最优。"
+    },
+    {
+      "q": "无主键表导致从库重放慢的原因是？",
+      "level": "高级",
+      "options": [
+        "无索引查询慢",
+        "ROW 格式 binlog 重放需全表扫描定位行",
+        "锁表",
+        "内存不足"
+      ],
+      "answer": 1,
+      "explain": "ROW 格式 binlog 记录每行变更，从库重放 UPDATE/DELETE 需定位行。无主键只能全表扫描匹配，极慢。有主键则通过索引快速定位。"
+    },
+    {
+      "q": "MySQL 8.0 INSTANT DDL 的特点是？",
+      "level": "高级",
+      "options": [
+        "复制全表",
+        "只修改元数据，瞬间完成，不锁表",
+        "需要触发器",
+        "耗时但无锁"
+      ],
+      "answer": 1,
+      "explain": "INSTANT DDL（8.0.12+）只修改数据字典元数据，不复制数据、不锁表，瞬间完成。但仅支持部分操作（如末尾加列）。"
+    },
+    {
+      "q": "大表在线变更推荐使用的工具是？",
+      "level": "高级",
+      "options": [
+        "直接 ALTER TABLE",
+        "gh-ost / pt-online-schema-change",
+        "mysqldump",
+        "复制表"
+      ],
+      "answer": 1,
+      "explain": "gh-ost（基于 binlog 无触发器）和 pt-osc（基于触发器）通过创建影子表+增量同步+切换实现无锁在线变更，适合大表 DDL。"
+    },
+    {
+      "q": "gh-ost 相比 pt-osc 的优势是？",
+      "level": "高级",
+      "options": [
+        "更快",
+        "基于 binlog 同步不使用触发器，对主库负载影响小",
+        "支持更多操作",
+        "更简单"
+      ],
+      "answer": 1,
+      "explain": "gh-ost 基于 binlog 同步增量数据，不使用触发器，避免触发器对主库的性能影响；pt-osc 基于触发器，可能影响主库写入性能。"
+    },
+    {
+      "q": "pt-query-digest 分析慢日志的方式是？",
+      "level": "高级",
+      "options": [
+        "逐行查看",
+        "按 SQL 指纹（fingerprint）聚合并统计耗时/次数",
+        "按时间排序",
+        "只看最后一条"
+      ],
+      "answer": 1,
+      "explain": "pt-query-digest 将相似 SQL 归一化为指纹（如参数替换为?），聚合统计调用次数、总耗时、平均耗时、扫描行数，便于定位 TOP 慢查询。"
+    },
+    {
+      "q": "以下哪种 SQL 会导致索引失效？",
+      "level": "进阶",
+      "options": [
+        "WHERE id=1",
+        "WHERE DATE(created)='2024-01-01'",
+        "WHERE name LIKE 'abc%'",
+        "WHERE status IN(1,2)"
+      ],
+      "answer": 1,
+      "explain": "对索引列使用函数（DATE、UPPER 等）会导致索引失效。应改为 created >= '2024-01-01' AND created < '2024-01-02' 范围查询。"
+    },
+    {
+      "q": "EXPLAIN 中 Extra 显示 Using filesort 表示？",
+      "level": "进阶",
+      "options": [
+        "使用了索引",
+        "需要额外排序（可能需优化 ORDER BY 走索引）",
+        "使用了临时表",
+        "查询很快"
+      ],
+      "answer": 1,
+      "explain": "Using filesort 表示无法用索引完成排序，需额外排序操作，大结果集时性能差。应优化 ORDER BY 字段使其走索引。"
+    },
+    {
+      "q": "死锁产生的必要条件是？",
+      "level": "高级",
+      "options": [
+        "单事务",
+        "两个或多个事务互相持有对方需要的锁形成循环等待",
+        "锁等待超时",
+        "事务太长"
+      ],
+      "answer": 1,
+      "explain": "死锁是多个事务互相持有对方需要的锁，形成循环等待。InnoDB 自动检测并回滚代价较小的事务（victim）。"
+    },
+    {
+      "q": "预防死锁最有效的方法是？",
+      "level": "高级",
+      "options": [
+        "缩短事务",
+        "固定加锁顺序（所有事务按相同顺序加锁）",
+        "降低隔离级别",
+        "增加超时"
+      ],
+      "answer": 1,
+      "explain": "固定加锁顺序（如按主键升序更新）可避免循环等待，是最有效的预防方法。缩短事务和降低隔离级别也有帮助。"
+    },
+    {
+      "q": "查看最近死锁信息的命令是？",
+      "level": "高级",
+      "options": [
+        "SHOW PROCESSLIST",
+        "SHOW ENGINE INNODB STATUS",
+        "SHOW ERRORS",
+        "SHOW WARNINGS"
+      ],
+      "answer": 1,
+      "explain": "SHOW ENGINE INNODB STATUS\\G 的 LATEST DETECTED DEADLOCK 段显示最近一次死锁详情，包括两个事务的 SQL 和锁持有/等待情况。"
+    },
+    {
+      "q": "间隙锁导致的死锁通常发生在哪个隔离级别？",
+      "level": "高级",
+      "options": [
+        "READ UNCOMMITTED",
+        "READ COMMITTED",
+        "REPEATABLE READ（RR）",
+        "SERIALIZABLE"
+      ],
+      "answer": 2,
+      "explain": "RR 隔离级别下 InnoDB 使用临键锁（含间隙锁）防幻读，范围查询加间隙锁可能与其他事务的插入冲突导致死锁。RC 无间隙锁。"
+    },
+    {
+      "q": "MySQL 8.0 不可见索引（Invisible Index）的用途是？",
+      "level": "高级",
+      "options": [
+        "隐藏数据",
+        "验证删除索引的影响，无影响再删除",
+        "加速查询",
+        "节省空间"
+      ],
+      "answer": 1,
+      "explain": "将索引设为 INVISIBLE 后优化器不使用它，观察查询性能是否受影响，若不受影响说明索引无用可安全删除，降低删除风险。"
+    },
+    {
+      "q": "MySQL 8.0 真正生效的降序索引指的是？",
+      "level": "进阶",
+      "options": [
+        "语法兼容",
+        "按 DESC 真正存储索引，加速 ORDER BY DESC",
+        "只是排序方向",
+        "无实际作用"
+      ],
+      "answer": 1,
+      "explain": "5.7 的 DESC 索引只是语法兼容，实际仍升序存储；8.0 真正按降序存储 B+ 树，能加速 ORDER BY ... DESC 查询。"
+    },
+    {
+      "q": "SKIP LOCKED 的适用场景是？",
+      "level": "高级",
+      "options": [
+        "跳过错误",
+        "任务队列中跳过被锁定的行，避免阻塞",
+        "跳过权限",
+        "跳过索引"
+      ],
+      "answer": 1,
+      "explain": "FOR UPDATE SKIP LOCKED 跳过被其他事务锁定的行，不阻塞，适合任务队列并发取任务，每个 worker 取不同任务。"
+    },
+    {
+      "q": "MySQL 9.0 新增的 VECTOR 类型用于？",
+      "level": "高级",
+      "options": [
+        "图形处理",
+        "AI 场景存储向量数据，支持相似度搜索",
+        "数组存储",
+        "坐标存储"
+      ],
+      "answer": 1,
+      "explain": "MySQL 9.0 新增 VECTOR 类型用于 AI/机器学习场景存储向量嵌入，配合 DISTANCE 函数计算向量相似度，支持向量检索。"
+    },
+    {
+      "q": "InnoDB 聚簇索引推荐使用自增主键的原因是？",
+      "level": "进阶",
+      "options": [
+        "查询快",
+        "顺序写入避免页分裂，插入性能好且索引紧凑",
+        "节省内存",
+        "唯一性好"
+      ],
+      "answer": 1,
+      "explain": "自增主键顺序写入，新数据追加到 B+ 树末尾，避免页分裂和碎片；主键越小二级索引也越小（二级索引存储主键值）。"
+    },
+    {
+      "q": "UUID 作为主键的主要问题是？",
+      "level": "进阶",
+      "options": [
+        "太长",
+        "随机无序导致频繁页分裂，索引体积大(16字节)",
+        "不唯一",
+        "不能做主键"
+      ],
+      "answer": 1,
+      "explain": "UUID 随机无序，插入位置随机导致频繁页分裂和碎片，性能差；16字节比 BIGINT(8) 大，所有二级索引都变大。可用 UUID v7 或 UUID_TO_BIN 变有序。"
+    },
+    {
+      "q": "雪花算法 Snowflake 生成的 ID 特点是？",
+      "level": "进阶",
+      "options": [
+        "完全随机",
+        "趋势递增、分布式唯一、可存为 BIGINT",
+        "字符串",
+        "固定长度"
+      ],
+      "answer": 1,
+      "explain": "雪花算法 64 位 = 时间戳+机器ID+序列号，趋势递增（时间有序，减少页分裂），分布式唯一，存为 BIGINT 节省空间。需处理时钟回拨。"
+    },
+    {
+      "q": "读写分离中写后立即读从库可能遇到的问题是？",
+      "level": "进阶",
+      "options": [
+        "权限不足",
+        "主从延迟导致读到旧数据",
+        "连接失败",
+        "死锁"
+      ],
+      "answer": 1,
+      "explain": "主库写入后 binlog 异步同步到从库，立即读从库可能因延迟读到旧数据。解决：关键读走主库、会话粘连、半同步复制等。"
+    },
+    {
+      "q": "ShardingSphere 强制读主库的方式是？",
+      "level": "高级",
+      "options": [
+        "无法强制",
+        "HintManager.setWriteRouteOnly() 或 SQL Hint",
+        "修改配置",
+        "重启"
+      ],
+      "answer": 1,
+      "explain": "ShardingSphere 支持 HintManager.setWriteRouteOnly() 在代码中强制走主库，也支持 SQL 注释 /*MASTER*/ 等方式，用于写后立即读场景。"
+    },
+    {
+      "q": "缓冲池命中率计算公式是？",
+      "level": "高级",
+      "options": [
+        "reads/questions",
+        "1 - Innodb_buffer_pool_reads / Innodb_buffer_pool_read_requests",
+        "reads/Uptime",
+        "命中/总连接"
+      ],
+      "answer": 1,
+      "explain": "命中率 = 1 - 物理读/逻辑读 = 1 - Innodb_buffer_pool_reads / Innodb_buffer_pool_read_requests。命中率应 >99%，低说明缓冲池太小。"
+    },
+    {
+      "q": "sys.schema_unused_indexes 视图的用途是？",
+      "level": "进阶",
+      "options": [
+        "查找错误",
+        "找出未被使用的索引（可考虑删除）",
+        "找重复索引",
+        "找缺失索引"
+      ],
+      "answer": 1,
+      "explain": "sys.schema_unused_indexes 列出从未被查询使用的索引，这些索引只增加写入开销不带来查询收益，可考虑删除以提升写入性能。"
+    },
+    {
+      "q": "连接数告警通常设置为？",
+      "level": "进阶",
+      "options": [
+        "超过1",
+        "超过 max_connections 的 80%",
+        "超过10",
+        "固定100"
+      ],
+      "answer": 1,
+      "explain": "Threads_connected 超过 max_connections 的 80% 应告警，预留缓冲避免连接耗尽导致拒绝连接。可通过连接池控制。"
+    },
+    {
+      "q": "Prometheus 监控 MySQL 使用的采集组件是？",
+      "level": "进阶",
+      "options": [
+        "node_exporter",
+        "mysqld_exporter",
+        "mysqld_agent",
+        "mysql_monitor"
+      ],
+      "answer": 1,
+      "explain": "mysqld_exporter 连接 MySQL 采集 SHOW GLOBAL STATUS 等指标，暴露给 Prometheus 抓取，配合 Grafana 可视化监控。"
+    },
+    {
+      "q": "performance_schema 相比 SHOW STATUS 的优势是？",
+      "level": "高级",
+      "options": [
+        "更快",
+        "细粒度事件级监控（锁、IO、语句、内存等）",
+        "更简单",
+        "不需要权限"
+      ],
+      "answer": 1,
+      "explain": "performance_schema 提供细粒度的事件级监控，包括锁等待、IO 等待、语句执行、内存分配等详细数据，比 SHOW STATUS 的全局聚合更精细。sys 库提供友好视图。"
     }
   ],
   "sql": [
@@ -21049,6 +23233,378 @@ const QUESTIONS = {
       ],
       "answer": 0,
       "explain": "SUBSTRING_INDEX(str, delim, n) 返回第 n 个分隔符之前的子串。n=2 返回 'a,b'（前两个字段）。n=-2 返回 'c,d'（后两个字段）。常用于分割逗号分隔字段。"
+    },
+    {
+      "q": "SQL 标准中字符串拼接运算符是？",
+      "level": "进阶",
+      "options": [
+        "+",
+        "||",
+        "CONCAT",
+        "&"
+      ],
+      "answer": 1,
+      "explain": "SQL 标准用 || 拼接字符串，PostgreSQL/Oracle/SQLite 支持。MySQL 默认 || 是逻辑 OR，需启用 PIPES_AS_CONCAT 模式或用 CONCAT()。SQL Server 用 +。"
+    },
+    {
+      "q": "跨数据库通用的空值替换函数是？",
+      "level": "进阶",
+      "options": [
+        "IFNULL",
+        "NVL",
+        "COALESCE",
+        "ISNULL"
+      ],
+      "answer": 2,
+      "explain": "COALESCE 是 SQL 标准，所有主流数据库支持。IFNULL 是 MySQL，NVL 是 Oracle，ISNULL 是 SQL Server。优先用 COALESCE 保证可移植性。"
+    },
+    {
+      "q": "SQL 标准的分页语法（SQL:2008）是？",
+      "level": "进阶",
+      "options": [
+        "LIMIT n OFFSET m",
+        "TOP n",
+        "ROWNUM",
+        "OFFSET ... FETCH NEXT"
+      ],
+      "answer": 3,
+      "explain": "SQL:2008 标准用 OFFSET ... ROWS FETCH NEXT ... ROWS ONLY，Oracle 12c+/SQL Server 支持。MySQL/PostgreSQL 用 LIMIT/OFFSET。"
+    },
+    {
+      "q": "UPSERT 的含义是？",
+      "level": "进阶",
+      "options": [
+        "删除后插入",
+        "存在则更新不存在则插入（原子操作）",
+        "批量插入",
+        "更新所有"
+      ],
+      "answer": 1,
+      "explain": "UPSERT = UPDATE or INSERT，存在则更新不存在则插入，原子操作避免先查再写的竞态，常用于幂等写入和数据同步。"
+    },
+    {
+      "q": "MySQL 实现 UPSERT 的推荐语法是？",
+      "level": "进阶",
+      "options": [
+        "REPLACE INTO",
+        "INSERT ON DUPLICATE KEY UPDATE",
+        "MERGE INTO",
+        "UPDATE OR INSERT"
+      ],
+      "answer": 1,
+      "explain": "INSERT ... ON DUPLICATE KEY UPDATE 基于唯一键冲突判断，存在则更新。REPLACE INTO 是先 DELETE 再 INSERT，有副作用（自增ID变化、触发器异常），不推荐。"
+    },
+    {
+      "q": "PostgreSQL 的 UPSERT 语法是？",
+      "level": "高级",
+      "options": [
+        "ON DUPLICATE KEY UPDATE",
+        "ON CONFLICT DO UPDATE",
+        "MERGE INTO",
+        "REPLACE INTO"
+      ],
+      "answer": 1,
+      "explain": "PostgreSQL 用 INSERT ... ON CONFLICT (列) DO UPDATE SET ...，ON CONFLICT 指定冲突列，DO NOTHING 表示忽略冲突，EXCLUDED 引用插入值。"
+    },
+    {
+      "q": "SQL:2003 标准 MERGE 语句支持的分支是？",
+      "level": "高级",
+      "options": [
+        "INSERT/DELETE",
+        "WHEN MATCHED THEN UPDATE/DELETE 和 WHEN NOT MATCHED THEN INSERT",
+        "只有 UPDATE",
+        "只有 INSERT"
+      ],
+      "answer": 1,
+      "explain": "MERGE INTO target USING source ON condition，WHEN MATCHED THEN UPDATE/DELETE（匹配则更新或删除），WHEN NOT MATCHED THEN INSERT（不匹配则插入）。Oracle/SQL Server 支持标准 MERGE。"
+    },
+    {
+      "q": "普通视图与物化视图的区别是？",
+      "level": "高级",
+      "options": [
+        "无区别",
+        "普通视图只存定义不存数据，物化视图实际存储查询结果",
+        "物化视图更快但无数据",
+        "普通视图存数据"
+      ],
+      "answer": 1,
+      "explain": "普通视图是虚拟表只存 SQL 定义，每次查询展开执行；物化视图实际存储查询结果，查询极快但需维护（数据可能过期）。"
+    },
+    {
+      "q": "物化视图的刷新策略不包括？",
+      "level": "高级",
+      "options": [
+        "ON DEMAND 手动刷新",
+        "ON COMMIT 自动刷新",
+        "定时刷新",
+        "每次查询刷新"
+      ],
+      "answer": 3,
+      "explain": "物化视图刷新策略：ON DEMAND 手动 REFRESH、ON COMMIT 基表提交时自动刷新、定时任务刷新、FAST 增量刷新。不会每次查询都刷新（那样就失去意义）。"
+    },
+    {
+      "q": "MySQL 原生是否支持物化视图？",
+      "level": "高级",
+      "options": [
+        "支持",
+        "不支持，需用汇总表+触发器/定时任务模拟",
+        "仅企业版支持",
+        "8.0开始支持"
+      ],
+      "answer": 1,
+      "explain": "MySQL 不原生支持物化视图，可用汇总表配合触发器（实时同步）或定时任务（延迟同步）模拟实现。PostgreSQL/Oracle/SQL Server 原生支持。"
+    },
+    {
+      "q": "Oracle 物化视图的查询改写（Query Rewrite）是指？",
+      "level": "高级",
+      "options": [
+        "改写用户SQL",
+        "用户查原表，优化器自动改写为查物化视图",
+        "自动创建视图",
+        "优化SQL语法"
+      ],
+      "answer": 1,
+      "explain": "启用 QUERY REWRITE 后，用户查询原表时优化器自动判断能否用物化视图替代，透明加速查询，应用无需修改 SQL。"
+    },
+    {
+      "q": "防御 SQL 注入最有效的措施是？",
+      "level": "进阶",
+      "options": [
+        "过滤特殊字符",
+        "参数化查询（预编译+参数绑定）",
+        "WAF",
+        "输入校验"
+      ],
+      "answer": 1,
+      "explain": "参数化查询将参数作为数据而非代码执行，从根本上杜绝注入。预编译 SQL 模板固定，参数无法改变 SQL 结构。是最有效的防御手段。"
+    },
+    {
+      "q": "以下哪种写法能防 SQL 注入？",
+      "level": "进阶",
+      "options": [
+        "拼接字符串：sql+name",
+        "使用 ? 占位符的 PreparedStatement",
+        "用 replace 替换引号",
+        "正则过滤"
+      ],
+      "answer": 1,
+      "explain": "PreparedStatement 使用 ? 占位符，参数通过 setString 等方法绑定，参数值不会被解释为 SQL 代码，有效防止注入。字符串拼接则可被注入。"
+    },
+    {
+      "q": "LIKE 查询防注入的正确做法是？",
+      "level": "高级",
+      "options": [
+        "直接拼接 %keyword%",
+        "CONCAT('%', ?, '%') 参数化通配符内内容",
+        "转义引号",
+        "过滤%"
+      ],
+      "answer": 1,
+      "explain": "用 CONCAT('%', ?, '%') 配合参数绑定，keyword 作为参数传入。注意用户输入的 % 仍作通配符，需 ESCAPE 子句转义用户输入的 % 和 _。"
+    },
+    {
+      "q": "ORDER BY 字段不能直接参数化的原因是？",
+      "level": "高级",
+      "options": [
+        "性能问题",
+        "ORDER BY 后是列名/标识符而非数据值，占位符只能绑定数据",
+        "语法不支持",
+        "安全限制"
+      ],
+      "answer": 1,
+      "explain": "参数化查询只能绑定数据值，不能绑定列名/表名等 SQL 标识符。ORDER BY 后是列名，需用白名单校验后拼接，不能用 ? 占位符。"
+    },
+    {
+      "q": "最小权限原则防御注入指的是？",
+      "level": "进阶",
+      "options": [
+        "用户权限最小",
+        "应用数据库账号只授必要权限，不给 DROP/ALTER/FILE 等",
+        "只读",
+        "单用户"
+      ],
+      "answer": 1,
+      "explain": "应用数据库账号应遵循最小权限，只授 SELECT/INSERT/UPDATE/DELETE，不给 DDL(DROP/ALTER/CREATE) 和 FILE/SUPER 等高危权限，即使被注入也限制破坏范围。"
+    },
+    {
+      "q": "MySQL 存金额应使用的数据类型是？",
+      "level": "进阶",
+      "options": [
+        "FLOAT",
+        "DOUBLE",
+        "DECIMAL",
+        "VARCHAR"
+      ],
+      "answer": 2,
+      "explain": "金额必须用 DECIMAL 精确存储，FLOAT/DOUBLE 是浮点数有精度损失（0.1+0.2≠0.3）。DECIMAL(18,2) 可精确到分。"
+    },
+    {
+      "q": "MySQL 推荐使用的字符集是？",
+      "level": "基础",
+      "options": [
+        "utf8（3字节）",
+        "utf8mb4（4字节支持emoji）",
+        "latin1",
+        "gbk"
+      ],
+      "answer": 1,
+      "explain": "utf8mb4 支持完整 Unicode 含 emoji（4字节），MySQL 的 utf8 是 3 字节子集不支持 emoji 已弃用。MySQL 8.0 默认 utf8mb4。"
+    },
+    {
+      "q": "DATETIME 与 TIMESTAMP 的区别是？",
+      "level": "进阶",
+      "options": [
+        "无区别",
+        "TIMESTAMP 自动时区转换但范围到2038年，DATETIME不受时区影响范围大",
+        "DATETIME更小",
+        "TIMESTAMP更慢"
+      ],
+      "answer": 1,
+      "explain": "TIMESTAMP(4字节) 存 UTC 自动时区转换，但范围只到2038年；DATETIME(8字节) 不受时区影响范围到9999年。跨时区用 TIMESTAMP，历史日期用 DATETIME。"
+    },
+    {
+      "q": "VARCHAR(50) 在 utf8mb4 下最多占多少字节？",
+      "level": "进阶",
+      "options": [
+        "50",
+        "100",
+        "200",
+        "202"
+      ],
+      "answer": 3,
+      "explain": "utf8mb4 一字符最多4字节，VARCHAR(50) 最多 50×4=200 字节，加上1-2字节长度记录，共约 202 字节。n 是字符数不是字节数。"
+    },
+    {
+      "q": "为什么建议字段设为 NOT NULL？",
+      "level": "进阶",
+      "options": [
+        "节省查询时间",
+        "NULL 占空间、影响索引、查询需 IS NULL、聚合忽略 NULL",
+        "NOT NULL 更快插入",
+        "无区别"
+      ],
+      "answer": 1,
+      "explain": "NULL 值额外占空间（bitmap），影响索引效率，查询需用 IS NULL 判断，COUNT/AVG 等聚合忽略 NULL。建议 NOT NULL DEFAULT 默认值。"
+    },
+    {
+      "q": "树形结构查询子树的推荐方案（MySQL 8.0+）是？",
+      "level": "高级",
+      "options": [
+        "多次查询",
+        "递归 CTE（WITH RECURSIVE）",
+        "自连接",
+        "存储过程"
+      ],
+      "answer": 1,
+      "explain": "MySQL 8.0+ 支持递归 CTE，用 WITH RECURSIVE 从起点出发递归查询所有子孙，一次查询完成，是邻接表模型的最佳查询方案。"
+    },
+    {
+      "q": "闭包表（Closure Table）存储的是？",
+      "level": "高级",
+      "options": [
+        "节点信息",
+        "所有祖先-后代对及深度",
+        "路径字符串",
+        "左右值"
+      ],
+      "answer": 1,
+      "explain": "闭包表单独存储每个节点到所有祖先和后代的关系对(ancestor, descendant, depth)，查询子树或祖先极快（单次查询），但空间开销大 O(n²)。"
+    },
+    {
+      "q": "嵌套集模型查询子树的方式是？",
+      "level": "高级",
+      "options": [
+        "WHERE parent_id",
+        "递归",
+        "WHERE lft BETWEEN parent.lft AND parent.rgt",
+        "路径LIKE"
+      ],
+      "answer": 2,
+      "explain": "嵌套集每个节点有 lft/rgt 区间，子节点的 lft/rgt 在父节点区间内。查子树用 WHERE lft BETWEEN parent.lft AND parent.rgt，一次查询但插入/移动需更新大量节点。"
+    },
+    {
+      "q": "时间序列数据填补空时间段的技巧是？",
+      "level": "高级",
+      "options": [
+        "忽略空值",
+        "生成连续时间序列(递归CTE/日历表)再 LEFT JOIN",
+        "用0填充",
+        "UNION"
+      ],
+      "answer": 1,
+      "explain": "时间序列可能有缺失点，用递归 CTE 或日历表生成连续时间段，再 LEFT JOIN 数据表，缺失的用 COALESCE 填 0，保证时间轴完整。"
+    },
+    {
+      "q": "计算环比增长率正确的 SQL 是？",
+      "level": "高级",
+      "options": [
+        "用子查询",
+        "用 LAG 窗口函数获取上一期值再计算",
+        "用 JOIN",
+        "用 UNION"
+      ],
+      "answer": 1,
+      "explain": "LAG(total,1) OVER(ORDER BY month) 获取上一期的值，然后 (total - LAG值)/LAG值*100 计算环比增长率，窗口函数一次扫描完成。"
+    },
+    {
+      "q": "移动平均的窗口函数写法是？",
+      "level": "高级",
+      "options": [
+        "AVG OVER()",
+        "AVG() OVER(ORDER BY time ROWS BETWEEN N PRECEDING AND CURRENT ROW)",
+        "SUM/M",
+        "AVG GROUP BY"
+      ],
+      "answer": 1,
+      "explain": "移动平均用 AVG(value) OVER(ORDER BY time ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) 计算当前及前2行的平均，实现3点移动平均。"
+    },
+    {
+      "q": "删除重复行保留 id 最小的推荐方法是？",
+      "level": "进阶",
+      "options": [
+        "DELETE 一行行删",
+        "ROW_NUMBER 窗口函数标记后删除 rn>1 的",
+        "TRUNCATE",
+        "用 DISTINCT 删除"
+      ],
+      "answer": 1,
+      "explain": "用 ROW_NUMBER() OVER(PARTITION BY 业务键 ORDER BY id) 给每组编号，删除 rn>1 的行，保留 rn=1（id最小）的，高效且准确。"
+    },
+    {
+      "q": "DISTINCT 和 GROUP BY 去重的区别是？",
+      "level": "进阶",
+      "options": [
+        "DISTINCT 更快",
+        "GROUP BY 更快",
+        "功能相近，GROUP BY 还可配合聚合函数",
+        "DISTINCT 去重所有列"
+      ],
+      "answer": 2,
+      "explain": "DISTINCT 和 GROUP BY 去重性能相近。GROUP BY 更灵活，可配合聚合函数（COUNT/SUM），DISTINCT 只去重显示。优化器可能将 DISTINCT 优化为 GROUP BY。"
+    },
+    {
+      "q": "字符串清洗去除首尾空格的函数是？",
+      "level": "基础",
+      "options": [
+        "REPLACE",
+        "TRIM",
+        "LOWER",
+        "SUBSTRING"
+      ],
+      "answer": 1,
+      "explain": "TRIM 去首尾空格，LTRIM/RTRIM 去左/右空格。UPDATE users SET name=TRIM(name) 可批量清洗数据。"
+    },
+    {
+      "q": "时间序列表通常采用什么分区方式便于归档？",
+      "level": "高级",
+      "options": [
+        "HASH 分区",
+        "LIST 分区",
+        "RANGE 按时间分区",
+        "不分区"
+      ],
+      "answer": 2,
+      "explain": "时间序列表按时间 RANGE 分区（如按月），清理历史数据时 DROP PARTITION 瞬间完成（比 DELETE 快得多），且查询可分区裁剪加速。"
     }
   ]
 };
