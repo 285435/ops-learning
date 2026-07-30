@@ -1,0 +1,2199 @@
+// 运维学习平台 - 知识点与题库数据
+
+// ============ 知识点数据 ============
+const KNOWLEDGE = {
+  network: {
+    name: '网络',
+    icon: '🌐',
+    color: '#3b82f6',
+    topics: [
+      {
+        id: 'net-osi',
+        title: 'OSI 七层模型',
+        level: '基础',
+        content: `OSI（Open Systems Interconnection）参考模型是国际标准化组织（ISO）提出的网络通信概念模型，将网络通信划分为七个层次：
+
+1. **物理层（Physical Layer）**：负责比特流在物理介质上的传输，定义电气、机械、过程和功能规范。常见设备：网线、集线器、中继器。
+
+2. **数据链路层（Data Link Layer）**：提供节点间可靠的数据帧传输，处理物理地址（MAC）、差错检测。常见设备：交换机、网桥。协议：PPP、HDLC、ARP。
+
+3. **网络层（Network Layer）**：负责数据包的路由和转发，实现逻辑寻址。协议：IP、ICMP、OSPF、BGP。设备：路由器。
+
+4. **传输层（Transport Layer）**：提供端到端的可靠或不可靠数据传输。协议：TCP（可靠）、UDP（不可靠）。
+
+5. **会话层（Session Layer）**：建立、管理和终止应用之间的会话。
+
+6. **表示层（Presentation Layer）**：数据格式转换、加密解密、压缩解压。
+
+7. **应用层（Application Layer）**：为应用程序提供网络服务。协议：HTTP、FTP、SMTP、DNS。
+
+记忆口诀："物数网传会表应"。`
+      },
+      {
+        id: 'net-tcp',
+        title: 'TCP 三次握手与四次挥手',
+        level: '基础',
+        content: `**三次握手（建立连接）**
+
+1. 客户端发送 SYN=1, seq=x 给服务器，进入 SYN_SENT 状态。
+2. 服务器收到后回复 SYN=1, ACK=1, seq=y, ack=x+1，进入 SYN_RCVD 状态。
+3. 客户端发送 ACK=1, seq=x+1, ack=y+1，连接建立，进入 ESTABLISHED 状态。
+
+**四次挥手（断开连接）**
+
+1. 主动方发送 FIN=1, seq=u，进入 FIN_WAIT_1。
+2. 被动方回复 ACK=1, ack=u+1，进入 CLOSE_WAIT；主动方进入 FIN_WAIT_2。
+3. 被动方发送 FIN=1, seq=w，进入 LAST_ACK。
+4. 主动方回复 ACK=1, ack=w+1，进入 TIME_WAIT，等待 2MSL 后关闭；被动方关闭。
+
+**为什么三次握手？** 防止已失效的连接请求到达服务器，造成资源浪费。
+
+**为什么四次挥手？** TCP 是全双工，关闭需要双方各自独立关闭发送通道。
+
+**TIME_WAIT 的作用？** 确保最后一个 ACK 能到达对端；让旧连接的数据包在网络中消亡。`
+      },
+      {
+        id: 'net-tcp-udp',
+        title: 'TCP 与 UDP 的区别',
+        level: '基础',
+        content: `**TCP（传输控制协议）**
+- 面向连接，需三次握手建立连接
+- 可靠传输：确认、重传、排序、流量控制、拥塞控制
+- 面向字节流
+- 首部 20 字节起
+- 一对一通信
+- 应用：HTTP、HTTPS、FTP、SMTP、SSH
+
+**UDP（用户数据报协议）**
+- 无连接
+- 不可靠：不保证送达、不保证顺序
+- 面向报文
+- 首部 8 字节
+- 支持一对一、一对多、多对多
+- 速度快、开销小
+- 应用：DNS、DHCP、TFTP、视频/语音流、游戏
+
+**选择原则**：要求可靠性选 TCP；要求实时性、可容忍少量丢包选 UDP。`
+      },
+      {
+        id: 'net-http',
+        title: 'HTTP/HTTPS 协议',
+        level: '基础',
+        content: `**HTTP（超文本传输协议）** 基于 TCP，无状态，默认端口 80。
+
+**请求方法**：GET（获取）、POST（提交）、PUT（更新）、DELETE（删除）、PATCH（部分更新）、HEAD、OPTIONS。
+
+**状态码**：
+- 1xx 信息：100 Continue
+- 2xx 成功：200 OK、201 Created、204 No Content
+- 3xx 重定向：301 永久重定向、302 临时重定向、304 Not Modified
+- 4xx 客户端错误：400 Bad Request、401 Unauthorized、403 Forbidden、404 Not Found、405 Method Not Allowed、429 Too Many Requests
+- 5xx 服务端错误：500 Internal Server Error、502 Bad Gateway、503 Service Unavailable、504 Gateway Timeout
+
+**HTTPS** = HTTP + TLS/SSL，默认端口 443，提供加密、认证、完整性保护。
+
+**HTTP 版本**：
+- HTTP/1.0：每次请求新建连接
+- HTTP/1.1：持久连接（keep-alive）、管道化、Host 头
+- HTTP/2：二进制分帧、多路复用、头部压缩（HPACK）、服务器推送
+- HTTP/3：基于 QUIC（UDP），解决队头阻塞`
+      },
+      {
+        id: 'net-subnet',
+        title: 'IP 地址与子网划分',
+        level: '进阶',
+        content: `**IPv4 地址**：32 位，分为 A/B/C/D/E 五类。
+- A 类：1.0.0.0 - 126.255.255.255，默认掩码 /8
+- B 类：128.0.0.0 - 191.255.255.255，默认掩码 /16
+- C 类：192.0.0.0 - 223.255.255.255，默认掩码 /24
+- D 类：组播 224.0.0.0 - 239.255.255.255
+- E 类：保留 240.0.0.0 - 255.255.255.255
+
+**私有地址**：
+- 10.0.0.0/8
+- 172.16.0.0/12
+- 192.168.0.0/16
+
+**子网掩码**：区分网络位和主机位。例如 192.168.1.0/24 表示前 24 位为网络位，主机位 8 位，可用主机数 2^8 - 2 = 254。
+
+**CIDR（无类别域间路由）**：打破传统分类，如 192.168.1.0/26 可划分为 4 个子网，每个子网可用主机 62 个。
+
+**计算公式**：
+- 子网数 = 2^(借位位数)
+- 每子网主机数 = 2^(主机位) - 2（减去网络号和广播号）
+
+**特殊地址**：127.0.0.0/8 回环、169.254.0.0/16 链路本地、0.0.0.0 默认路由。`
+      },
+      {
+        id: 'net-dns',
+        title: 'DNS 解析原理',
+        level: '进阶',
+        content: `**DNS（域名系统）** 将域名解析为 IP 地址，默认端口 53（TCP/UDP）。
+
+**解析过程**：
+1. 浏览器缓存 → 系统缓存（hosts）→ 本地 DNS 服务器（递归查询）
+2. 本地 DNS 询问根域名服务器（.）
+3. 根返回顶级域名服务器（.com）地址
+4. 本地 DNS 询问 .com 服务器，返回权威服务器地址
+5. 本地 DNS 询问权威服务器，获得最终 A 记录
+6. 返回结果给客户端并缓存
+
+**记录类型**：
+- A：域名 → IPv4
+- AAAA：域名 → IPv6
+- CNAME：别名记录
+- MX：邮件交换
+- TXT：文本记录（SPF、验证）
+- NS：域名服务器
+- PTR：反向解析
+- SRV：服务记录
+
+**递归查询 vs 迭代查询**：客户端到本地 DNS 为递归；本地 DNS 到各级服务器为迭代。`
+      },
+      {
+        id: 'net-nat',
+        title: 'NAT 与端口映射',
+        level: '进阶',
+        content: `**NAT（网络地址转换）** 在私有 IP 和公网 IP 间转换，解决 IPv4 地址不足问题。
+
+**类型**：
+- SNAT（源地址转换）：内网访问外网时改源 IP，常见于出口路由器
+- DNAT（目的地址转换）：外网访问内网时改目的 IP，即端口映射/端口转发
+- PAT（端口地址转换）：多内网 IP 共用一个公网 IP，通过端口区分
+
+**iptables 实现**：
+\`\`\`bash
+# SNAT：内网 192.168.1.0/24 通过 eth0 出网
+iptables -t nat -A POSTROUTING -s 192.168.1.0/24 -o eth0 -j SNAT --to-source 1.2.3.4
+
+# DNAT：将公网 80 端口转发到内网 192.168.1.100:80
+iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 80 -j DNAT --to-destination 192.168.1.100:80
+\`\`\`
+
+**缺点**：破坏端到端、增加延迟、影响某些协议（如 FTP 主动模式）。`
+      },
+      {
+        id: 'net-firewall',
+        title: '防火墙与安全策略',
+        level: '进阶',
+        content: `**防火墙类型**：
+- 包过滤防火墙（网络层）：基于 IP、端口、协议过滤，如 iptables
+- 状态检测防火墙：跟踪连接状态，如 stateful
+- 应用层防火墙：深度检查应用数据，如 WAF
+- 下一代防火墙（NGFW）：集成 IDS/IPS、应用识别
+
+**iptables 四表五链**：
+- 表：filter（过滤）、nat（地址转换）、mangle（修改报文）、raw（关闭跟踪）
+- 链：PREROUTING、INPUT、FORWARD、OUTPUT、POSTROUTING
+
+**常用规则示例**：
+\`\`\`bash
+# 允许已建立连接
+iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+# 允许 SSH
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+# 允许 HTTP/HTTPS
+iptables -A INPUT -p tcp -m multiport --dports 80,443 -j ACCEPT
+# 默认拒绝
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+\`\`\`
+
+**firewalld** 是 CentOS 7+ 的默认防火墙管理工具，基于 zone 概念，支持动态更新。`
+      }
+    ]
+  },
+
+  linux: {
+    name: 'Linux 系统',
+    icon: '🐧',
+    color: '#f59e0b',
+    topics: [
+      {
+        id: 'linux-cmd',
+        title: '常用命令大全',
+        level: '基础',
+        content: `**文件与目录**
+\`\`\`bash
+ls -lah        # 详细列表含隐藏文件
+cd /path       # 切换目录
+pwd            # 当前路径
+mkdir -p a/b/c # 递归创建目录
+rm -rf dir     # 强制递归删除（危险）
+cp -r src dst  # 递归复制
+mv old new     # 移动/重命名
+ln -s src link # 软链接
+tree -L 2      # 树形显示
+\`\`\`
+
+**查找**
+\`\`\`bash
+find / -name "*.log" -mtime -7      # 7天内修改的日志
+find / -type f -size +100M          # 大于100M的文件
+grep -rn "keyword" /path            # 递归显示行号
+which command                       # 命令位置
+locate filename                     # 从数据库快速查找
+\`\`\`
+
+**文本处理**
+\`\`\`bash
+cat file | head -n 20       # 前20行
+tail -f /var/log/messages   # 实时跟踪
+awk '{print $1,$4}' file    # 列处理
+sed -i 's/old/new/g' file   # 原地替换
+sort | uniq -c | sort -rn   # 去重统计排序
+wc -l file                  # 行数统计
+cut -d: -f1 /etc/passwd     # 按分隔符取列
+\`\`\`
+
+**打包压缩**
+\`\`\`bash
+tar -czvf file.tar.gz dir/   # 打包压缩
+tar -xzvf file.tar.gz        # 解压
+tar -tf file.tar.gz          # 查看内容
+zip -r file.zip dir/
+unzip file.zip
+\`\`\``
+      },
+      {
+        id: 'linux-permission',
+        title: '用户与权限管理',
+        level: '基础',
+        content: `**用户管理**
+\`\`\`bash
+useradd -m -s /bin/bash user    # 创建用户并建家目录
+passwd user                      # 设置密码
+usermod -aG sudo user            # 加入 sudo 组
+userdel -r user                  # 删除用户及家目录
+groupadd dev                     # 创建组
+gpasswd -a user dev              # 用户加入组
+id user                          # 查看用户信息
+\`\`\`
+
+**权限模型**：rwx 分别为 4/2/1，三组分别属主/属组/其他。
+\`\`\`bash
+chmod 755 file      # rwxr-xr-x
+chmod u+x file      # 属主加执行
+chmod -R 644 dir/   # 递归修改
+chown user:group file
+chgrp group file
+\`\`\`
+
+**特殊权限**：
+- SUID（4）：执行时以属主身份运行，如 passwd
+- SGID（2）：在目录上创建文件继承组
+- Sticky（1）：目录下文件只能属主删除，如 /tmp
+
+**ACL（访问控制列表）**：提供更细粒度权限
+\`\`\`bash
+setfacl -m u:user:rwx file
+getfacl file
+\`\`\`
+
+**sudo 配置**：visudo 编辑 /etc/sudoers，使用 sudo -l 查看权限。`
+      },
+      {
+        id: 'linux-process',
+        title: '进程与服务管理',
+        level: '基础',
+        content: `**进程查看**
+\`\`\`bash
+ps aux              # 所有进程
+ps -ef | grep nginx
+top                 # 实时进程
+htop                # 增强 top
+pstree -p           # 进程树
+pgrep -l nginx      # 按名查 PID
+pidof nginx
+\`\`\`
+
+**进程控制**
+\`\`\`bash
+kill -9 PID         # 强制杀死
+kill -15 PID        # 优雅终止（SIGTERM）
+kill -HUP PID       # 重载配置
+pkill nginx
+jobs                # 后台任务
+fg %1               # 调到前台
+nohup command &     # 脱离终端运行
+\`\`\`
+
+**systemd 服务管理**
+\`\`\`bash
+systemctl start nginx
+systemctl stop nginx
+systemctl restart nginx
+systemctl reload nginx
+systemctl status nginx
+systemctl enable nginx       # 开机自启
+systemctl disable nginx
+systemctl list-units --type=service --state=running
+journalctl -u nginx -f       # 查看服务日志
+\`\`\`
+
+**信号**：常用 1(HUP 重载)、9(KILL 强杀)、15(TERM 终止)、18(CONT 继续)、19(STOP 暂停)。`
+      },
+      {
+        id: 'linux-disk',
+        title: '磁盘与文件系统',
+        level: '进阶',
+        content: `**磁盘查看**
+\`\`\`bash
+lsblk                   # 块设备列表
+df -h                   # 磁盘使用
+df -i                   # inode 使用
+du -sh /path            # 目录大小
+du -h --max-depth=1 /   # 一层目录大小
+fdisk -l                # 分区表
+\`\`\`
+
+**分区与格式化**
+\`\`\`bash
+fdisk /dev/sdb          # 交互式分区
+parted /dev/sdb
+mkfs.ext4 /dev/sdb1     # 格式化
+mkfs.xfs /dev/sdb1
+\`\`\`
+
+**挂载**
+\`\`\`bash
+mount /dev/sdb1 /data
+umount /data
+# 开机自动挂载 /etc/fstab
+/dev/sdb1  /data  ext4  defaults  0 0
+\`\`\`
+
+**LVM（逻辑卷管理）**
+\`\`\`bash
+pvcreate /dev/sdb            # 创建物理卷
+vgcreate vg0 /dev/sdb        # 创建卷组
+lvcreate -L 50G -n lv0 vg0   # 创建逻辑卷
+mkfs.xfs /dev/vg0/lv0
+# 扩容
+lvextend -L +20G /dev/vg0/lv0
+xfs_growfs /dev/vg0/lv0      # xfs 在线扩容
+resize2fs /dev/vg0/lv0       # ext4 在线扩容
+\`\`\`
+
+**inode**：记录文件元数据。inode 耗尽会导致"No space left on device"但 df 显示有空间。`
+      },
+      {
+        id: 'linux-network',
+        title: '网络配置与排查',
+        level: '进阶',
+        content: `**网络配置**
+\`\`\`bash
+ip addr show           # 查看 IP（替代 ifconfig）
+ip link set eth0 up    # 启用网卡
+ip route               # 路由表
+ip route add 10.0.0.0/8 via 192.168.1.1
+# CentOS 配置文件 /etc/sysconfig/network-scripts/ifcfg-eth0
+# Ubuntu 配置 /etc/netplan/*.yaml
+\`\`\`
+
+**网络排查工具**
+\`\`\`bash
+ping -c 4 8.8.8.8              # 连通性
+traceroute 8.8.8.8             # 路由跟踪
+mtr 8.8.8.8                    # 综合诊断
+nslookup domain.com            # DNS 解析
+dig domain.com +short
+ss -tlnp                       # 监听端口（替代 netstat）
+ss -s                          # 连接统计
+netstat -anp | grep ESTABLISHED
+tcpdump -i eth0 port 80 -nn   # 抓包
+nc -zv host 80                 # 端口探测
+curl -v http://example.com
+wget url
+\`\`\`
+
+**tcpdump 常用过滤**
+\`\`\`bash
+tcpdump -i eth0 host 192.168.1.1
+tcpdump -i eth0 tcp port 443
+tcpdump -i eth0 -w capture.pcap   # 保存
+\`\`\`
+
+**防火墙配置**：CentOS 7+ 使用 firewalld，Ubuntu 使用 ufw。`
+      },
+      {
+        id: 'linux-shell',
+        title: 'Shell 脚本编程',
+        level: '进阶',
+        content: `**基础语法**
+\`\`\`bash
+#!/bin/bash
+# 变量
+name="world"
+echo "Hello, $name"
+\`command\` 或 $(command)   # 命令替换
+\`\`\`
+
+**条件判断**
+\`\`\`bash
+if [ -f /etc/passwd ]; then
+    echo "file exists"
+elif [ $age -gt 18 ]; then
+    echo "adult"
+else
+    echo "minor"
+fi
+
+# 文件测试：-f 文件 -d 目录 -e 存在 -r 可读 -w 可写 -x 可执行
+# 数值：-eq -ne -gt -lt -ge -le
+# 字符串：= != -z 空 -n 非空
+\`\`\`
+
+**循环**
+\`\`\`bash
+for i in 1 2 3; do
+    echo $i
+done
+
+for i in $(seq 1 10); do
+    echo $i
+done
+
+while [ $i -lt 10 ]; do
+    ((i++))
+done
+\`\`\`
+
+**函数与参数**
+\`\`\`bash
+function greet() {
+    echo "Hello $1"
+    return 0
+}
+greet "Tom"
+# $0 脚本名 $1-$9 参数 $# 参数个数 $@ 所有参数 $? 上个命令返回值
+\`\`\`
+
+**实用技巧**：set -e 出错退出、set -x 调试、trap 捕获信号、cron 定时任务。`
+      },
+      {
+        id: 'linux-perf',
+        title: '性能监控与调优',
+        level: '高级',
+        content: `**CPU**
+\`\`\`bash
+top / htop          # 实时 CPU
+uptime              # 负载均值（1/5/15分钟）
+vmstat 1 5          # 虚拟内存
+mpstat -P ALL 1     # 多核
+sar -u 1 5          # 历史 CPU
+\`\`\`
+
+**内存**
+\`\`\`bash
+free -h             # 内存使用
+vmstat              # swap
+sar -r              # 历史内存
+\`\`\`
+
+**IO**
+\`\`\`bash
+iostat -x 1         # 磁盘 IO
+iotop               # 进程 IO
+sar -d              # 历史 IO
+\`\`\`
+
+**网络**
+\`\`\`bash
+iftop               # 流量
+nethogs             # 进程流量
+sar -n DEV 1        # 网卡流量
+\`\`\`
+
+**综合**
+\`\`\`bash
+dstat               # 综合监控
+sar                 # 系统活动报告
+perf                # 性能分析
+strace -p PID       # 系统调用跟踪
+\`\`\`
+
+**负载理解**：load average 表示运行队列平均进程数，超过 CPU 核数表示过载。
+
+**常见瓶颈排查**：
+- CPU 高：top 看 %CPU，可能是死循环或计算密集
+- 内存高：可用内存低，swap 使用频繁，可能内存泄漏
+- IO 高：%util 接近 100，await 高，磁盘瓶颈
+- 网络慢：丢包、带宽打满、连接数过多`
+      },
+  {id:'lin-022', title:'/proc与/sys文件系统详解', level:'基础', content:`## /proc文件系统
+/proc是虚拟文件系统，不占用磁盘空间，内容由内核动态生成。
+- /proc/cpuinfo：CPU详细信息（核数、型号、缓存）
+- /proc/meminfo：内存使用情况（MemTotal、MemFree、Buffers、Cached）
+- /proc/loadavg：系统负载（1/5/15分钟）
+- /proc/[PID]/：进程信息目录，status、cmdline、environ等
+- /proc/sys/：可通过sysctl修改的内核参数
+
+## /sys文件系统
+/sys也是虚拟文件系统，2.6内核引入，用于替代/proc中杂乱的硬件信息。
+- /sys/devices/：设备拓扑结构
+- /sys/block/：块设备信息（sda、sdb等）
+- /sys/class/：按类别组织的设备（net、input、tty）
+- /sys/module/：已加载内核模块参数
+
+## 常用操作
+\`\`\`bash
+cat /proc/cpuinfo | grep processor  # CPU核数
+sysctl -a | grep ip_forward         # 查看转发参数
+echo 1 > /proc/sys/net/ipv4/ip_forward  # 临时开启转发
+cat /sys/block/sda/size             # 磁盘扇区数
+\`\`\``},
+  {id:'lin-023', title:'Linux内核模块管理', level:'基础', content:`## 内核模块概述
+Linux内核采用模块化设计，可动态加载/卸载功能代码，扩展内核能力无需重新编译。常见模块类型：文件系统（ext4、xfs）、设备驱动（网卡、显卡）、网络协议等。
+
+## 模块管理命令
+- **lsmod**：列出已加载模块，显示Module、Size、Used by
+- **modinfo**：查看模块详细信息（作者、描述、依赖、参数）
+- **insmod**：加载单个模块（需手动解决依赖，不推荐）
+- **rmmod**：卸载模块（需确保未被使用）
+- **modprobe**：智能加载/卸载，自动处理依赖关系
+- **depmod**：生成模块依赖关系映射文件/lib/modules/\`uname -r\`/modules.dep
+
+## 模块配置与持久化
+- 配置文件：/etc/modprobe.d/*.conf（别名、黑名单、参数）
+- 开机加载：/etc/modules-load.d/*.conf（systemd）或/etc/modules（SysV）
+- 黑名单：blacklist nouveau 禁用nouveau驱动
+
+## 示例
+\`\`\`bash
+modinfo ext4                 # 查看ext4模块信息
+modprobe -r nouveau          # 卸载nouveau
+echo "blacklist nouveau" > /etc/modprobe.d/blacklist.conf
+\`\`\``},
+  {id:'lin-024', title:'系统备份策略 rsync/dd/tar', level:'基础', content:`## tar增量备份
+tar支持基于时间戳或快照文件的增量备份：
+\`\`\`bash
+# 完整备份
+tar -g /backup/snapshot.snar -czf /backup/full.tar.gz /data
+# 增量备份（基于snapshot文件）
+tar -g /backup/snapshot.snar -czf /backup/inc1.tar.gz /data
+# 恢复：先恢复完整，再依次恢复增量
+\`\`\`
+
+## rsync远程/本地同步
+rsync是增量文件传输工具，仅传输差异部分，速度快、占用带宽低：
+\`\`\`bash
+rsync -avz /data/ user@host:/backup/data/   # 本地→远程
+rsync -avz user@host:/data/ /backup/data/   # 远程→本地
+rsync -avz --delete /src/ /dst/             # 删除目标多余文件（镜像同步）
+rsync -avz --exclude='*.log' /src/ /dst/    # 排除匹配文件
+# -a归档模式=-rlptgoD(递归/链接/权限/时间/组/所有者/设备)
+# -v详细输出 -z压缩传输
+\`\`\`
+
+## dd裸设备备份
+dd按扇区级复制，适合整盘克隆、制作镜像、生成测试文件：
+\`\`\`bash
+dd if=/dev/sda of=/backup/sda.img bs=4M status=progress   # 整盘镜像
+dd if=/backup/sda.img of=/dev/sdb bs=4M                   # 恢复到新盘
+dd if=/dev/zero of=testfile bs=1M count=100               # 生成100M空文件
+dd if=/dev/urandom of=rand.bin bs=1K count=10             # 随机数据文件
+\`\`\``},
+  {id:'lin-025', title:'systemd深入 unit/journald', level:'进阶', content:`## systemd Unit类型
+systemd用Unit文件管理所有系统资源，常用类型：
+- **.service**：系统服务，最常用类型
+- **.socket**：套接字激活，按需启动服务（如sshd.socket）
+- **.timer**：定时任务，替代cron，支持单调时间和日历事件
+- **.target**：运行级别分组，如multi-user.target、graphical.target
+- **.mount/.automount**：文件系统挂载管理
+- **.path**：监控文件/目录变化触发动作
+
+## Unit文件结构（/etc/systemd/system/或/usr/lib/systemd/system/）
+\`\`\`ini
+[Unit]
+Description=Nginx Web Server
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/nginx
+ExecReload=/usr/sbin/nginx -s reload
+ExecStop=/usr/sbin/nginx -s quit
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+\`\`\`
+
+## journald日志管理
+journald是systemd配套的日志服务，二进制存储、结构化查询：
+\`\`\`bash
+journalctl -u nginx.service              # 查看指定服务日志
+journalctl -u nginx -f                   # 实时跟踪（类似tail -f）
+journalctl --since "2024-01-01 09:00"    # 按时间过滤
+journalctl -p err                        # 只看错误级别
+journalctl --vacuum-size=500M            # 限制日志占用磁盘空间
+journalctl --disk-usage                  # 查看日志占用大小
+\`\`\`
+journald与rsyslog可并存：journald收集→转发给rsyslog做长期存储。`},
+  {id:'lin-026', title:'PAM认证机制详解', level:'进阶', content:`## PAM概述
+PAM(Pluggable Authentication Modules)是Linux可插拔认证框架，将认证逻辑从应用中解耦。通过配置文件动态组合认证模块，实现SSO、双因素、LDAP集成等。
+
+## 配置文件结构
+- 主配置：/etc/pam.conf（全局，一般不用）
+- 应用配置目录：/etc/pam.d/（每个应用一个文件，如sshd、login、su、sudo）
+- 模块目录：/lib/security/ 或 /lib64/security/
+- 模块配置：/etc/security/
+
+## PAM配置行语法
+\`\`\`
+type  control  module-path  module-arguments
+\`\`\`
+- **type**：auth(认证)、account(账户)、password(密码)、session(会话)
+- **control**：required(失败继续但最终失败)、requisite(失败立即返回)、sufficient(成功立即返回)、optional(可选)
+- 常用模块：pam_unix(本地用户)、pam_ldap(LDAP)、pam_google_authenticator(双因素)、pam_limits(资源限制)、pam_cracklib(密码强度)
+
+## 常见场景
+\`\`\`bash
+# /etc/pam.d/sshd 示例
+auth      required    pam_securetty.so        # root禁止从非安全终端登录
+auth      required    pam_unix.so             # 本地密码认证
+account   required    pam_unix.so             # 账户有效期检查
+password  required    pam_cracklib.so retry=3 minlen=8  # 密码复杂度
+session   required    pam_limits.so           # 应用ulimit资源限制
+\`\`\`
+修改配置后立即生效，无需重启服务。`},
+  {id:'lin-027', title:'性能调优 IO/内存/swappiness', level:'高级', content:`## 内存调优参数
+/proc/sys/vm/下关键参数：
+- **swappiness(0-100)**：倾向使用swap的程度。值越低越优先用物理内存。桌面推荐60，服务器推荐10-30，数据库推荐1-10
+- **dirty_ratio**：脏页占内存百分比触发异步刷盘，默认20
+- **dirty_background_ratio**：触发pdflush后台刷盘，默认10
+- **min_free_kbytes**：保留最低空闲内存，防止OOM
+
+## IO调度算法
+- **none/noop**：SSD、NVMe及虚拟环境，不做调度直接下发
+- **mq-deadline**：SSD推荐，按请求期限排序，兼顾读优先级
+- **bfq**：桌面/交互场景，按进程预算公平分配
+- **kyber**：低延迟场景
+\`\`\`bash
+echo mq-deadline > /sys/block/sda/queue/scheduler  # 临时修改
+# 持久化：GRUB_CMDLINE_LINUX="scsi_mod.use_blk_mq=1 elevator=mq-deadline"
+\`\`\`
+
+## 文件系统挂载优化
+/etc/fstab挂载选项：
+- **noatime**：不更新访问时间，减少写IO（数据库/日志盘必开）
+- **nodiratime**：不更新目录访问时间
+- **data=writeback(ext4)**：元数据日志+数据异步写，性能最好但崩溃风险高
+- **discard**：SSD自动TRIM（大SSD建议用fstrim.timer替代）
+- **errors=remount-ro**：出错时只读挂载，防止数据破坏
+
+## 调优实战
+\`\`\`bash
+# MySQL服务器推荐
+echo 1 > /proc/sys/vm/swappiness
+sysctl -w vm.dirty_ratio=5
+sysctl -w vm.dirty_background_ratio=2
+# 添加到/etc/sysctl.conf持久化
+\`\`\``},
+  {id:'lin-028', title:'SELinux与系统安全加固', level:'高级', content:`## SELinux三种模式
+- **Enforcing**：强制模式，违反策略即拦截并记录
+- **Permissive**：宽容模式，仅记录不拦截（调试用）
+- **Disabled**：完全关闭
+
+\`\`\`bash
+getenforce                    # 查看当前模式
+setenforce 0                  # 临时切Permissive（1切Enforcing）
+# /etc/selinux/config 持久化修改（重启生效）
+\`\`\`
+
+## 核心概念：上下文标签
+SELinux为每个文件/进程打上安全上下文：user:role:type:level
+- **ps -eZ**：查看进程安全上下文
+- **ls -Z**：查看文件安全上下文
+- **id -Z**：查看用户安全上下文
+
+常见type：httpd_sys_content_t(网页内容)、ssh_home_t(ssh家目录)、user_home_t(用户家目录)
+
+## 策略修改工具
+- **chcon -t type 文件**：临时修改文件上下文（重启后恢复）
+- **restorecon -Rv /path**：按策略恢复默认上下文
+- **semanage fcontext -a -t type 'regex'**：持久化添加上下文规则 + restorecon生效
+- **setsebool -P httpd_can_network_connect on**：开启布尔值（-P永久）
+- **getsebool -a | grep httpd**：查看所有httpd相关布尔值
+
+## auditd审计系统
+auditd是内核级审计框架，记录系统调用、文件访问、权限变更：
+\`\`\`bash
+systemctl enable --now auditd
+auditctl -w /etc/passwd -p wa -k passwd_change  # 监控/etc/passwd写/属性变更
+ausearch -k passwd_change                        # 按key查询审计日志
+aureport -au                                     # 认证失败报告
+\`\`\`
+审计日志存储于/var/log/audit/audit.log，可通过/etc/audit/rules.d/持久化规则。`}
+    ]
+  },
+
+  frontend: {
+    name: '前端',
+    icon: '🎨',
+    color: '#ec4899',
+    topics: [
+      {
+        id: 'fe-html',
+        title: 'HTML 语义化与结构',
+        level: '基础',
+        content: `**语义化标签**：使用有意义的标签增强可读性和 SEO。
+- \`<header>\` 页头、\`<nav>\` 导航、\`<main>\` 主内容
+- \`<article>\` 独立文章、\`<section>\` 区块、\`<aside>\` 侧边栏
+- \`<footer>\` 页脚、\`<figure>\` 图文、\`<figcaption>\` 图说明
+- \`<time>\` 时间、\`<mark>\` 标记
+
+**表单元素**：
+\`\`\`html
+<input type="text/email/number/date/password/url" required>
+<input type="checkbox" checked>
+<input type="radio" name="g">
+<select><option>A</option></select>
+<textarea></textarea>
+\`\`\`
+
+**重要属性**：
+- alt：图片替代文本
+- title：悬停提示
+- data-*：自定义数据
+- role / aria-*：无障碍
+
+**DOCTYPE**：\`<!DOCTYPE html>\` 触发标准模式。
+
+**meta 标签**：
+- charset 编码
+- viewport 响应式
+- description SEO
+- http-equiv 缓存控制`
+      },
+      {
+        id: 'fe-css',
+        title: 'CSS 布局与核心概念',
+        level: '基础',
+        content: `**盒模型**：content + padding + border + margin。box-sizing: border-box 含 border 和 padding。
+
+**选择器优先级**：!important > 内联 > ID > 类/伪类/属性 > 标签/伪元素。
+
+**布局方式**：
+- **Flexbox**：一维布局
+\`\`\`css
+display: flex;
+justify-content: center;   /* 主轴 */
+align-items: center;       /* 交叉轴 */
+flex-direction: row|column;
+flex-wrap: wrap;
+flex: 1;
+\`\`\`
+- **Grid**：二维布局
+\`\`\`css
+display: grid;
+grid-template-columns: repeat(3, 1fr);
+grid-gap: 10px;
+grid-column: span 2;
+\`\`\`
+- **定位**：static / relative / absolute / fixed / sticky
+
+**响应式**：
+\`\`\`css
+@media (max-width: 768px) { ... }
+\`\`\`
+
+**BFC（块级格式化上下文）**：触发条件 float、absolute、overflow:hidden、display:flex。可清除浮动、避免 margin 重叠。
+
+**居中**：flex 最简单；绝对定位 + transform 通用；margin: auto 适合块级。
+
+**CSS3**：transition、animation、transform、box-shadow、border-radius、gradient。`
+      },
+      {
+        id: 'fe-js',
+        title: 'JavaScript 核心语法',
+        level: '基础',
+        content: `**数据类型**：
+- 基本类型：string、number、boolean、null、undefined、symbol、bigint
+- 引用类型：object（含数组、函数、日期等）
+
+**变量声明**：var（函数作用域，变量提升）、let（块作用域）、const（常量）。
+
+**作用域与闭包**：
+\`\`\`js
+function counter() {
+    let count = 0;
+    return () => ++count;  // 闭包保存 count
+}
+\`\`\`
+
+**原型链**：每个对象有 __proto__ 指向原型对象，查找属性沿原型链向上。Function.prototype.__proto__ === Object.prototype。
+
+**this 指向**：
+- 普通函数：window（严格模式 undefined）
+- 对象方法：调用对象
+- 构造函数：新对象
+- 箭头函数：继承外层
+- call/apply/bind 手动指定
+
+**异步**：
+\`\`\`js
+// Promise
+fetch(url).then(r => r.json()).then(data => console.log(data));
+// async/await
+async function getData() {
+    const res = await fetch(url);
+    return res.json();
+}
+\`\`\`
+
+**事件循环**：调用栈 → 微任务（Promise.then、MutationObserver）→ 宏任务（setTimeout、setInterval、I/O）。
+
+**ES6+**：解构、展开运算符、模板字符串、箭头函数、Promise、async/await、Class、Module、Map/Set、Proxy/Reflect。`
+      },
+      {
+        id: 'fe-dom',
+        title: 'DOM 与事件机制',
+        level: '进阶',
+        content: `**DOM 操作**
+\`\`\`js
+document.getElementById('id')
+document.querySelector('.cls')
+document.querySelectorAll('div')
+element.createElement('div')
+parent.appendChild(child)
+parent.removeChild(child)
+element.classList.add/remove/toggle('active')
+element.setAttribute('data-id', '1')
+element.textContent = 'hello'
+\`\`\`
+
+**事件流**：捕获阶段（document → target）→ 目标阶段 → 冒泡阶段（target → document）。
+
+**事件绑定**
+\`\`\`js
+element.addEventListener('click', handler, false);  // 默认冒泡
+element.removeEventListener('click', handler);
+\`\`\`
+
+**事件委托**：利用冒泡，在父元素监听子元素事件。
+\`\`\`js
+ul.addEventListener('click', e => {
+    if (e.target.tagName === 'LI') {
+        console.log(e.target.dataset.id);
+    }
+});
+\`\`\`
+
+**事件对象**：e.target（真实触发）、e.currentTarget（监听元素）、e.preventDefault()（阻止默认）、e.stopPropagation()（阻止冒泡）。
+
+**常见事件**：
+- 鼠标：click、dblclick、mouseenter、mouseleave、mousemove
+- 键盘：keydown、keyup
+- 表单：input、change、submit、focus、blur
+- 窗口：load、resize、scroll
+- 拖拽：drag、drop`
+      },
+      {
+        id: 'fe-vue',
+        title: 'Vue 框架核心',
+        level: '进阶',
+        content: `**Vue 3 组合式 API**
+\`\`\`js
+import { ref, reactive, computed, watch, onMounted } from 'vue';
+
+export default {
+    setup() {
+        const count = ref(0);
+        const state = reactive({ name: 'Tom', list: [] });
+        const double = computed(() => count.value * 2);
+        watch(count, (newVal, oldVal) => { console.log(newVal); });
+        onMounted(() => { console.log('mounted'); });
+        return { count, double };
+    }
+}
+\`\`\`
+
+**指令**：
+- v-bind（:）绑定属性
+- v-on（@）绑定事件
+- v-model 双向绑定
+- v-if / v-else / v-show 条件渲染
+- v-for 列表渲染（需 :key）
+- v-html 渲染 HTML
+
+**生命周期**：beforeCreate、created、beforeMount、mounted、beforeUpdate、updated、beforeUnmount、unmounted。
+
+**组件通信**：
+- 父→子：props
+- 子→父：emit
+- 兄弟：事件总线 / 状态管理
+- 跨级：provide/inject
+- 全局：Pinia / Vuex
+
+**响应式原理**：Vue 2 用 Object.defineProperty；Vue 3 用 Proxy。`
+      },
+  {
+        id: 'fe-react',
+        title: 'React 框架核心',
+        level: '进阶',
+        content: `**函数组件与 Hooks**
+\`\`\`jsx
+import { useState, useEffect, useRef, useMemo, useCallback, useContext } from 'react';
+
+function Counter() {
+    const [count, setCount] = useState(0);
+    const [name, setName] = useState('Tom');
+
+    useEffect(() => {
+        document.title = \`Count: \${count}\`;
+        return () => console.log('cleanup');  // 清理函数
+    }, [count]);  // 依赖数组
+
+    const double = useMemo(() => count * 2, [count]);
+    const handleClick = useCallback(() => setCount(c => c + 1), []);
+
+    return <button onClick={handleClick}>{count} / {double}</button>;
+}
+\`\`\`
+
+**常用 Hooks**：
+- useState：状态
+- useEffect：副作用
+- useRef：引用 DOM 或保存可变值
+- useMemo：缓存计算结果
+- useCallback：缓存函数
+- useContext：跨组件传值
+- useReducer：复杂状态
+
+**JSX 规则**：className 代替 class，htmlFor 代替 for，style 接收对象，单标签需闭合。
+
+**组件通信**：
+- 父→子：props
+- 子→父：回调函数
+- 兄弟：状态提升到父组件
+- 跨级：Context
+- 全局：Redux / Zustand / Recoil
+
+**虚拟 DOM**：用 JS 对象描述真实 DOM，diff 算法对比差异，最小化 DOM 操作。`
+      },
+  {
+        id: 'fe-perf',
+        title: '前端性能优化',
+        level: '高级',
+        content: `**加载优化**
+- 减少 HTTP 请求：合并文件、雪碧图、内联小资源
+- 压缩：gzip/brotli、图片压缩、代码压缩
+- 缓存：强缓存（Cache-Control）、协商缓存（ETag/Last-Modified）
+- CDN：静态资源分发
+- 懒加载：图片 lazy、组件动态 import()
+- 预加载：preload、prefetch
+
+**渲染优化**
+- 减少 DOM 操作、使用文档碎片
+- 防抖（debounce）与节流（throttle）
+- requestAnimationFrame 处理动画
+- 虚拟列表（react-window / vue-virtual-scroller）
+- CSS 硬件加速：transform、will-change
+
+**构建优化**
+- 代码分割：路由懒加载
+- Tree Shaking：删除无用代码
+- 按需加载：lodash-es、组件库
+- 体积分析：webpack-bundle-analyzer
+
+**关键指标**：
+- FCP（First Contentful Paint）首次内容绘制
+- LCP（Largest Contentful Paint）最大内容绘制
+- FID（First Input Delay）首次输入延迟
+- CLS（Cumulative Layout Shift）累积布局偏移
+- TTI（Time to Interactive）可交互时间
+
+**目标**：LCP < 2.5s，FID < 100ms，CLS < 0.1。`
+      },
+  {
+    id: 'fe-pwa',
+    title: 'Service Worker与PWA应用',
+    level: '基础',
+    content: `### PWA核心概念
+PWA（Progressive Web App）让Web应用拥有原生App般的体验，核心依赖Service Worker技术。
+
+### Service Worker原理
+SW是运行在浏览器独立线程的脚本，拦截网络请求、管理缓存、支持离线访问。生命周期包括install（预缓存资源）、activate（清理旧缓存）、fetch（拦截请求）三个阶段。
+
+### 缓存策略
+常见策略有Cache First（静态资源优先缓存）、Network First（数据优先走网络）、Stale-While-Revalidate（缓存+后台更新）。配合Cache Storage API实现精细化缓存管理。
+
+### 离线推送与安装
+通过Push API和Notification API实现服务端推送消息。Add to Home Screen让用户可将PWA安装到桌面，支持全屏启动和离线使用。`
+  },
+  {
+    id: 'fe-canvas',
+    title: 'Canvas/SVG/WebGL图形基础',
+    level: '基础',
+    content: `### Canvas基础
+Canvas是HTML5提供的位图绘制API，通过getContext('2d')获取绘图上下文。支持矩形、圆弧、路径、文本、图片绘制，配合requestAnimationFrame实现动画。适合像素级操作和大量动态元素。
+
+### SVG矢量图形
+SVG是基于XML的矢量图形格式，使用DOM元素描述图形（circle、rect、path等）。支持CSS样式、JS交互、SMIL动画。缩放不失真，适合图标、图表、可交互图形场景。
+
+### WebGL入门
+WebGL基于OpenGL ES，通过着色器（Vertex Shader + Fragment Shader）在GPU上渲染3D图形。常见库有Three.js、Babylon.js简化API。适用于3D可视化、游戏、VR/AR场景。`
+  },
+  {
+    id: 'fe-webcomponents',
+    title: 'Web Components组件标准',
+    level: '进阶',
+    content: `### Web Components三大核心
+- Custom Elements：通过customElements.define()定义自定义HTML标签，继承HTMLElement实现生命周期钩子（connectedCallback、disconnectedCallback、attributeChangedCallback）。
+- Shadow DOM：attachShadow({mode:'open'})创建隔离的DOM树，样式和结构不污染外部，实现真正的组件封装。
+- HTML Templates：<template>标签定义可复用模板，cloneNode(true)实例化插入DOM。
+
+### 与框架对比
+原生组件无框架依赖，浏览器原生支持，跨框架复用。相比Vue/React组件，缺少响应式、虚拟DOM等高级能力，常配合Lit、Stencil等库简化开发。
+
+### 通信方式
+通过属性/特性传递数据，CustomEvent实现事件通信，slot支持内容分发（类似Vue插槽）。`
+  },
+  {
+    id: 'fe-microfrontend',
+    title: '微前端架构实践',
+    level: '进阶',
+    content: `### 微前端核心思想
+将大型前端应用拆分为多个独立、可自治的子应用，每个子应用可独立开发、测试、部署，最终在主应用中集成运行。解决巨石应用维护困难、技术栈升级难等问题。
+
+### 常见方案对比
+- qiankun：基于single-spa，支持HTML Entry、JS沙箱（Proxy +快照）、样式隔离（Shadow DOM/前缀），上手简单生态成熟。
+- MicroApp：京东出品，类Web Components思想，通过自定义标签<micro-app>加载子应用，零配置接入。
+- 模块联邦：Webpack5原生能力，构建时直接共享模块，运行时动态加载依赖。
+
+### 关键问题
+路由分发（主应用匹配路由加载子应用）、应用通信（props/发布订阅/CustomEvent）、样式隔离、JS沙箱、公共依赖共享、子应用挂载卸载生命周期。`
+  },
+  {
+    id: 'fe-ssr',
+    title: 'SSR/SSG服务端渲染',
+    level: '高级',
+    content: `### SSR核心原理
+传统SPA首屏慢、SEO差，SSR在服务端渲染HTML字符串返回浏览器，客户端注水（hydration）激活交互。首屏直出HTML，用户更快看到内容，搜索引擎可直接抓取。
+
+### 主流框架方案
+- Nuxt.js（Vue生态）、Next.js（React生态）、SvelteKit（Svelte生态）开箱即用，约定路由、数据获取（getServerSideProps/getStaticProps/load）、API路由。
+- 渲染模式切换：SSR（每个请求动态渲染）、SSG（构建时静态生成HTML，Next getStaticProps + ISR增量静态再生）、CSR（纯客户端渲染）、ISR/SSC（边缘渲染）。
+
+### 性能与复杂度
+需关注服务端压力（缓存策略：页面级/组件级缓存）、 hydration 不匹配、同构代码兼容（不能直接访问window/document）、数据预取时机（服务端拉取vs客户端二次拉取）。相比SPA增加运维复杂度，适合对SEO和首屏有强需求的场景。`
+  },
+  {
+    id: 'fe-wasm',
+    title: 'WebAssembly原理与应用',
+    level: '高级',
+    content: `### WASM核心概念
+WebAssembly是可在浏览器中运行的低级二进制指令格式，接近机器码执行速度。C/C++/Rust/Go等语言编译为.wasm模块，通过JS API加载运行，与JS共享内存空间。
+
+### 工作原理
+.wasm是栈式虚拟机指令，浏览器JIT编译（AOT编译后产物）直接在CPU执行，绕过JS解析编译开销。支持线性内存模型，通过Memory对象与JS交换数据，通过Import/Export对象互相调用函数。
+
+### 典型应用场景
+- 计算密集型：视频编解码、PDF处理、图像处理、3D渲染、加密算法、科学计算。
+- 代码复用：将C/C++库（如FFmpeg、SQLite、OpenCV）移植到Web。
+- 跨平台：配合Emscripten工具链编译现有项目，性能可达原生80%+。
+- 注意：WASM仅处理数值运算，DOM操作仍需JS桥接，数据序列化开销需评估。`
+  }
+    ]
+  },
+
+  backend: {
+    name: '后端',
+    icon: '⚙️',
+    color: '#10b981',
+    topics: [
+      {
+        id: 'be-python',
+        title: 'Python 后端基础',
+        level: '基础',
+        content: `**基础语法**
+\`\`\`python
+# 数据类型
+s = "hello"
+n = 10
+f = 3.14
+b = True
+lst = [1, 2, 3]
+tup = (1, 2)
+d = {"k": "v"}
+st = {1, 2, 3}
+
+# 字符串格式化
+name = "Tom"
+print(f"Hello, {name}")
+
+# 列表推导
+squares = [x**2 for x in range(10) if x % 2 == 0]
+\`\`\`
+
+**函数**
+\`\`\`python
+def greet(name: str, times: int = 1) -> str:
+    return f"Hello {name}" * times
+
+# 可变参数
+def func(*args, **kwargs):
+    pass
+
+# 匿名函数
+square = lambda x: x ** 2
+\`\`\`
+
+**面向对象**
+\`\`\`python
+class Animal:
+    def __init__(self, name):
+        self.name = name
+    def speak(self):
+        raise NotImplementedError
+
+class Dog(Animal):
+    def speak(self):
+        return f"{self.name}: Woof"
+
+from abc import ABC, abstractmethod
+class Shape(ABC):
+    @abstractmethod
+    def area(self): pass
+\`\`\`
+
+**装饰器**
+\`\`\`python
+import time
+def timer(func):
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        print(f"{func.__name__}: {time.time()-start:.2f}s")
+        return result
+    return wrapper
+
+@timer
+def slow():
+    time.sleep(1)
+\`\`\`
+
+**常用模块**：os、sys、json、datetime、re、collections、itertools、pathlib、logging。`
+      },
+      {
+        id: 'be-flask',
+        title: 'Flask Web 框架',
+        level: '进阶',
+        content: `**最小应用**
+\`\`\`python
+from flask import Flask, request, jsonify, render_template
+
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return 'Hello Flask'
+
+@app.route('/api/users/<int:user_id>', methods=['GET'])
+def get_user(user_id):
+    return jsonify({'id': user_id, 'name': 'Tom'})
+
+@app.route('/api/users', methods=['POST'])
+def create_user():
+    data = request.get_json()
+    return jsonify(data), 201
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
+\`\`\`
+
+**蓝图（Blueprint）模块化**
+\`\`\`python
+from flask import Blueprint
+user_bp = Blueprint('user', __name__, url_prefix='/user')
+
+@user_bp.route('/list')
+def list_users():
+    return 'users'
+
+app.register_blueprint(user_bp)
+\`\`\`
+
+**常用扩展**：
+- Flask-SQLAlchemy：ORM
+- Flask-Login：会话管理
+- Flask-WTF：表单
+- Flask-Migrate：数据库迁移
+- Flask-Cors：跨域
+
+**模板（Jinja2）**
+\`\`\`html
+{% for item in items %}
+    <p>{{ item.name }}</p>
+{% endfor %}
+{% if user %}Welcome{% endif %}
+\`\`\`
+
+**配置**：app.config['DEBUG'] = True、环境变量、配置文件。`
+      },
+      {
+        id: 'be-mysql',
+        title: 'MySQL 数据库',
+        level: '进阶',
+        content: `**基础 SQL**
+\`\`\`sql
+-- 建表
+CREATE TABLE users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    age INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_name (name)
+);
+
+-- 增删改查
+INSERT INTO users (name, email) VALUES ('Tom', 'tom@x.com');
+SELECT * FROM users WHERE age > 18 ORDER BY id DESC LIMIT 10;
+UPDATE users SET age = 20 WHERE id = 1;
+DELETE FROM users WHERE id = 1;
+\`\`\`
+
+**联表查询**
+\`\`\`sql
+-- INNER JOIN 只返回匹配
+SELECT u.name, o.amount
+FROM users u
+INNER JOIN orders o ON u.id = o.user_id;
+
+-- LEFT JOIN 保留左表全部
+-- RIGHT JOIN 保留右表全部
+\`\`\`
+
+**聚合与分组**
+\`\`\`sql
+SELECT department, COUNT(*) cnt, AVG(salary) avg_sal
+FROM employees
+GROUP BY department
+HAVING cnt > 5;
+\`\`\`
+
+**索引**：
+- 主键索引、唯一索引、普通索引、组合索引
+- 最左前缀原则
+- EXPLAIN 分析执行计划
+- 避免索引失效：函数操作、类型转换、LIKE '%xx'、OR
+
+**事务 ACID**：原子性、一致性、隔离性、持久性。
+**隔离级别**：读未提交、读已提交、可重复读（MySQL 默认）、串行化。
+
+**锁**：共享锁、排他锁、行锁、表锁、间隙锁。
+**优化**：避免 SELECT *、合理索引、分页优化、读写分离、分库分表。`
+      },
+      {
+        id: 'be-redis',
+        title: 'Redis 缓存',
+        level: '进阶',
+        content: `**数据类型**
+- String：缓存、计数器、分布式锁
+- Hash：对象存储
+- List：消息队列、最新列表
+- Set：标签、共同好友
+- ZSet（有序集合）：排行榜、延时队列
+
+**常用命令**
+\`\`\`bash
+SET key value EX 60       # 带过期
+GET key
+DEL key
+INCR counter              # 自增
+HSET user:1 name Tom age 20
+HGET user:1 name
+LPUSH list a b c          # 左推
+LRANGE list 0 -1
+SADD tags python linux
+SMEMBERS tags
+ZADD rank 100 tom 90 jerry
+ZREVRANGE rank 0 9 WITHSCORES
+EXPIRE key 60             # 设置过期
+TTL key                   # 剩余时间
+\`\`\`
+
+**应用场景**
+- 缓存热点数据
+- 分布式锁：SETNX + EXPIRE 或 SET key value NX EX
+- 限流：INCR + EXPIRE
+- 排行榜：ZSet
+- 会话存储：Session
+- 消息队列：List / Stream
+
+**持久化**
+- RDB：快照，恢复快，可能丢数据
+- AOF：追加日志，更安全，文件大
+
+**缓存问题**
+- **穿透**：查不存在的数据。解决：缓存空值、布隆过滤器
+- **击穿**：热点 key 失效。解决：互斥锁、永不过期
+- **雪崩**：大量 key 同时失效。解决：过期时间加随机值、多级缓存`
+      },
+      {
+        id: 'be-docker',
+        title: 'Docker 容器化',
+        level: '高级',
+        content: `**核心概念**：镜像（Image）只读模板、容器（Container）运行实例、仓库（Registry）镜像存储。
+
+**常用命令**
+\`\`\`bash
+docker pull nginx:latest           # 拉取镜像
+docker images                       # 镜像列表
+docker run -d --name web -p 80:80 nginx   # 运行
+docker ps                           # 运行容器
+docker ps -a                        # 所有容器
+docker stop web
+docker rm web
+docker rmi nginx
+docker exec -it web bash            # 进入容器
+docker logs -f web                  # 日志
+docker cp file web:/path            # 拷贝
+docker build -t myapp:1.0 .         # 构建
+docker login / push / tag
+\`\`\`
+
+**Dockerfile**
+\`\`\`dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+COPY . .
+EXPOSE 5000
+CMD ["python", "app.py"]
+\`\`\`
+
+**docker-compose** 多容器编排
+\`\`\`yaml
+version: '3'
+services:
+  web:
+    build: .
+    ports: ["5000:5000"]
+    depends_on: [db]
+  db:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    volumes: ["db_data:/var/lib/mysql"]
+volumes:
+  db_data:
+\`\`\`
+
+**网络**：bridge（默认）、host、none、自定义网络。
+**数据卷**：持久化数据，挂载到 /var/lib/docker/volumes。`
+      },
+      {
+        id: 'be-nginx',
+        title: 'Nginx 配置与运维',
+        level: '高级',
+        content: `**核心配置结构**
+\`\`\`nginx
+worker_processes auto;
+events {
+    worker_connections 1024;
+}
+http {
+    include mime.types;
+    sendfile on;
+    keepalive_timeout 65;
+
+    upstream backend {
+        server 127.0.0.1:5000;
+        server 127.0.0.1:5001;
+    }
+
+    server {
+        listen 80;
+        server_name example.com;
+
+        location / {
+            root /var/www/html;
+            index index.html;
+            try_files $uri $uri/ =404;
+        }
+
+        location /api/ {
+            proxy_pass http://backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+
+        location ~ \\.(jpg|png|css|js)$ {
+            expires 30d;
+        }
+    }
+}
+\`\`\`
+
+**常用功能**
+- 静态资源服务
+- 反向代理：proxy_pass
+- 负载均衡：upstream（轮询、权重、ip_hash、least_conn）
+- HTTPS：listen 443 ssl + ssl_certificate
+- Gzip 压缩：gzip on
+- 限流：limit_req_zone
+- 重定向：rewrite
+
+**常用命令**
+\`\`\`bash
+nginx -t                # 检查配置
+nginx -s reload         # 重载
+nginx -s stop
+systemctl restart nginx
+\`\`\`
+
+**日志**：access.log、error.log，可通过 log_format 自定义格式。`
+      },
+      {
+        id: 'be-ci',
+        title: 'CI/CD 持续集成部署',
+        level: '高级',
+        content: `**CI/CD 概念**
+- CI（持续集成）：代码提交自动构建、测试
+- CD（持续交付/部署）：自动部署到测试/生产环境
+
+**GitLab CI 示例** \`.gitlab-ci.yml\`
+\`\`\`yaml
+stages:
+  - test
+  - build
+  - deploy
+
+test:
+  stage: test
+  image: python:3.11
+  script:
+    - pip install -r requirements.txt
+    - pytest
+
+build:
+  stage: build
+  image: docker:latest
+  script:
+    - docker build -t myapp:$CI_COMMIT_SHORT_SHA .
+    - docker push registry.com/myapp:$CI_COMMIT_SHORT_SHA
+  only:
+    - main
+
+deploy:
+  stage: deploy
+  script:
+    - ssh user@server "docker pull registry.com/myapp:$CI_COMMIT_SHORT_SHA && docker-compose up -d"
+  only:
+    - main
+\`\`\`
+
+**GitHub Actions 示例**
+\`\`\`yaml
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt
+      - run: pytest
+\`\`\`
+
+**Jenkins 流程**：拉取代码 → 构建 → 单元测试 → 镜像构建推送 → 部署 → 通知。
+
+**部署策略**：
+- 蓝绿部署：两套环境切换
+- 滚动部署：逐步替换
+- 金丝雀发布：小流量验证
+
+**常用工具**：GitLab CI、GitHub Actions、Jenkins、Drone、ArgoCD（GitOps）。`
+      },
+  { id: 'be-java-core', title: 'Java核心语法OOP集合', level: '基础', content: 'Java面向对象静态强类型，三大特性：封装(访问修饰符隐藏细节)、继承(extends复用父类)、多态(方法重写/重载)。集合框架高频考点：ArrayList动态数组随机访问快，LinkedList双向链表适合中间插入删除；HashMap非线程安全，ConcurrentHashMap用CAS+分段锁保并发。Stream API函数式处理：map转换、filter过滤、collect收集。异常分Checked Exception(必捕获)和RuntimeException，try-with-resources自动关资源。' },
+  { id: 'be-go-basics', title: 'Go语言基础并发goroutine', level: '基础', content: 'Go由Google开发，以简洁高效原生并发著称。goroutine是轻量协程，Go runtime调度非OS线程，初始栈仅2KB，单程序轻松启动数万。goroutine间通过channel通信，遵循"用通信共享内存而非共享内存通信"。channel分无缓冲(同步阻塞握手)、有缓冲(异步队列)。defer用于资源清理，LIFO后进先出执行。slice可变长序列，append触发扩容分配新数组，cap容量len长度。接口隐式满足无implements关键字，struct实现所有方法即自动满足。context传递取消/超时/元数据。' },
+  { id: 'be-node-express', title: 'Node.js框架Express/Koa', level: '基础', content: 'Node.js基于V8事件驱动I/O，单线程异步非阻塞，适合IO密集场景。事件循环6阶段：timers、pending callbacks、poll(核心IO轮询)、check(setImmediate)等。Express最流行Web框架，中间件(req,res,next)按顺序执行，错误中间件4参数(err,req,res,next)。Koa更轻量，洋葱模型+async/await，内置异常捕获。require() CommonJS同步，import ESM静态导入，可互操作。' },
+  { id: 'be-postgresql-vs-mysql', title: 'PostgreSQL对比MySQL', level: '基础', content: 'PG与MySQL都是主流关系型数据库，各有侧重。PG功能最丰富开源库，支持JSONB二进制可索引、数组、GIS地理、全文搜索、CTE递归、窗口函数等高级特性。MySQL互联网领域更广，InnoDB引擎成熟稳定，MVCC+读写优化经大量生产验证。选型建议：PG适合复杂查询、数据分析、需丰富数据类型；MySQL适合OLTP高并发、生态工具链完善场景。PG MVCC基于快照旧版本存表内(VACUUM清理)；MySQL InnoDB MVCC基于undo log回滚段。两者都支持主从复制，PG内置流复制。' },
+  { id: 'be-mongodb-nosql', title: 'MongoDB文档数据库NoSQL', level: '基础', content: 'MongoDB最流行文档型NoSQL，BSON(二进制JSON)存储，数据灵活无需预定义表结构。核心概念：Database→Collection集合(对应SQL表)→Document文档(对应行)。索引支持单字段、复合、地理空间、文本、TTL自动过期。聚合管道Aggregation Pipeline多阶段处理：$match过滤、$group分组、$sort排序、$lookup类似JOIN。复制集Replica Set高可用1主多从+仲裁，自动故障转移。分片集群Sharded Cluster通过Shard Key水平扩展，范围/哈希分片。适用日志、内容、实时分析；不适合强事务复杂JOIN。' },
+  { id: 'be-mq-selection', title: 'RabbitMQ与Kafka选型对比', level: '进阶', content: '消息队列实现解耦、异步削峰，RabbitMQ和Kafka最主流。RabbitMQ基于AMQP，路由灵活：Direct精确、Topic通配符#.*、Fanout广播、Headers匹配头。支持消息确认、死信交换机DLX+TTL做延迟队列，适合业务消息需精确路由。Kafka分布式发布订阅，Topic→Partition有序分区→Offset位点→Consumer Group。顺序追加日志百万TPS，持久化+副本容错+幂等Exactly-Once，适合日志采集、大数据流处理。' },
+  { id: 'be-auth-compare', title: 'JWT OAuth2与Session对比', level: '进阶', content: '三种认证方式各有优劣。Session：服务端存会话(内存/Redis)，客户端Cookie带SessionId。优点：可主动注销、状态可控；缺点：分布式需共享存储、跨域麻烦、CSRF风险。JWT三部分header.payload.signature，base64url编码签名防篡改。Payload标准claims：sub主体、iat签发、exp过期、nbf生效、iss签发方、aud受众。优点无状态天然分布式跨域；缺点无法主动撤销需黑名单。OAuth2是授权框架非认证协议，授权码模式(配合PKCE最安全)、密码模式、客户端模式，常用于第三方登录微信/GitHub。' },
+  { id: 'be-websocket', title: 'WebSocket实时通信', level: '进阶', content: 'WebSocket HTML5全双工协议，基于TCP，经HTTP Upgrade握手建连，默认端口80/443，解决HTTP单向请求-响应需低效轮询问题。握手用HTTP 101 Switching Protocols切换。与轮询Polling/SSE相比，WebSocket持久连接服务器主动推送，延迟低开销小。应用场景：即时聊天、在线协作文档、实时通知、在线游戏、股票行情。生产注意：心跳Ping/Pong检测断连；Nginx反代配proxy_read_timeout防长连接断开；wss=TLS加密防中间人；集群配合Redis Pub/Sub或Kafka广播消息，确保多节点可达。' },
+  { id: 'be-redis-persistence', title: 'Redis持久化RDB与AOF对比', level: '进阶', content: 'Redis内存数据库，持久化防重启丢数据。RDB快照模式：指定时间间隔内内存数据二进制压缩写入dump.rdb。触发方式：手动save/bgsave、配置save规则(save 900 1:900秒1次修改)。优点：文件紧凑恢复快；缺点：两次快照间宕机丢数据、fork子进程Copy-On-Write有开销。AOF追加写：记录每条写命令appendonly.aof协议文本。fsync策略：always每条刷盘最安全最慢、everysec每秒(推荐)、no OS决定。AOF rewrite重写合并重复命令压缩文件。可同时开RDB+AOF，重启优先加载AOF，数据更完整。' },
+  { id: 'be-db-replication', title: '数据库主从复制读写分离', level: '进阶', content: '主从复制是高可用和性能扩展基础。MySQL原理：主库变更写binlog二进制日志，从库I/O线程拉binlog写relay log中继日志，从库SQL线程重放事件同步。复制模式：异步(默认性能好可能丢数据)、半同步Semisync至少一从库确认后提交、全同步GTID+组复制。读写分离：主库处理写INSERT/UPDATE/DELETE，从库处理读SELECT，分摊负载。实现方式：应用层代码路由、中间件代理MyCat/ShardingSphere Proxy/Atlas。注意事项：主从复制延迟实时性要求高的读走主库；从库长事务阻塞SQL线程。' },
+  { id: 'be-distributed-tx', title: '分布式事务理论与方案', level: '高级', content: '分布式事务是微服务核心难题。CAP定理：一致性C、可用性A、分区容错P不可兼得，P客观必选，实际CP/AP二选一。BASE理论：基本可用、软状态、最终一致，多数互联网业务接受最终一致。2PC两阶段提交：协调者+参与者prepare→commit/rollback，问题协调者单点、阻塞。TCC Try资源预留→Confirm确认→Cancel补偿，侵入性强一致性高。Saga长事务拆本地事务+补偿，分编排式(事件驱动)、协调式(中央调度)，适合长流程。' },
+  { id: 'be-spring-cloud', title: '微服务架构Spring Cloud', level: '高级', content: '微服务将单体拆成多个自治小服务，Spring Cloud是最成熟微服务技术栈。核心组件：服务注册发现(Nacos/Eureka/Consul)，心跳检测动态取实例。服务调用OpenFeign声明式HTTP客户端，集成Ribbon负载均衡。服务网关Spring Cloud Gateway统一入口：路由转发、鉴权、限流、灰度。配置中心集中管理配置动态刷新。断路器Resilience4j/Sentinel熔断降级防级联故障。链路追踪Sleuth+Zipkin/SkyWalking分布式调用链。Spring Cloud Alibaba整合Nacos+Sentinel+Seata国内主流。' },
+  { id: 'be-shardingsphere', title: '分库分表ShardingSphere策略', level: '高级', content: '单库单表超500万行读写瓶颈，需水平切分分库分表。ShardingSphere Apache顶级项目，支持JDBC/Proxy/Sidecar三种接入。分片策略：哈希分片HASH MOD分布均匀扩缩容麻烦；范围分片RANGE按时间区间便于范围查询易热点。分片算法：Standard单键、Complex多键、Hint强制路由。主键策略：雪花算法Snowflake(64位:符号+时间+机器+序列)、UUID、Segment号段。读写分离主写从读，集成Seata支持分布式事务。绑定表避免笛卡尔积；广播表全库冗余存字典表。' }
+    ]
+  }
+};
+
+// ============ 题库数据 ============
+const QUESTIONS = {
+  network: [
+    {
+      q: 'OSI 参考模型共有几层？',
+      level: '基础',
+      options: ['5 层', '6 层', '7 层', '8 层'],
+      answer: 2,
+      explain: 'OSI 模型分为物理层、数据链路层、网络层、传输层、会话层、表示层、应用层共 7 层。'
+    },
+    {
+      q: 'TCP 三次握手中，第二次握手报文的标志位是？',
+      level: '进阶',
+      options: ['SYN', 'ACK', 'SYN+ACK', 'FIN'],
+      answer: 2,
+      explain: '第二次握手服务器回复 SYN=1, ACK=1，即 SYN+ACK 报文，表示同意建立连接并确认客户端的 SYN。'
+    },
+    {
+      q: '以下哪个协议运行在传输层？',
+      level: '基础',
+      options: ['HTTP', 'TCP', 'IP', 'ARP'],
+      answer: 1,
+      explain: 'TCP 是传输层协议；HTTP 是应用层；IP 是网络层；ARP 是数据链路层。'
+    },
+    {
+      q: 'HTTP 状态码 404 表示？',
+      level: '基础',
+      options: ['服务器内部错误', '请求的资源不存在', '未授权', '禁止访问'],
+      answer: 1,
+      explain: '404 Not Found 表示服务器找不到请求的资源；500 是服务端错误；401 是未认证；403 是禁止访问。'
+    },
+    {
+      q: '默认情况下 HTTPS 使用的端口是？',
+      level: '基础',
+      options: ['80', '443', '8080', '21'],
+      answer: 1,
+      explain: 'HTTP 默认 80，HTTPS 默认 443，FTP 默认 21，SSH 默认 22。'
+    },
+    {
+      q: 'IP 地址 192.168.1.100 属于哪类地址？',
+      level: '基础',
+      options: ['A 类', 'B 类', 'C 类', '私有地址'],
+      answer: 3,
+      explain: '192.168.0.0/16 是私有地址范围，虽然按分类是 C 类，但更准确的说法是私有地址。'
+    },
+    {
+      q: '子网掩码 255.255.255.0 对应的 CIDR 表示是？',
+      level: '进阶',
+      options: ['/8', '/16', '/24', '/32'],
+      answer: 2,
+      explain: '255.255.255.0 前 24 位为 1，对应 /24。'
+    },
+    {
+      q: 'DNS 默认使用的端口号是？',
+      level: '进阶',
+      options: ['53', '80', '443', '123'],
+      answer: 0,
+      explain: 'DNS 默认使用 53 端口（TCP 和 UDP 都用），NTP 是 123。'
+    },
+    {
+      q: '以下哪个是 UDP 协议的应用？',
+      level: '进阶',
+      options: ['HTTP', 'FTP', 'DNS', 'SSH'],
+      answer: 2,
+      explain: 'DNS 同时支持 TCP 和 UDP，主要用 UDP；HTTP/FTP/SSH 都基于 TCP。'
+    },
+    {
+      q: 'TCP 四次挥手中，主动关闭方最后进入的状态是？',
+      level: '高级',
+      options: ['CLOSE_WAIT', 'LAST_ACK', 'TIME_WAIT', 'FIN_WAIT_2'],
+      answer: 2,
+      explain: '主动关闭方发送最后 ACK 后进入 TIME_WAIT，等待 2MSL 后才关闭，确保对端收到 ACK。'
+    },
+    {
+      q: '以下哪个 IP 是回环地址？',
+      level: '基础',
+      options: ['192.168.1.1', '10.0.0.1', '127.0.0.1', '172.16.0.1'],
+      answer: 2,
+      explain: '127.0.0.0/8 是回环地址，用于本机测试；其他都是私有地址。'
+    },
+    {
+      q: 'HTTP/2 相比 HTTP/1.1 的主要改进不包括？',
+      level: '高级',
+      options: ['二进制分帧', '多路复用', '头部压缩', '基于 UDP'],
+      answer: 3,
+      explain: 'HTTP/2 仍基于 TCP；HTTP/3 才基于 UDP（QUIC）。多路复用、二进制分帧、头部压缩都是 HTTP/2 特性。'
+    },
+{q:'UDP协议适用于以下哪种场景?', level:'基础', options:['文件传输','视频直播','电子邮件','网页浏览'], answer:1, explain:'UDP无连接、低延迟，适合对实时性要求高的场景如视频直播，不要求100%可靠传输。'},
+{q:'HTTP状态码301表示什么含义?', level:'基础', options:['请求成功','永久重定向','临时重定向','请求错误'], answer:1, explain:'301表示永久重定向，搜索引擎会更新索引；302是临时重定向。'},
+{q:'DNS记录中，MX记录的作用是什么?', level:'基础', options:['解析域名到IPv4地址','解析域名到IPv6地址','指定邮件服务器','域名别名'], answer:2, explain:'MX(Mail Exchange)记录用于指定该域名对应的邮件服务器，处理电子邮件投递。'},
+{q:'DHCP租约到期后，客户端会首先做什么?', level:'基础', options:['立即释放IP地址','发送DHCPREQUEST续租','发送DHCPDISCOVER重新申请','等待24小时再处理'], answer:1, explain:'租约到达50%时客户端会单播DHCPREQUEST给原服务器尝试续租，失败则到87.5%时广播续租。'},
+{q:'CIDR前缀/24对应的子网掩码是?', level:'基础', options:['255.0.0.0','255.255.0.0','255.255.255.0','255.255.255.128'], answer:2, explain:'/24表示前24位为网络位，即前3个字节全1，对应255.255.255.0。'},
+{q:'静态路由与动态路由相比，静态路由的特点是?', level:'基础', options:['自动适应拓扑变化','配置简单、开销小','适合大型网络','需要路由协议支持'], answer:1, explain:'静态路由由管理员手动配置，开销小但无法自动适应拓扑变化，适合小型固定网络。'},
+{q:'VLAN标签的标准协议是?', level:'基础', options:['802.1X','802.1Q','802.3','802.11n'], answer:1, explain:'802.1Q是VLAN标签标准，在以太网帧中插入4字节标签标识VLAN ID。'},
+{q:'STP生成树协议中，根桥的选举依据是什么?', level:'基础', options:['MAC地址最小','优先级最小，其次MAC最小','IP地址最小','端口数量最多'], answer:1, explain:'根桥选举先比较桥优先级(默认32768)，最小者胜出；优先级相同则MAC地址最小者为根桥。'},
+{q:'ping命令使用的是ICMP的哪种报文类型?', level:'基础', options:['类型0/回声应答','类型8/回声请求','类型11/超时','类型3/目的不可达'], answer:1, explain:'ping发送ICMP Echo Request(类型8)，对方回应Echo Reply(类型0)实现连通性检测。'},
+{q:'FTP协议使用的默认端口组合是?', level:'基础', options:['20/数据端口，21/控制端口','21/数据端口，22/控制端口','22/SSH，23/Telnet','80/HTTP，443/HTTPS'], answer:0, explain:'FTP使用21端口建立控制连接，主动模式下服务器用20端口建立数据连接。'},
+{q:'ARP表的作用是什么?', level:'基础', options:['存储域名到IP的映射','存储IP到MAC地址的映射','存储路由表项','存储端口与进程映射'], answer:1, explain:'ARP(地址解析协议)表维护同一局域网内IP地址到MAC地址的映射，用于二层转发。'},
+{q:'MAC广播地址的格式是?', level:'基础', options:['00:00:00:00:00:00','FF:FF:FF:FF:FF:FF','11:11:11:11:11:11','AA:AA:AA:AA:AA:AA'], answer:1, explain:'48位全1的MAC地址FF:FF:FF:FF:FF:FF是广播地址，会发送给同一广播域内所有主机。'},
+{q:'802.11无线网络中，2.4G频段相比5G频段的特点是?', level:'基础', options:['速度更快','穿墙能力更强','信道干扰更少','延迟更低'], answer:1, explain:'2.4G波长更长，穿透能力强、覆盖范围广，但速率较低且干扰设备多(微波炉、蓝牙等)。'},
+{q:'以下哪种WiFi加密协议安全性最高?', level:'基础', options:['WEP','WPA','WPA2','WPA3'], answer:3, explain:'WPA3是最新标准，使用SAE握手替代PSK，提供更强的防暴力破解和前向安全性。'},
+{q:'CDN中，边缘节点与源站的关系是?', level:'基础', options:['边缘节点就是源站','边缘节点缓存源站内容，用户就近访问','源站缓存边缘节点内容','两者完全独立无关'], answer:1, explain:'CDN边缘节点分布式部署在各地，缓存源站静态/准静态内容，用户就近访问降低延迟。'},
+{q:'DMZ区域的主要作用是?', level:'基础', options:['存放内部数据库','部署对外公开服务器','管理员专用网段','存放备份数据'], answer:1, explain:'DMZ(隔离区/非军事区)在内外网之间部署对外服务器如Web/Mail，外部只能访问DMZ，不能直连内网。'},
+{q:'正向代理与反向代理的区别是?', level:'基础', options:['正向代理代理客户端，反向代理代理服务器','正向代理代理服务器，反向代理代理客户端','两者完全相同','正向代理用于Web，反向代理用于邮件'], answer:0, explain:'正向代理替客户端访问外部资源(如翻墙)；反向代理替服务器接收外部请求(如Nginx做负载均衡)。'},
+{q:'IPv6地址长度是多少位?', level:'基础', options:['32位','64位','128位','256位'], answer:2, explain:'IPv4为32位地址，IPv6扩展到128位，解决地址枯竭问题。'},
+{q:'nc -zv 命令的主要作用是?', level:'基础', options:['传输文件','端口扫描测试连通性','远程登录','抓包分析'], answer:1, explain:'nc(netcat) -z表示不发送数据只扫描端口，-v显示详细信息，常用于TCP/UDP端口连通性测试。'},
+{q:'HTTP状态码5xx系列代表什么?', level:'进阶', options:['请求成功','重定向','客户端错误','服务器错误'], answer:3, explain:'5xx是服务器端错误，如500内部错误、502网关错误、503服务不可用、504网关超时。'},
+{q:'DNS的CNAME记录和A记录的区别是?', level:'进阶', options:['CNAME指向IP，A指向别名','A指向IP，CNAME指向另一个域名','CNAME用于邮件，A用于Web','A用于IPv6，CNAME用于IPv4'], answer:1, explain:'A记录直接映射到IPv4地址；CNAME(Canonical Name)是别名记录，指向另一个域名而非IP。'},
+{q:'子网192.168.1.64/26的广播地址是?', level:'进阶', options:['192.168.1.95','192.168.1.127','192.168.1.63','192.168.1.255'], answer:1, explain:'/26块大小为64，子网区间为.64-.127，广播地址是最后一个地址即.127。'},
+{q:'traceroute和mtr的主要区别是?', level:'进阶', options:['traceroute用TCP，mtr用UDP','mtr结合ping和traceroute，持续统计丢包率','traceroute只能测IPv4，mtr支持IPv6','mtr需要root权限，traceroute不需要'], answer:1, explain:'mtr(My Traceroute)结合了traceroute和ping功能，持续发送数据包统计每跳丢包率和延迟，诊断更全面。'},
+{q:'SNMP各版本中，哪个版本首次支持强认证和加密?', level:'进阶', options:['SNMP v1','SNMP v2c','SNMP v2u','SNMP v3'], answer:3, explain:'SNMP v1/v2使用明文community字符串不安全；SNMP v3引入USM安全模型，支持MD5/SHA认证和DES/AES加密。'},
+{q:'NTP层级(stratum)概念中，stratum 0表示?', level:'进阶', options:['标准时钟源如GPS/原子钟','连接标准时钟的服务器','客户端','层级越高越准确'], answer:0, explain:'stratum 0是权威时间源(GPS/原子钟)，stratum 1直连stratum 0，层级数字越大离源越远、精度越低。'},
+{q:'IPsec VPN和SSL VPN(如OpenVPN)相比，IPsec的特点是?', level:'进阶', options:['仅支持Web应用','工作在网络层，透明支持所有IP流量','只能用TCP协议','无需客户端软件'], answer:1, explain:'IPsec工作在网络层，对上层协议透明；SSL VPN通常工作在传输层/应用层，远程接入更灵活。'},
+{q:'netstat和ss命令的区别是?', level:'进阶', options:['netstat更快速','ss读取内核信息更高效，支持更多状态过滤','netstat已被弃用无法使用','ss只能看TCP连接'], answer:1, explain:'ss是iproute2工具，直接读取内核socket信息比netstat更快更高效，支持复杂状态过滤如state established。'},
+{q:'lsof -i :8080 命令的作用是?', level:'进阶', options:['查看8080端口流量','查看占用8080端口的进程PID和名称','修改8080端口配置','关闭8080端口'], answer:1, explain:'lsof(list open files) -i按网络接口过滤，:8080查找占用该端口的进程、PID、用户等信息。'},
+{q:'tcpdump过滤 host 10.0.0.1 and port 80 的含义是?', level:'进阶', options:['抓取所有80端口流量','抓取源或目的IP为10.0.0.1且源或目的端口为80的流量','抓取10.0.0.1发出的80端口流量','抓取目的到10.0.0.1的80端口流量'], answer:1, explain:'host匹配源或目的IP，port匹配源或目的端口，AND逻辑组合后抓取符合条件的双向流量。'},
+{q:'FTP主动模式和被动模式的区别是?', level:'进阶', options:['主动模式客户端主动连接，被动模式服务器主动连接','主动模式服务器主动连客户端数据端口，被动模式客户端主动连服务器高端口','主动模式更安全','被动模式使用端口20'], answer:1, explain:'主动模式服务器用20端口主动连客户端(易被客户端防火墙拦截)；被动模式服务器开放随机高端口，由客户端主动连接。'},
+{q:'4层负载均衡与7层负载均衡的区别是?', level:'进阶', options:['L4基于URL转发，L7基于IP+端口','L4基于IP+端口转发，L7基于HTTP头/URL等应用层信息转发','L7性能更高','L4支持cookie会话保持'], answer:1, explain:'L4工作在传输层，根据源/目的IP和端口做NAT转发；L7工作在应用层，可解析HTTP内容做URL/Host路由、cookie会话保持等。'},
+{q:'IDS和IPS的核心区别是?', level:'进阶', options:['IDS检测+拦截，IPS仅检测','IDS旁路监听仅告警，IPS串联部署可主动阻断','IDS工作在2层，IPS工作在3层','IPS就是IDS的别名'], answer:1, explain:'IDS(入侵检测系统)旁路监听，检测攻击后告警不阻断；IPS(入侵防御系统)串联部署，检测到攻击可主动丢弃/阻断。'},
+{q:'OSPF协议中DR和BDR的作用是什么?', level:'高级', options:['加密路由报文','在多路访问网络中减少LSA洪泛和邻接数量','作为默认网关','转发用户数据流量'], answer:1, explain:'OSPF在广播/NBMA网络中选举DR(指定路由器)和BDR(备份)，其他路由器只与DR/BDR建立邻接，大幅减少LSA洪泛数量。'},
+{q:'BGP路径属性中，用于控制出流量方向的常用属性是?', level:'高级', options:['AS Path','Local Preference','Origin','MED'], answer:1, explain:'Local Preference是本地优先级，仅在AS内部传播，值越大越优先，常用于控制本AS的出流量方向。'},
+{q:'TCP窗口缩放(Window Scaling)的作用是?', level:'高级', options:['加密TCP报文','突破16位窗口限制(最大65535字节)，适配高带宽延迟乘积网络','减少TCP握手次数','实现UDP可靠传输'], answer:1, explain:'TCP头窗口字段仅16位(最大65535字节)，高BDP网络(如10Gbps长距)需要更大窗口，Window Scaling将窗口左移扩展到GB级。'},
+{q:'TLS 1.3相比TLS 1.2的主要改进不包括?', level:'高级', options:['握手从2-RTT降至1-RTT，支持0-RTT恢复','移除RC4、MD5、SHA-1、RSA密钥交换等不安全算法','强制前向保密','新增SSLv3兼容模式'], answer:3, explain:'TLS 1.3握手更快、移除不安全算法、强制PFS，但完全废弃了SSLv3等旧协议，不再兼容。'},
+{q:'HTTP/3(QUIC)相比HTTP/2(TCP)的核心优势是?', level:'高级', options:['使用TCP多路复用避免队头阻塞','基于UDP实现可靠传输，流级独立无TCP队头阻塞，支持连接迁移','强制HTTPS加密','仅支持二进制帧'], answer:1, explain:'HTTP/2基于TCP，TCP层丢包阻塞所有流(队头阻塞)；HTTP/3基于QUIC在UDP上实现可靠传输，流级别独立且支持连接迁移(4G切WiFi不中断)。'},
+{q:'SYN Flood攻击与SYN Cookies防御的描述正确的是?', level:'高级', options:['SYN Cookies需要存储大量半连接','SYN Flood通过发送大量TCP连接报文耗尽服务器半连接队列','SYN Cookies是加密TCP载荷','SYN Flood攻击UDP服务'], answer:1, explain:'SYN Flood发送大量伪造源IP的SYN包，耗尽服务器TCP半连接队列；SYN Cookies不分配半连接资源，而是将状态编码到ISN中返回，收到ACK时验证即可恢复连接。'},
+{q:'OSI模型共分为几层？', level:'基础', options:['5层','6层','7层','8层'], answer:2, explain:'OSI模型分为7层：物理层到应用层。'},
+{q:'TCP建立连接需要几次握手？', level:'基础', options:['1次','2次','3次','4次'], answer:2, explain:'TCP通过三次握手建立可靠连接。'},
+{q:'HTTP状态码200表示什么？', level:'基础', options:['重定向','请求成功','客户端错误','服务器错误'], answer:1, explain:'200 OK表示请求已成功处理。'},
+{q:'DNS的主要作用是什么？', level:'基础', options:['加密传输','域名解析','路由选择','负载均衡'], answer:1, explain:'DNS将域名解析为IP地址。'},
+{q:'DHCP协议用于什么？', level:'基础', options:['动态分配IP','远程登录','文件传输','邮件发送'], answer:0, explain:'DHCP动态为主机分配IP地址等参数。'},
+{q:'VLAN的主要作用是什么？', level:'基础', options:['加密数据','划分广播域','路由转发','地址转换'], answer:1, explain:'VLAN通过逻辑划分隔离广播域。'},
+{q:'ICMP协议常用于哪个命令？', level:'基础', options:['ssh','ping','ftp','telnet'], answer:1, explain:'ping命令使用ICMP回显请求/应答。'},
+{q:'HTTPS默认使用哪个端口？', level:'基础', options:['21','22','80','443'], answer:3, explain:'HTTPS默认端口为443。'},
+{q:'SSH默认使用哪个端口？', level:'基础', options:['21','22','23','80'], answer:1, explain:'SSH默认端口为22。'},
+{q:'ARP协议的作用是什么？', level:'基础', options:['IP转MAC','MAC转IP','域名转IP','IP转域名'], answer:0, explain:'ARP通过IP地址解析MAC地址。'},
+{q:'HTTP默认端口是多少？', level:'基础', options:['21','22','80','443'], answer:2, explain:'HTTP默认端口为80。'},
+{q:'FTP默认使用哪个端口？', level:'基础', options:['20和21','22和23','80和443','53和67'], answer:0, explain:'FTP使用21(控制)和20(数据)端口。'},
+{q:'Telnet默认端口是多少？', level:'基础', options:['21','22','23','25'], answer:2, explain:'Telnet默认端口为23。'},
+{q:'SMTP默认端口是多少？', level:'基础', options:['23','25','53','110'], answer:1, explain:'SMTP默认端口为25。'},
+{q:'DNS默认端口是多少？', level:'基础', options:['25','53','80','110'], answer:1, explain:'DNS默认使用53端口(UDP为主)。'},
+{q:'POP3默认端口是多少？', level:'基础', options:['25','53','110','143'], answer:2, explain:'POP3默认端口为110。'},
+{q:'STP协议的主要作用是什么？', level:'基础', options:['防止路由环路','防止交换环路','加密传输','地址转换'], answer:1, explain:'STP生成树协议防止二层交换环路。'},
+{q:'NAT的主要作用是什么？', level:'基础', options:['加密数据','网络地址转换','域名解析','负载均衡'], answer:1, explain:'NAT实现私网与公网地址转换。'},
+{q:'CDN的全称是什么？', level:'基础', options:['内容分发网络','公共数据网','综合数字网','电路交换网'], answer:0, explain:'CDN是Content Delivery Network。'},
+{q:'DMZ区域的作用是什么？', level:'基础', options:['内部办公区','隔离公共服务区','数据库区','开发测试区'], answer:1, explain:'DMZ放置对外提供服务的服务器。'},
+{q:'SNMP协议用于什么？', level:'基础', options:['文件传输','网络管理','邮件发送','域名解析'], answer:1, explain:'SNMP是简单网络管理协议。'},
+{q:'NTP协议用于什么？', level:'基础', options:['时间同步','文件传输','远程登录','域名解析'], answer:0, explain:'NTP实现网络时间同步。'},
+{q:'BGP属于哪类路由协议？', level:'基础', options:['距离矢量','链路状态','路径矢量','外部网关'], answer:3, explain:'BGP是外部网关协议(EGP)。'},
+{q:'OSPF属于哪类路由协议？', level:'基础', options:['距离矢量','链路状态','路径矢量','混合协议'], answer:1, explain:'OSPF是链路状态路由协议。'},
+{q:'RIP属于哪类路由协议？', level:'基础', options:['距离矢量','链路状态','路径矢量','外部网关'], answer:0, explain:'RIP是距离矢量路由协议。'},
+{q:'TLS协议位于OSI哪一层？', level:'基础', options:['网络层','传输层','会话层','表示层'], answer:3, explain:'TLS工作在表示层，对应用层数据加密。'},
+{q:'UDP协议相对于TCP的特点是？', level:'基础', options:['可靠传输','面向连接','无连接低开销','流量控制'], answer:2, explain:'UDP是无连接协议，开销小但不可靠。'},
+{q:'TCP协议相对于UDP的特点是？', level:'基础', options:['无连接','不可靠','可靠有序','低延迟'], answer:2, explain:'TCP提供可靠、有序、重传的传输。'},
+{q:'子网掩码255.255.255.0对应CIDR前缀是？', level:'基础', options:['/8','/16','/24','/32'], answer:2, explain:'255.255.255.0对应/24，前24位网络位。'},
+{q:'CIDR前缀/16对应子网掩码是？', level:'基础', options:['255.0.0.0','255.255.0.0','255.255.255.0','255.255.255.255'], answer:1, explain:'/16对应255.255.0.0。'},
+{q:'WiFi加密协议WPA2的加密算法是？', level:'基础', options:['WEP','TKIP','CCMP(AES)','DES'], answer:2, explain:'WPA2使用CCMP即AES加密算法。'},
+{q:'代理服务器的主要作用不包括？', level:'基础', options:['访问控制','缓存加速','加密用户数据','隐藏内部地址'], answer:2, explain:'代理不直接加密用户原始数据。'},
+{q:'IDS的全称是什么？', level:'基础', options:['入侵检测系统','入侵防御系统','集成开发系统','内部域名系统'], answer:0, explain:'IDS是Intrusion Detection System。'},
+{q:'VPN的主要作用是什么？', level:'基础', options:['加速网络','建立安全加密隧道','域名解析','负载均衡'], answer:1, explain:'VPN在公网建立加密通信隧道。'},
+{q:'IMAP默认端口是多少？', level:'基础', options:['25','110','143','993'], answer:2, explain:'IMAP默认端口为143。'},
+{q:'MAC地址长度是多少位？', level:'基础', options:['32位','48位','64位','128位'], answer:1, explain:'MAC地址为48位(6字节)十六进制表示。'},
+{q:'IPv4地址长度是多少位？', level:'基础', options:['32位','48位','64位','128位'], answer:0, explain:'IPv4地址为32位二进制。'},
+{q:'IPv6地址长度是多少位？', level:'基础', options:['32位','48位','64位','128位'], answer:3, explain:'IPv6地址为128位二进制。'},
+{q:'netstat命令中查看TCP连接的参数是？', level:'基础', options:['-a','-t','-u','-n'], answer:1, explain:'netstat -t显示TCP连接。'},
+{q:'ss命令的作用是？', level:'基础', options:['查看进程','查看网络套接字','查看内存','查看磁盘'], answer:1, explain:'ss比netstat更高效地查看套接字。'},
+{q:'lsof -i命令的作用是？', level:'基础', options:['查看打开文件','查看监听网络的进程','查看用户登录','查看系统负载'], answer:1, explain:'lsof -i列出打开网络套接字的进程。'},
+{q:'tcpdump抓包的作用是？', level:'基础', options:['修改报文','捕获和分析网络报文','发送报文','路由转发'], answer:1, explain:'tcpdump用于抓取和分析网络数据包。'},
+{q:'L4负载均衡是基于哪层信息？', level:'基础', options:['MAC层','IP层','传输层端口','应用层内容'], answer:2, explain:'四层负载基于IP+端口进行分发。'},
+{q:'L7负载均衡是基于哪层信息？', level:'基础', options:['MAC层','IP层','传输层','应用层内容'], answer:3, explain:'七层负载基于URL/HTTP头等应用信息。'},
+{q:'WAF的全称是什么？', level:'基础', options:['Web应用防火墙','广域防火墙','无线接入防火墙','Web访问功能'], answer:0, explain:'WAF是Web Application Firewall。'},
+{q:'ACL的全称是什么？', level:'基础', options:['访问控制列表','应用控制层','自动配置列表','接入认证层'], answer:0, explain:'ACL是Access Control List。'},
+{q:'QoS的主要作用是什么？', level:'基础', options:['加密数据','服务质量保证','地址转换','域名解析'], answer:1, explain:'QoS为特定流量提供服务质量保障。'},
+{q:'MPLS的标签长度是多少？', level:'基础', options:['20位','32位','48位','64位'], answer:1, explain:'MPLS标签32位，含20位标签值等字段。'},
+{q:'VXLAN的VNI标识符长度是？', level:'基础', options:['12位','16位','24位','32位'], answer:2, explain:'VXLAN网络标识符VNI为24位。'},
+{q:'SDN的核心思想是什么？', level:'基础', options:['控制与转发分离','硬件加速','加密传输','分布式存储'], answer:0, explain:'SDN将控制平面与数据平面分离。'},
+{q:'VRRP协议的作用是什么？', level:'基础', options:['网关冗余','链路聚合','路由计算','域名解析'], answer:0, explain:'VRRP实现默认网关的冗余备份。'},
+{q:'HSRP是哪个厂商的协议？', level:'基础', options:['华为','Cisco','H3C','Juniper'], answer:1, explain:'HSRP是Cisco私有热备份路由协议。'},
+{q:'LACP协议的作用是什么？', level:'基础', options:['网关冗余','链路聚合控制','域名解析','加密传输'], answer:1, explain:'LACP是链路聚合控制协议标准。'},
+{q:'SLAAC是哪个协议的功能？', level:'基础', options:['IPv4','IPv6','MPLS','BGP'], answer:1, explain:'SLAAC是IPv6无状态地址自动配置。'},
+{q:'DHCPv6的客户端端口是？', level:'基础', options:['546','547','67','68'], answer:0, explain:'DHCPv6客户端用546，服务器547。'},
+{q:'FTP主动模式下服务器连接的端口是？', level:'基础', options:['20','21','随机高端口','1024以下'], answer:0, explain:'主动模式服务器用20端口发起数据连接。'},
+{q:'FTP被动模式下客户端连接的端口是？', level:'基础', options:['20','21','服务器指定高端口','53'], answer:2, explain:'被动模式客户端连接服务器指定的数据端口。'},
+{q:'traceroute命令使用什么协议？', level:'基础', options:['TCP','UDP(默认)','ICMP','SCTP'], answer:1, explain:'Linux traceroute默认用UDP，Windows用ICMP。'},
+{q:'mtr命令结合了哪两个命令？', level:'基础', options:['ping和ssh','ping和traceroute','netstat和ss','ftp和sftp'], answer:1, explain:'mtr结合ping与traceroute功能。'},
+{q:'组播地址的D类地址范围是？', level:'基础', options:['10.0.0.0/8','172.16.0.0/12','224.0.0.0/4','192.168.0.0/16'], answer:2, explain:'D类组播地址224.0.0.0~239.255.255.255。'},
+{q:'私网地址192.168.0.0的CIDR范围是？', level:'基础', options:['/8','/12','/16','/24'], answer:2, explain:'192.168.0.0/16是C类私网地址段。'},
+{q:'私网地址172.16.0.0的CIDR范围是？', level:'基础', options:['/8','/12','/16','/24'], answer:1, explain:'172.16.0.0/12是B类私网地址段。'},
+{q:'私网地址10.0.0.0的CIDR范围是？', level:'基础', options:['/8','/12','/16','/24'], answer:0, explain:'10.0.0.0/8是A类私网地址段。'},
+{q:'HTTP状态码301表示什么？', level:'基础', options:['永久重定向','临时重定向','未修改','请求错误'], answer:0, explain:'301 Moved Permanently永久重定向。'},
+{q:'HTTP状态码404表示什么？', level:'基础', options:['未授权','禁止访问','未找到资源','服务器错误'], answer:2, explain:'404 Not Found请求的资源不存在。'},
+{q:'HTTP状态码500表示什么？', level:'基础', options:['成功','重定向','客户端错误','服务器内部错误'], answer:3, explain:'500 Internal Server Error服务器内部错误。'},
+{q:'HTTP状态码302表示什么？', level:'基础', options:['永久重定向','临时重定向','未修改','禁止访问'], answer:1, explain:'302 Found表示临时重定向。'},
+{q:'HTTP状态码403表示什么？', level:'基础', options:['未授权','禁止访问','未找到','超时'], answer:1, explain:'403 Forbidden服务器拒绝访问。'},
+{q:'HTTP状态码401表示什么？', level:'基础', options:['未授权需要认证','禁止访问','未找到','请求太大'], answer:0, explain:'401 Unauthorized需要身份认证。'},
+{q:'IS-IS属于哪类路由协议？', level:'基础', options:['距离矢量','链路状态','路径矢量','外部网关'], answer:1, explain:'IS-IS是链路状态IGP路由协议。'},
+{q:'Diameter协议主要用于什么场景？', level:'基础', options:['网页浏览','AAA认证','文件传输','邮件发送'], answer:1, explain:'Diameter是下一代AAA认证协议。'},
+{q:'SIP协议主要用于什么？', level:'基础', options:['路由协议','VoIP会话控制','域名解析','文件传输'], answer:1, explain:'SIP是会话发起协议，用于VoIP。'},
+{q:'PCRF主要应用于哪个领域？', level:'基础', options:['数据中心','移动通信LTE/EPC','企业内网','校园网'], answer:1, explain:'PCRF是LTE/EPC核心网策略计费控制单元。'},
+{q:'TCP关闭连接需要几次挥手？', level:'基础', options:['2次','3次','4次','5次'], answer:2, explain:'TCP通过四次挥手断开连接。'},
+{q:'IPsec AH协议提供什么功能？', level:'基础', options:['只加密不认证','只认证完整性','加密+认证','地址转换'], answer:1, explain:'AH提供认证和完整性，不加密。'},
+{q:'IPsec ESP协议默认提供什么？', level:'基础', options:['只加密','只认证','加密+认证','只压缩'], answer:2, explain:'ESP默认提供加密和认证完整性。'},
+{q:'SYN flood攻击利用了TCP什么机制？', level:'进阶', options:['三次握手','四次挥手','滑动窗口','拥塞控制'], answer:0, explain:'SYN flood滥用半连接队列资源耗尽服务器。'},
+{q:'子网192.168.1.0/27的可用主机数是？', level:'进阶', options:['30','32','62','64'], answer:0, explain:'/27有5主机位，2^5-2=30个可用主机。'},
+{q:'10.0.0.0/22每个子网可用主机数是？', level:'进阶', options:['510','1022','2046','4094'], answer:1, explain:'32-22=10主机位，2^10-2=1022。'},
+{q:'C类地址划分子网需要4个子网，子网掩码是？', level:'进阶', options:['255.255.255.128','255.255.255.192','255.255.255.224','255.255.255.240'], answer:1, explain:'4子网需借2位，/26即255.255.255.192。'},
+{q:'需要至少100台主机的子网，最小CIDR前缀是？', level:'进阶', options:['/24','/25','/26','/27'], answer:1, explain:'2^7-2=126≥100，32-7=25，即/25。'},
+{q:'DNS递归查询与迭代查询的区别是？', level:'进阶', options:['递归客户端请求根服务器','递归服务器替客户端完成查询','迭代必须缓存','迭代更快'], answer:1, explain:'递归DNS服务器代客户端完成完整查询链。'},
+{q:'DHCP Discover报文采用什么方式发送？', level:'进阶', options:['单播','广播','组播','任播'], answer:1, explain:'客户端无IP，发送255.255.255.255广播。'},
+{q:'STP中根网桥选举依据是？', level:'进阶', options:['最大MAC','最小MAC+最小优先级','最大优先级','接口带宽'], answer:1, explain:'先比桥优先级(默认32768)再比MAC小者为根。'},
+{q:'STP中指定端口选举依据是？', level:'进阶', options:['端口ID最小','到根桥开销最小','端口速率最快','MAC最小'], answer:1, explain:'先比到根路径开销，再对比端桥ID、端口ID。'},
+{q:'标准NAPT转换中，内部地址映射依据是？', level:'进阶', options:['仅IP','IP+端口','仅端口','MAC+IP'], answer:1, explain:'NAPT通过源IP+源端口映射到公网地址端口。'},
+{q:'正向代理与反向代理的区别是？', level:'进阶', options:['正向代理服务端用','反向代理代表客户端访问','正向代理代表客户端访问','反向代理只能缓存'], answer:2, explain:'正向代理替客户端访问，反向代理替服务器接收。'},
+{q:'IPsec两种模式区别是？', level:'进阶', options:['传输模式只加密上层数据','隧道模式只认证','传输模式封装整个IP','隧道模式只加密TCP'], answer:0, explain:'传输模式只加密IP上层，隧道模式封装整个IP。'},
+{q:'SNMPv3相比v2c新增了什么？', level:'进阶', options:['GetBulk操作','Inform消息','认证和加密','视图访问控制'], answer:2, explain:'SNMPv3新增USM安全模型，支持认证加密。'},
+{q:'BGP建立邻居使用的端口是？', level:'进阶', options:['520','179','161','1701'], answer:1, explain:'BGP使用TCP 179端口建立邻居。'},
+{q:'OSPF的DR/BDR选举在什么网络类型进行？', level:'进阶', options:['点到点','广播/NBMA','点到多点','虚链路'], answer:1, explain:'广播和NBMA网络才选举DR和BDR减少邻接。'},
+{q:'OSPF区域0的作用是？', level:'进阶', options:['普通区域','骨干区域所有区域必须连接','Stub区域','NSSA区域'], answer:1, explain:'OSPF骨干区域Area 0，其他区域必须与之连接。'},
+{q:'TLS握手过程中，Pre-Master Secret谁生成？', level:'进阶', options:['客户端','服务器','双方各一半','CA生成'], answer:0, explain:'客户端生成Pre-Master并用服务器公钥加密发送。'},
+{q:'HTTP/2多路复用的作用是？', level:'进阶', options:['加密数据','同一连接并发多个请求响应','压缩头部','服务器推送'], answer:1, explain:'二进制帧实现单TCP连接上多路流并发。'},
+{q:'TCP拥塞控制慢启动阈值ssthresh的作用是？', level:'进阶', options:['低于阈值线性增长','高于阈值指数增长','低于阈值指数增长','固定拥塞窗口'], answer:2, explain:'cwnd<ssthresh指数增长(慢启动)，之后线性(拥塞避免)。'},
+{q:'netstat -anp中p参数的作用是？', level:'进阶', options:['显示端口号','显示程序名/PID','禁用DNS解析','显示UDP'], answer:1, explain:'-p显示使用该套接字的进程名和PID。'},
+{q:'ss -s命令的作用是？', level:'进阶', options:['显示TCP socket统计汇总','显示UDP连接','显示程序名','显示路由表'], answer:0, explain:'ss -s输出套接字使用统计摘要。'},
+{q:'lsof -i:80的作用是？', level:'进阶', options:['查看80端口进程','查看80进程文件','查看端口80硬件','查看80用户'], answer:0, explain:'列出所有监听或使用80端口的进程。'},
+{q:'tcpdump -i eth0 host 192.168.1.1捕获的是？', level:'进阶', options:['仅源IP是192.168.1.1','仅目的IP是192.168.1.1','源或目的IP是192.168.1.1','仅MAC匹配'], answer:2, explain:'host匹配源或目的IP地址的报文。'},
+{q:'FTP被动模式相对于主动模式的优势是？', level:'进阶', options:['传输更快','客户端在NAT后更容易连接','更安全','占用端口更少'], answer:1, explain:'被动模式客户端发起数据连接，适合客户端在NAT后。'},
+{q:'L4与L7负载均衡相比，L4特点是？', level:'进阶', options:['能按URL分发','性能高开销小','能做会话保持cookie','能修改HTTP头'], answer:1, explain:'四层仅处理到传输层，处理速度快开销低。'},
+{q:'WAF能防护的攻击是？', level:'进阶', options:['DDoS流量型','SQL注入/XSS等应用层','物理层攻击','电源故障'], answer:1, explain:'WAF主要防护SQL注入、XSS等Web应用攻击。'},
+{q:'VXLAN相比VLAN的主要优势是？', level:'进阶', options:['速度更快','VNI数量远超4096支持多租户','更安全','需要更少设备'], answer:1, explain:'24位VNI支持16M租户，解决VLAN 4096限制。'},
+{q:'SDN OpenFlow协议作用是？', level:'进阶', options:['交换机内部通信','控制器与交换机间控制信令','服务器间数据','管理配置'], answer:1, explain:'OpenFlow是SDN控制器与转发设备间的标准接口。'},
+{q:'QoS中DSCP位于报文什么位置？', level:'进阶', options:['以太网帧头','IP报文头部ToS字段','TCP头部','UDP头部'], answer:1, explain:'DSCP占用IPv4 ToS/IPv6 TC字段的前6位。'},
+{q:'MPLS标签栈中S位为1表示？', level:'进阶', options:['栈顶标签','栈底标签','中间标签','无效标签'], answer:1, explain:'S=1表明这是标签栈中最后一个(栈底)标签。'},
+{q:'组播PIM-SM模式的特点是？', level:'进阶', options:['推模式主动广播','拉模式按需加入，适合稀疏组','仅本地有效','需要静态RP'], answer:1, explain:'PIM-SM稀疏模式使用RP，接收者按需Join。'},
+{q:'IPv6 SLAAC获取地址后，如何检测地址冲突？', level:'进阶', options:['发送ARP','发送DAD(NS报文)','发送DHCPv6请求','人工配置'], answer:1, explain:'SLAAC通过DAD重复地址检测(NS报文)确认唯一性。'},
+{q:'TCP重传定时器(RTO)计算基于？', level:'进阶', options:['固定1秒','RTT的平滑估计值','最大传输单元','拥塞窗口'], answer:1, explain:'RTO基于平滑RTT(SRTT)及RTT偏差计算。'},
+{q:'NAT穿透(打洞)常用技术不包括？', level:'进阶', options:['STUN','TURN','ICE','OSPF'], answer:3, explain:'OSPF是路由协议，STUN/TURN/ICE是NAT穿透方案。'},
+{q:'VRRP虚拟路由器默认优先级是？', level:'进阶', options:['0','100','255','1024'], answer:1, explain:'VRRP默认优先级100，255表示IP地址拥有者。'},
+{q:'LACP模式中主动模式是？', level:'进阶', options:['Passive','Active','On','Off'], answer:1, explain:'LACP Active主动发送LACPDU，Passive被动响应。'},
+{q:'策略路由(PBR)与普通路由区别是？', level:'进阶', options:['PBR只看目的IP','PBR基于源地址等多条件选路','PBR优先级更低','PBR不可指定下一跳'], answer:1, explain:'PBR基于策略(源/端口等)，优于目的路由表。'},
+{q:'RIP最大跳数限制是多少？', level:'进阶', options:['15','16','30','255'], answer:0, explain:'RIP最大有效跳数15，16表示不可达。'},
+{q:'IS-IS相比OSPF的特点是？', level:'进阶', options:['基于IP协议','基于CLNP，区域在路由器内划分','仅支持IP','DR选举更频繁'], answer:1, explain:'IS-IS最初为CLNP设计，一个路由器可属多区域。'},
+{q:'MPLS VPN中RD和RT的作用是？', level:'进阶', options:['RD用于路由区分，RT控制VPN路由导入导出','RD控制导入导出','RT唯一标识VPN','RD做加密'], answer:0, explain:'RD(8字节)使VPNv4地址唯一，RT是BGP扩展团体属性。'},
+{q:'Diameter相比RADIUS的优势是？', level:'进阶', options:['基于UDP','基于TCP/TLS支持能力协商更可靠','更简单','端口固定1812'], answer:1, explain:'Diameter用TCP/SCTP+TLS，有确认和能力协商，更可靠。'},
+{q:'SIP协议中INVITE方法作用是？', level:'进阶', options:['结束会话','发起会话邀请','注册用户','查询状态'], answer:1, explain:'INVITE用于发起建立一个新的SIP会话。'},
+{q:'PCRF与PCEF之间的接口是？', level:'进阶', options:['S11','Gx','Gy','S5/S8'], answer:1, explain:'Gx接口是PCRF到PCEF(PGW)的策略控制接口。'},
+{q:'OSI数据链路层的两个子层是？', level:'进阶', options:['LLC和MAC','IP和ICMP','TCP和UDP','PHY和MAC'], answer:0, explain:'数据链路层分为LLC逻辑链路控制和MAC介质访问。'},
+{q:'TCP滑动窗口的作用是？', level:'进阶', options:['拥塞控制','流量控制，接收方控制发送量','加密数据','路由寻址'], answer:1, explain:'窗口大小由接收方通告，实现端到端流量控制。'},
+{q:'HTTP状态码304表示什么场景？', level:'进阶', options:['重定向','协商缓存命中，资源未修改','错误请求','禁止访问'], answer:1, explain:'304 Not Modified协商缓存命中，直接用本地缓存。'},
+{q:'STP Listening到Learning状态的等待时间是？', level:'进阶', options:['10秒','15秒(Forward Delay)','20秒(Max Age)','30秒'], answer:1, explain:'Forward Delay默认15秒，每个过渡状态等待。'},
+{q:'BGP选路规则中Local_Preference比较顺序是？', level:'进阶', options:['优先比较','第2步(在Weight后)','第5步','最后比较'], answer:1, explain:'BGP选路：1 Weight 2 Local Pref 3 Local起源 4 AS-Path等。'},
+{q:'ARP缓存表项老化时间默认约为？', level:'进阶', options:['10秒','5分钟','2小时','永久'], answer:1, explain:'Linux/Windows默认ARP缓存约2-5分钟老化。'},
+{q:'TCP报文段中URG标志的作用是？', level:'进阶', options:['推送数据','紧急指针有效','确认号有效','同步序列号'], answer:1, explain:'URG=1表示紧急指针字段有效，紧急数据优先处理。'},
+{q:'HTTP/2头部压缩算法是？', level:'进阶', options:['gzip','DEFLATE','HPACK','Brotli'], answer:2, explain:'HTTP/2使用HPACK算法专门压缩HTTP头部。'},
+{q:'VXLAN外层UDP目的端口号是？', level:'进阶', options:['4789','4790','8472','443'], answer:0, explain:'IANA分配VXLAN UDP目的端口为4789。'},
+{q:'mtr报告中L%列的含义是？', level:'进阶', options:['延迟百分比','丢包率','负载百分比','标签跳数'], answer:1, explain:'L%是Loss%丢包率，显示各跳的丢包情况。'},
+{q:'TCP的TIME_WAIT状态一般持续多久？', level:'高级', options:['15秒','30秒','1MSL约1-2分钟','永久'], answer:2, explain:'TIME_WAIT为2MSL，MSL默认通常2分钟。'},
+{q:'BGP路由黑洞问题通常如何解决？', level:'高级', options:['全互联IBGP','路由反射器+IGP同步或MPLS','关闭同步','增加Metric'], answer:1, explain:'非全互联IBGP下需路由反射/联盟或MPLS标签转发。'},
+{q:'OSPF虚链路的作用是什么？', level:'高级', options:['加密OSPF报文','连接无法直连Area0的区域','替代物理链路','加速收敛'], answer:1, explain:'虚链路逻辑连接不连续骨干区的ABR到Area 0。'},
+{q:'TCP拥塞控制BBR算法与CUBIC的区别是？', level:'高级', options:['BBR基于丢包','BBR基于带宽RTT建模不依赖丢包','CUBIC更适合无线','BBR窗口更小'], answer:1, explain:'BBR基于最大带宽和最小RTT构建模型，CUBIC基于丢包。'},
+{q:'复杂网络中traceroute出现*号最可能的原因？', level:'高级', options:['链路断了','路由器禁用ICMP超时或策略限速','DNS解析失败','MTU不匹配'], answer:1, explain:'路由器常过滤限速ICMP Time Exceeded导致*，非真丢包。'},
+{q:'tcpdump抓HTTP GET报文过滤表达式正确是？', level:'高级', options:['port 80 and tcp[20:4]=0x47455420','tcp port http','tcp dst port 80','ether proto http'], answer:0, explain:'0x47455420即"GET "，偏移20匹配GET请求首4字节。'},
+{q:'LACP LACPDU中Actor/Partner的状态位AGG是？', level:'高级', options:['表示独立链路','表示可聚合链路','表示超时','表示同步'], answer:1, explain:'AGG=1表明该链路可加入聚合组，否则独立。'},
+{q:'BGP Community属性no-export的作用是？', level:'高级', options:['不通告给任何邻居','不通告出本AS(EBGP邻居)','不通告给IBGP','不通告给RR'], answer:1, explain:'NO_EXPORT不通告到EBGP邻居即不出本AS。'},
+{q:'IS-IS L1/L2路由器如何避免路由环路？', level:'高级', options:['水平分割','设置ATT位，L1默认路由到最近L2','毒性反转','抑制时间'], answer:1, explain:'L1路由器设ATT位时其他L1路由器生成指向它的默认路由到L2区域。'},
+{q:'MPLS PHP(倒数第二跳弹出)的作用是？', level:'高级', options:['加速标签交换','减少LER查找标签操作，LER直接查IP','增加标签栈','加密标签'], answer:1, explain:'倒数第二跳弹出标签，LER免去标签查找直接IP转发，节省资源。'},
+{q:'IPsec IKEv2与IKEv1主模式相比优势是？', level:'高级', options:['IKEv2需要6报文主模式','IKEv2只需4报文+支持NAT-T内置+更安全重协商','IKEv2不支持DPD','IKEv1更适合移动'], answer:1, explain:'IKEv2初始交换4报文，集成NAT-T，MOBIKE支持移动性，更高效。'},
+{q:'TLS 1.3相比1.2的握手延迟优化是？', level:'高级', options:['无变化','1-RTT握手(甚至0-RTT)省去Key Exchange','增加报文数','固定3-RTT'], answer:1, explain:'TLS1.3简化密码套件默认前向保密，正常1-RTT，恢复会话0-RTT。'},
+{q:'SYN Cookies防御SYN flood的原理是？', level:'高级', options:['丢弃SYN','SYN-ACK的seq编码源/目的IP端口等信息，不存半连接','增大backlog','防火墙阻断'], answer:1, explain:'Cookie将连接信息编码到序列号，ACK回来校验无需占用半连接队列。'},
+{q:'STP拓扑变更(TC)后CAM表如何处理？', level:'高级', options:['不变','将CAM老化时间缩短到Forward Delay加速重新学习','永久删除CAM','禁止学习'], answer:1, explain:'TCN触发TC，交换机将CAM表老化时间设为Forward Delay快速刷新。'},
+{q:'VXLAN头端复制(Head-End Replication)适用场景是？', level:'高级', options:['大型网络多VTEP','没有组播支持的小网络，单播复制给所有VTEP','任何场景都最优','仅加密场景'], answer:1, explain:'头端复制不需要底层组播，但大表项时VTEP复制负担重。'},
+{q:'BGP ADD-PATH能力的作用是？', level:'高级', options:['仅能发送最优路径','允许发送多条同前缀路径，实现快速切换和负载','加速收敛','加密BGP'], answer:1, explain:'ADD-PATH允许发多条路径，RR不必只反射最优，可用作快速备份。'},
+{q:'SIP对话中180 Ringing与183 Session Progress的区别？', level:'高级', options:['180无媒体','183可携带SDP建立早期媒体(如彩铃)','180是最终响应','183表示会话成功'], answer:1, explain:'183带SDP可建早期媒体通道放彩铃/忙音等，180仅提示振铃。'},
+{q:'Diameter会话信用控制中CCA初答DIAMETER_CREDIT_CONTROL_NOT_APPLICABLE表示？', level:'高级', options:['认证失败','该业务无需实时计费，允许会话继续','需要终止','需要重定向'], answer:1, explain:'该码表示无需实时信用控制，业务可继续但可能离线计费。'},
+{q:'PCRF中PCC规则的QCI参数的含义是？', level:'高级', options:['计费标识','QoS等级分类，决定调度策略权重丢包率门限','用户标识','PDN类型'], answer:1, explain:'QCI 1-9，定义了资源类型/优先级/包延迟/丢包率。'},
+{q:'TCP Fast Open的条件和作用是？', level:'高级', options:['必须3次握手后才能发数据','SYN或SYN-ACK可携带数据减少1-RTT延迟，需Cookie','只能用于UDP','减少MTU'], answer:1, explain:'TFO使用预先获得的TFO Cookie，SYN中可带应用层数据。'},
+{q:'DHCPv6 PD(前缀委派)的作用是？', level:'高级', options:['分配单个IPv6给客户端','运营商给CPE分配一段IPv6前缀供CPE下联子网自动划分','分配DNS','仅用于链路本地'], answer:1, explain:'PD让CPE从运营商获得前缀并自动规划下联网络。'},
+{q:'策略路由set ip next-hop recursive的作用是？', level:'高级', options:['直接ARP下一跳','递归查找下一跳可达性后再决定','强制直连','丢弃数据包'], answer:1, explain:'递归下一跳允许下一跳非直连，通过路由表递归解析最终出接口。'},
+{q:'MPLS TE RSVP-TE中Explicit Route Object(ERO)的作用是？', level:'高级', options:['加密LSP','显式指定LSP路径各跳，实现约束路由','带宽预留','错误报告'], answer:1, explain:'ERO携带路径跳列表，CSPF计算后放入Path消息建立LSP。'},
+{q:'VXLAN EVPN Type-2/MAC/IP路由的作用是？', level:'高级', options:['宣告VTEP','MAC地址通告+主机IP可达性，用于二层转发表同步','宣告组播','宣告多播'], answer:1, explain:'EVPN Type 2路由携带MAC+IP，用于VTEP间同步主机可达性，抑制ARP泛洪。'},
+{q:'BGP Large Community(RFC8092)相比标准Community的特点是？', level:'高级', options:['只有32位','4字节GlobalAdmin+4字节LocalData共12字节，可表达更丰富策略','不能传播','只能IBGP用'], answer:1, explain:'Large Community格式12字节(4+4+4)，解决标准32位不够用。'}
+  ],
+
+  linux: [
+    {
+      q: '查看磁盘使用情况的命令是？',
+      level: '基础',
+      options: ['du', 'df', 'free', 'top'],
+      answer: 1,
+      explain: 'df 显示文件系统磁盘使用情况；du 显示目录大小；free 显示内存；top 显示进程。'
+    },
+    {
+      q: '文件权限 rwxr-xr-- 对应的数字是？',
+      level: '进阶',
+      options: ['754', '745', '755', '764'],
+      answer: 0,
+      explain: 'rwx=7, r-x=5, r--=4，所以是 754。'
+    },
+    {
+      q: '实时查看文件末尾内容变化的命令是？',
+      level: '基础',
+      options: ['tail -f', 'head -f', 'cat -f', 'less -f'],
+      answer: 0,
+      explain: 'tail -f 实时跟踪文件新增内容，常用于查看日志。'
+    },
+    {
+      q: '以下哪个命令可以查看进程树？',
+      level: '基础',
+      options: ['ps', 'top', 'pstree', 'pgrep'],
+      answer: 2,
+      explain: 'pstree 以树形结构显示进程；ps 列表显示；top 实时；pgrep 按名查找 PID。'
+    },
+    {
+      q: '强制杀死进程的信号是？',
+      level: '基础',
+      options: ['SIGTERM (15)', 'SIGKILL (9)', 'SIGHUP (1)', 'SIGSTOP (19)'],
+      answer: 1,
+      explain: 'SIGKILL (9) 强制终止，不可被捕获；SIGTERM (15) 是优雅终止。'
+    },
+    {
+      q: 'systemd 中设置服务开机自启的命令是？',
+      level: '基础',
+      options: ['systemctl start nginx', 'systemctl enable nginx', 'systemctl reload nginx', 'systemctl mask nginx'],
+      answer: 1,
+      explain: 'enable 设置开机自启；start 是立即启动；reload 是重载配置。'
+    },
+    {
+      q: '查看监听端口的现代命令是？',
+      level: '进阶',
+      options: ['netstat -tlnp', 'ss -tlnp', 'lsof -i', '以上都可以'],
+      answer: 3,
+      explain: 'ss、netstat、lsof 都可以查看监听端口，ss 是现代替代 netstat 的工具。'
+    },
+    {
+      q: '查找 7 天内修改过的 .log 文件的命令是？',
+      level: '进阶',
+      options: ['find / -name "*.log" -mtime 7', 'find / -name "*.log" -mtime -7', 'find / -name "*.log" -mtime +7', 'find / -name "*.log" -mmin -7'],
+      answer: 1,
+      explain: '-mtime -7 表示 7 天内修改；-mtime 7 表示恰好 7 天前；-mtime +7 表示超过 7 天。'
+    },
+    {
+      q: 'LVM 中创建逻辑卷的命令是？',
+      level: '高级',
+      options: ['pvcreate', 'vgcreate', 'lvcreate', 'mkfs'],
+      answer: 2,
+      explain: 'lvcreate 创建逻辑卷；pvcreate 创建物理卷；vgcreate 创建卷组；mkfs 格式化。'
+    },
+    {
+      q: '查看系统负载平均值的命令是？',
+      level: '基础',
+      options: ['uptime', 'free', 'df', 'who'],
+      answer: 0,
+      explain: 'uptime 显示系统运行时间和 1/5/15 分钟负载平均值。'
+    },
+    {
+      q: 'Shell 脚本中 $# 表示？',
+      level: '高级',
+      options: ['所有参数', '参数个数', '脚本名', '上一个命令返回值'],
+      answer: 1,
+      explain: '$# 是参数个数；$@ 是所有参数；$0 是脚本名；$? 是上个命令返回值。'
+    },
+    {
+      q: 'tcpdump 抓取 80 端口数据包的命令是？',
+      level: '进阶',
+      options: ['tcpdump port 80', 'tcpdump -p 80', 'tcpdump --port 80', 'tcpdump filter 80'],
+      answer: 0,
+      explain: 'tcpdump port 80 抓取 80 端口流量；可加 -i 指定网卡，-w 保存。'
+    },
+    {
+      q: '以下哪个不是 Linux 文件特殊权限？',
+      level: '进阶',
+      options: ['SUID', 'SGID', 'Sticky', 'ACL'],
+      answer: 3,
+      explain: 'SUID、SGID、Sticky 是三种特殊权限位；ACL 是访问控制列表，属于另一套权限机制。'
+    },
+{q:'修改文件所有者为user1、所属组为group1的正确命令是？', level:'基础', options:['chown user1.group1 file','chown user1:group1 file','chgrp user1:group1 file','chmod user1:group1 file'], answer:1, explain:'chown使用冒号分隔所有者和组，格式为chown user:group file，chgrp只能修改组。'},
+{q:'关于软链接(ln -s)与硬链接，以下说法正确的是？', level:'基础', options:['硬链接可以跨文件系统','软链接删除源文件后仍可正常访问','硬链接的inode与源文件相同','软链接不能对目录创建'], answer:2, explain:'硬链接指向相同inode，不能跨分区、不能对目录；软链接是独立文件，可跨分区但源删除后失效。'},
+{q:'系统umask设为022时，新建普通文件的默认权限是？', level:'基础', options:['755','644','664','777'], answer:1, explain:'普通文件起始权限666减umask 022得644(rw-r--r--)；目录起始777减022得755。'},
+{q:'关于Linux inode，下列说法错误的是？', level:'基础', options:['inode存储文件元信息如权限和时间','inode号在同一文件系统内唯一','删除文件是删除文件名和inode引用关系','inode中直接存储文件数据内容'], answer:3, explain:'inode存储元信息和数据块指针，文件实际数据存放在data block中，inode本身不存数据内容。'},
+{q:'查看系统内存使用情况（含缓冲区和缓存），最常用命令是？', level:'基础', options:['free -h','vmstat','iostat','sar'], answer:0, explain:'free -h以人类可读格式显示物理内存、swap、buffers、cached的使用情况。'},
+{q:'查看系统运行时间和平均负载的命令是？', level:'基础', options:['w','uptime','last','dmesg'], answer:1, explain:'uptime显示当前时间、运行时长、登录用户数、1/5/15分钟负载；w也能看但信息更多。'},
+{q:'只看文件前20行的正确命令是？', level:'基础', options:['head -n 20 file','tail -n 20 file','cat -20 file','wc -l 20 file'], answer:0, explain:'head -n 20取前20行；tail -n 20取后20行；wc -l统计行数。'},
+{q:'统计文件行数、单词数、字节数的命令是？', level:'基础', options:['wc file','sort file','uniq file','cut file'], answer:0, explain:'wc显示行数、单词数、字节数；wc -l只统计行数，wc -c只统计字节数。'},
+{q:'判断一个文件类型（二进制/文本/图片等）应使用的命令是？', level:'基础', options:['strings file','type file','file file','which file'], answer:2, explain:'file命令通过读取magic number判断文件真实类型，不受扩展名影响。'},
+{q:'挂载/dev/sdb1到/data目录，正确命令是？', level:'基础', options:['mount /dev/sdb1 /data','mount /data /dev/sdb1','umount /dev/sdb1 /data','fsck /dev/sdb1 /data'], answer:0, explain:'mount语法为mount 设备 挂载点；卸载是umount 设备或挂载点，fsck是磁盘检查。'},
+{q:'启动nginx服务的正确systemctl命令是？', level:'基础', options:['systemctl start nginx','systemctl enable nginx','systemctl on nginx','systemctl run nginx'], answer:0, explain:'systemctl start启动服务；enable设置开机自启；status看状态；restart重启；stop停止。'},
+{q:'/etc/passwd与/etc/shadow的区别，正确的是？', level:'基础', options:['/etc/passwd存储加密密码','/etc/shadow只有root可读','/etc/passwd中第二个字段是UID','两个文件功能完全相同'], answer:1, explain:'/etc/passwd存用户基本信息（密码字段为x占位），所有用户可读；/etc/shadow存加密密码，仅root可读。'},
+{q:'su与sudo的主要区别是？', level:'基础', options:['su需要目标用户密码，sudo需要自己密码','sudo切换用户更彻底','su只能切root不能切普通用户','两者功能完全相同'], answer:0, explain:'su切换用户需目标用户密码（root切他人不用）；sudo以目标身份执行命令，需输入自己密码，可配置权限粒度。'},
+{q:'将用户tom添加到develop组（不离开原有组），正确命令是？', level:'基础', options:['usermod -G develop tom','usermod -aG develop tom','groupmod -a tom develop','newgrp develop tom'], answer:1, explain:'usermod -aG是追加到附加组；-G会覆盖所有附加组（-a是append）。newgrp是临时切换主组。'},
+{q:'iptables中在链末尾追加规则与头部插入规则的参数分别是？', level:'基础', options:['-A 和 -I','-I 和 -A','-D 和 -R','-L 和 -N'], answer:0, explain:'iptables -A chain在链尾追加；-I chain [num]插入（默认第1条）；顺序很重要，匹配到即停止。'},
+{q:'firewalld中永久开放8080/tcp端口，正确命令是？', level:'基础', options:['firewall-cmd --add-port=8080/tcp','firewall-cmd --permanent --add-port=8080/tcp','firewall-cmd --add-service=8080','firewall-cmd --open-port=8080/tcp'], answer:1, explain:'--permanent写永久规则（需reload生效）；不加permanent是临时生效重启丢失。服务名用--add-service=http。'},
+{q:'Debian/Ubuntu中更新软件包索引列表的命令是？', level:'基础', options:['apt-get upgrade','apt install update','apt-get update','apt-get dist-upgrade'], answer:2, explain:'apt-get update更新软件源索引；upgrade升级已装包；dist-upgrade智能处理依赖升级；install装包。'},
+{q:'RHEL/CentOS中查询某个命令属于哪个RPM包的命令是？', level:'基础', options:['rpm -qa | grep cmd','rpm -qf /usr/bin/cmd','rpm -ql package','rpm -e package'], answer:1, explain:'rpm -qf 文件路径 查询哪个包提供该文件；-qa列出所有包；-ql列出包内文件；-e卸载包。'},
+{q:'查看当前已加载的内核模块列表的命令是？', level:'基础', options:['insmod','lsmod','modprobe -l','rmmod -a'], answer:1, explain:'lsmod读取/proc/modules显示已加载模块，含Size和Used by；insmod/rmmod手动加卸载；modprobe智能处理依赖。'},
+{q:'tee命令的主要作用是？', level:'进阶', options:['压缩文件','从标准输入读取并同时写入文件和标准输出','按行分割文件','合并多个文件'], answer:1, explain:'tee类似三通管道：命令输出一边显示一边写入文件，如ls | tee out.txt；-a追加模式。'},
+{q:'xargs命令的作用是？', level:'进阶', options:['做数学运算','将标准输入转化为命令行参数传递给其他命令','按列提取文本','排序并去重'], answer:1, explain:'xargs把管道输入转为参数，解决很多命令不支持管道输入的问题，如find . -name "*.log" | xargs rm。'},
+{q:'取出/etc/passwd第1列（用户名）和第7列（shell）并以冒号分隔，正确cut命令是？', level:'进阶', options:['cut -d: -f1,7 /etc/passwd','cut -f1,7 /etc/passwd','cut -c1,7 /etc/passwd','cut -s: -f1 7 /etc/passwd'], answer:0, explain:'cut -d指定分隔符，-f指定字段（逗号分隔多个），-c按字符；默认TAB分隔。'},
+{q:'将文件中行按字母降序排序并去重，正确组合是？', level:'进阶', options:['sort -u file','sort -r file | uniq','sort -ru file','uniq -r file | sort'], answer:2, explain:'sort -r降序；sort -u排序并去重（比uniq更彻底，不要求相邻）；uniq只去除相邻重复行，常配合sort用。'},
+{q:'将文件中所有小写字母转大写，正确tr命令是？', level:'进阶', options:['tr a-z A-Z < file','tr [a-z] [A-Z] file',"tr 'A-Z' 'a-z' < file",'cat file | tr lower upper'], answer:0, explain:'tr处理字符集替换，从STDIN读，用<重定向输入；[a-z]写在引号中可省略方括号；-d删除字符，-s压缩重复。'},
+{q:'rsync -avz /src/ user@host:/dst/ 中-vz含义是？', level:'进阶', options:['验证+压缩','详细输出+压缩传输','校验+分区','版本+零拷贝'], answer:1, explain:'rsync -a归档(=-rlptgoD)；-v详细输出；-z压缩传输减少带宽；-H保留硬链接；--delete镜像删除目标多余文件。'},
+{q:'通过非默认端口2222将本地文件传到远程服务器，scp正确写法是？', level:'进阶', options:['scp -P 2222 file user@host:/path/','scp -p 2222 file user@host:/path/','scp file user@host:2222:/path/','scp --port 2222 file user@host:/path/'], answer:0, explain:'scp -P指定远程端口（大写）；注意ssh是-p小写，scp是-P大写别搞混。-r递归拷贝目录。'},
+{q:'用dd生成一个10MB内容全为0的测试文件，正确命令是？', level:'进阶', options:['dd if=/dev/null of=test bs=1M count=10','dd if=/dev/zero of=test bs=1M count=10','dd if=/dev/random of=test bs=10M count=1','dd of=test size=10M'], answer:1, explain:'if=输入文件，of=输出文件，bs=块大小，count=块数；/dev/zero产零，/dev/urandom产随机，/dev/null是空黑洞。'},
+{q:'关于进程优先级与nice值，正确的是？', level:'进阶', options:['nice值范围-100到100','nice值-20优先级最高，19最低','renice只能降低优先级','普通用户可以设置负nice值'], answer:1, explain:'nice值-20(最高优先级)~19(最低)；仅root能设负值或降低nice值；普通用户只能往高(>=0)调自己的进程。'},
+{q:'kill -9、kill -15、kill -2分别对应信号是？', level:'进阶', options:['SIGKILL、SIGTERM、SIGINT','SIGTERM、SIGKILL、SIGINT','SIGINT、SIGTERM、SIGKILL','SIGKILL、SIGSTOP、SIGQUIT'], answer:0, explain:'默认kill=15(SIGTERM，温和终止可被捕获/忽略)；-9=SIGKILL不可捕获强制杀；-2=SIGINT等同Ctrl+C。pkill按进程名杀。'},
+{q:'实时跟踪nginx服务journal日志并指定只看今天0点以来的命令是？', level:'进阶', options:['journalctl -u nginx -f --since today','journalctl -f nginx','journalctl --unit nginx --after now','journalctl tail nginx'], answer:0, explain:'journalctl -u指定unit；-f=F模式实时跟踪；--since支持today/yesterday/YYYY-MM-DD HH:MM/时间偏移；--vacuum-size限制磁盘占用。'},
+{q:'cron表达式 */5 * * * * 的含义是？', level:'进阶', options:['每5秒执行','每5分钟执行','每小时第5分钟执行','每天5点执行'], answer:1, explain:'cron五字段：分 时 日 月 周；*/n表每n单位；*表任意；,表枚举；-表区间。@hourly/@daily/@weekly/@monthly是快捷别名。'},
+{q:'ulimit命令的作用是？', level:'高级', options:['设置磁盘配额','控制shell启动进程的资源限制','修改用户UID范围','设置网卡带宽上限'], answer:1, explain:'ulimit控制shell进程资源：-n文件描述符数(高并发必调)、-u最大进程数、-c core文件大小、-m内存；-a查所有；/etc/security/limits.conf持久化。'},
+{q:'sudoers中为用户tom配置免密执行所有sudo命令的正确行是？', level:'高级', options:['tom ALL=(ALL) NOPASSWD: ALL','tom NOPASSWD=ALL','tom ALL=NOPASSWD: ALL','tom ALL=(ALL) PASSWD: ALL'], answer:0, explain:'sudoers语法：用户 主机=(切换身份) 标签:命令。visudo编辑防语法错；NOPASSWD:后接命令列表可细分，避免ALL风险最小化。'},
+{q:'auditd添加审计规则监控/etc/shadow写操作并标记key为shadow_change，正确auditctl是？', level:'高级', options:['auditctl -w /etc/shadow -p wa -k shadow_change','auditctl -a /etc/shadow -k shadow_change','auditctl -m /etc/shadow -p r -k shadow','aureport -w /etc/shadow -k shadow_change'], answer:0, explain:'auditctl -w 路径 -p 权限(r/w/x/a=属性变更) -k 自定义key；ausearch -k按键查日志；aureport生成审计报告；规则持久化写/etc/audit/rules.d/。'},
+{q:'LVM中在已有卷组vg0上创建名为lv_data、大小50G的逻辑卷，再扩展10G并调整ext4文件系统，正确步骤是？', level:'高级', options:['lvcreate -L 50G -n lv_data vg0 → lvextend -L +10G /dev/vg0/lv_data → resize2fs /dev/vg0/lv_data','lvcreate +50G /dev/vg0 → lv_size +10G → mkfs.ext4','pvcreate vg0 50G → vgcreate lv_data → xfs_growfs','lvcreate -n lv_data -s 50G vg0 → lvresize -10G /dev/vg0/lv_data'], answer:0, explain:'LVM：pvcreate→vgcreate→lvcreate；-L指定大小，-n命名；lvextend -L +10G追加10G；ext4用resize2fs扩文件系统，xfs用xfs_growfs(必须已挂载)。'},
+{q:'临时开启内核IP转发功能并通过sysctl -p永久生效，正确操作是？', level:'高级', options:['echo 1 > /proc/sys/net/ipv4/ip_forward + 写入net.ipv4.ip_forward=1到/etc/sysctl.conf后sysctl -p','sysctl -w net.ipv4.ip_forward = 0 + /etc/sysctl添加ip_forward=1','uname -a开启转发 + 修改/boot/grub/grub.cfg','insmod ip_forward + modprobe forward'], answer:0, explain:'sysctl -w参数=值临时修改；/proc/sys文件echo临时；/etc/sysctl.conf或/etc/sysctl.d/*.conf写永久配置，sysctl -p重新加载。'},
+{q:'SELinux临时切换为宽容模式(Permissive)并恢复httpd网站目录默认上下文的正确组合是？', level:'高级', options:['setenforce 0 + restorecon -Rv /var/www/html','setenforce 1 + chcon -t default_t /var/www/html','getenforce 0 + semanage restore /var/www','disable_selinux + fixfiles'], answer:0, explain:'setenforce 0临时Permissive(1=Enforcing)，/etc/selinux/config改永久；restorecon按策略恢复上下文；chcon临时改，semanage fcontext永久改上下文规则；setsebool -P调布尔值。'}
+  ],
+
+  frontend: [
+    {
+      q: '以下哪个不是 JavaScript 的基本数据类型？',
+      level: '基础',
+      options: ['string', 'number', 'object', 'symbol'],
+      answer: 2,
+      explain: 'object 是引用类型；基本类型有 string、number、boolean、null、undefined、symbol、bigint。'
+    },
+    {
+      q: 'let 和 var 的主要区别是？',
+      level: '基础',
+      options: ['let 不能重复声明', 'let 有块级作用域', 'let 不会变量提升', '以上都是'],
+      answer: 3,
+      explain: 'let 有块级作用域、不会变量提升（有暂时性死区）、同一作用域不能重复声明。'
+    },
+    {
+      q: '以下哪个 CSS 属性用于垂直居中？(flex 布局)',
+      level: '基础',
+      options: ['justify-content: center', 'align-items: center', 'text-align: center', 'vertical-align: middle'],
+      answer: 1,
+      explain: 'align-items 控制交叉轴对齐，flex 默认主轴水平，所以 align-items: center 实现垂直居中。'
+    },
+    {
+      q: 'box-sizing: border-box 表示？',
+      level: '基础',
+      options: ['width 只含 content', 'width 含 content+padding+border', 'width 含 content+padding', 'width 含 content+margin'],
+      answer: 1,
+      explain: 'border-box 时 width 包含 content+padding+border，便于布局计算。'
+    },
+    {
+      q: 'JavaScript 事件流的正确顺序是？',
+      level: '进阶',
+      options: ['冒泡→捕获→目标', '捕获→冒泡→目标', '捕获→目标→冒泡', '目标→捕获→冒泡'],
+      answer: 2,
+      explain: '事件流顺序：捕获阶段（document 到 target）→ 目标阶段 → 冒泡阶段（target 到 document）。'
+    },
+    {
+      q: '以下哪个不是 Vue 的指令？',
+      level: '基础',
+      options: ['v-if', 'v-for', 'v-bind', 'v-loop'],
+      answer: 3,
+      explain: 'Vue 用 v-for 循环，没有 v-loop。v-if、v-bind、v-model、v-on 都是常用指令。'
+    },
+    {
+      q: 'React 中用于处理副作用的 Hook 是？',
+      level: '高级',
+      options: ['useState', 'useEffect', 'useMemo', 'useRef'],
+      answer: 1,
+      explain: 'useEffect 处理副作用（数据请求、订阅、DOM 操作）；useState 是状态；useMemo 缓存计算；useRef 引用。'
+    },
+    {
+      q: 'HTTP 强缓存相关的头部是？',
+      level: '高级',
+      options: ['ETag', 'Last-Modified', 'Cache-Control', 'If-None-Match'],
+      answer: 2,
+      explain: 'Cache-Control（和 Expires）用于强缓存；ETag/If-None-Match、Last-Modified/If-Modified-Since 用于协商缓存。'
+    },
+    {
+      q: '以下哪个是闭包的应用场景？',
+      level: '进阶',
+      options: ['模块化私有变量', '全局变量', 'CSS 样式', 'HTML 结构'],
+      answer: 0,
+      explain: '闭包可以保存局部变量不被销毁，常用于模块化、私有变量、回调、防抖节流。'
+    },
+    {
+      q: 'flex: 1 等价于？',
+      level: '进阶',
+      options: ['flex-grow:1; flex-shrink:0; flex-basis:0%', 'flex-grow:1; flex-shrink:1; flex-basis:0%', 'flex-grow:0; flex-shrink:1; flex-basis:auto', 'flex-grow:1; flex-shrink:1; flex-basis:auto'],
+      answer: 1,
+      explain: 'flex:1 等价于 flex-grow:1; flex-shrink:1; flex-basis:0%，元素会等分剩余空间。'
+    },
+    {
+      q: '事件委托利用的是事件流的哪个阶段？',
+      level: '基础',
+      options: ['捕获阶段', '目标阶段', '冒泡阶段', '默认阶段'],
+      answer: 2,
+      explain: '事件委托利用冒泡阶段，在父元素监听子元素的事件，减少事件绑定数量。'
+    },
+    {
+      q: 'Vue 3 中用于创建响应式对象的 API 是？',
+      level: '进阶',
+      options: ['ref', 'reactive', 'computed', 'watch'],
+      answer: 1,
+      explain: 'reactive 创建对象响应式；ref 创建基本类型响应式（也支持对象）；computed 计算属性；watch 侦听器。'
+    },
+  {q:'以下哪个HTML5标签用于定义页面独立的文章内容？', level:'基础', options:['section','article','nav','aside'], answer:1, explain:'article标签表示页面中独立的、可单独引用的内容块，如博客文章、新闻报道等。'},
+  {q:'HTML5表单中哪个属性用于指定输入值必须匹配的正则表达式模式？', level:'基础', options:['required','pattern','placeholder','disabled'], answer:1, explain:'pattern属性用于指定输入值必须匹配的正则表达式，用于表单验证。'},
+  {q:'HTML5拖放API中，哪个事件在拖放元素经过目标元素时持续触发？', level:'基础', options:['dragstart','dragend','dragover','drop'], answer:2, explain:'dragover事件在被拖拽元素经过目标元素时持续触发，需preventDefault才能触发drop。'},
+  {q:'History API中哪个方法用于修改浏览器历史记录而不触发页面刷新？', level:'基础', options:['pushState','go()','back()','forward()'], answer:0, explain:'pushState(state,title,url)向历史栈添加新记录，replaceState替换当前记录，均不刷新页面。'},
+  {q:'ARIA中哪个属性用于为元素提供可访问名称/标签？', level:'基础', options:['role','aria-label','aria-hidden','aria-live'], answer:1, explain:'aria-label属性为元素提供不可见的文本标签，供屏幕阅读器朗读识别。'},
+  {q:'meta viewport标签中initial-scale=1.0的作用是？', level:'基础', options:['禁止缩放','初始缩放比例1:1','最小缩放比例','最大缩放比例'], answer:1, explain:'initial-scale设置页面初始加载时的缩放比例，1.0表示按设备宽度1:1显示。'},
+  {q:'CSS选择器优先级从高到低排序正确的是？', level:'基础', options:['class>id>element>inline','inline>id>class>element','id>inline>class>element','element>class>id>inline'], answer:1, explain:'CSS特异性优先级：内联样式(1000) > ID选择器(100) > 类/伪类/属性(10) > 元素/伪元素(1)。'},
+  {q:'以下哪个条件不能创建BFC（块级格式化上下文）？', level:'基础', options:['overflow:hidden','float:left','display:inline-block','position:static'], answer:3, explain:'position值非static（如absolute/fixed）、float非none、overflow非visible、display为inline-block/flex/grid等可触发BFC。'},
+  {q:'CSS position:sticky的特点是？', level:'基础', options:['始终固定在视口','相对父元素偏移','滚动到阈值前相对，之后固定','脱离文档流完全不占位'], answer:2, explain:'sticky定位结合relative和fixed，滚动到指定阈值（top/bottom等）前为relative，之后变为fixed。'},
+  {q:'transform:translate()动画相比top/left定位动画的优势是？', level:'基础', options:['语法更简单','触发GPU合成层不重排','兼容性更好','支持更多单位'], answer:1, explain:'transform和opacity在合成线程处理，不触发layout/paint，直接GPU加速，动画更流畅。'},
+  {q:'CSS transition简写属性正确的顺序是？', level:'基础', options:['duration property timing delay','property duration timing-function delay','timing property duration delay','property timing duration delay'], answer:1, explain:'transition简写顺序为：property duration timing-function delay，其中duration必须设置才生效。'},
+  {q:'CSS @keyframes中animation-direction:reverse的效果是？', level:'基础', options:['正向循环','反向播放（从结束到开始）','先正后反交替','不循环播放一次'], answer:1, explain:'animation-direction:reverse使动画从结束帧反向播放到起始帧，alternate为交替方向。'},
+  {q:'以下哪个CSS渐变类型是沿圆周方向从中心点向外辐射？', level:'基础', options:['linear-gradient','radial-gradient','conic-gradient','repeating-linear'], answer:1, explain:'radial-gradient为径向渐变，从中心点向外辐射；conic-gradient为圆锥渐变，绕中心旋转。'},
+  {q:'CSS自定义属性（变量）语法正确的是？', level:'基础', options:['--color:red; 使用var(--color)','$color:red; 使用$color','@color:red; 使用@color','color-var:red; 使用color-var'], answer:0, explain:'CSS变量以--前缀声明，通过var(--name, fallback)读取，可带默认值参数。'},
+  {q:'CSS Modules的主要作用是？', level:'基础', options:['压缩CSS代码','生成局部作用域类名避免冲突','自动添加浏览器前缀','将CSS转为JS对象'], answer:1, explain:'CSS Modules通过构建工具将类名编译成唯一哈希值，实现CSS局部作用域，避免全局命名冲突。'},
+  {q:'移动端优先（Mobile First）的媒体查询写法习惯是？', level:'基础', options:['@media (max-width:768px)','@media (min-width:768px)','@media (width:768px)','@media screen only 768px'], answer:1, explain:'移动端优先先写小屏样式，用min-width逐步向大屏叠加；桌面优先用max-width向小屏适配。'},
+  {q:'em和rem单位的区别正确的是？', level:'基础', options:['em相对根元素，rem相对父元素','em相对父元素字体，rem相对html根字体','两者完全等价','em固定16px，rem可变'], answer:1, explain:'em继承父元素font-size计算，rem（root em）始终相对html根元素的font-size，更可控。'},
+  {q:'CSS @supports规则的作用是？', level:'基础', options:['支持旧浏览器降级','检测浏览器是否支持某CSS特性再应用样式','加载外部样式文件','定义CSS变量作用域'], answer:1, explain:'@supports是CSS特性检测查询，类似JS的CSS.supports()，可在支持某属性时才应用对应样式块。'},
+  {q:'JS原型链中，实例obj的__proto__指向？', level:'基础', options:['Object.prototype','Constructor.prototype','obj自身','Function.prototype'], answer:1, explain:'每个实例的__proto__（[[Prototype]]）指向其构造函数的prototype对象，构成原型链向上查找。'},
+  {q:'箭头函数与普通函数在this上的区别是？', level:'进阶', options:['箭头函数this指向调用者','箭头函数没有自己的this，继承外层作用域且不可bind','箭头函数this总指向window','两者this行为完全相同'], answer:1, explain:'箭头函数不绑定自己的this/arguments，this从词法外层作用域继承，call/apply/bind也无法改变其this。'},
+  {q:'Promise的三种状态转换描述正确的是？', level:'进阶', options:['pending可多次转换为fulfilled/rejected','pending→fulfilled或pending→rejected，状态不可逆','fulfilled可转回pending','rejected可直接转fulfilled'], answer:1, explain:'Promise状态只能从pending变更为fulfilled或rejected一次，状态确定后凝固不可逆。'},
+  {q:'以下哪个Promise方法会等待全部Promise都完成（无论成功失败）？', level:'进阶', options:['Promise.all','Promise.race','Promise.allSettled','Promise.any'], answer:2, explain:'allSettled等待所有Promise完成返回结果数组；all任一失败即整体失败；any取第一个成功。'},
+  {q:'async/await串行与并行执行对比正确的是？', level:'进阶', options:['多个await默认并行执行','Promise.all([p1,p2])内部是串行执行','await p1;await p2; 是串行；Promise.all是并行','串行和并行耗时总是相同'], answer:2, explain:'连续多个await会按顺序等待前一个完成（串行）；Promise.all同时触发所有Promise并等待全部（并行）。'},
+  {q:'JS事件循环中微任务队列不包含以下哪个？', level:'进阶', options:['Promise.then回调','MutationObserver','queueMicrotask','setTimeout回调'], answer:3, explain:'微任务包括Promise.then/catch/finally、MutationObserver、queueMicrotask；setTimeout/setInterval属于宏任务。'},
+  {q:'关于变量提升和TDZ，以下说法正确的是？', level:'进阶', options:['let/const不提升也无TDZ','var提升且初始化为undefined；let/const提升但进入TDZ不能访问','let和var提升行为完全相同','const可先使用后声明'], answer:1, explain:'var声明被提升且初始化为undefined；let/const同样提升但未初始化前处于TDZ临时死区，访问会报错。'},
+  {q:'JS中==与===区别，以下哪个是falsy值？', level:'进阶', options:['0与"0"===相等','"false"转为布尔值为false','0、""、null、undefined、NaN、false都是falsy','[]转换为布尔值为false'], answer:2, explain:'falsy值共6个：false/0/""(空串)/null/undefined/NaN；===不做类型转换，==会隐式类型转换。'},
+  {q:'深浅拷贝对比，structuredClone()的特点是？', level:'进阶', options:['只能拷贝基础类型','支持循环引用，可拷贝Date/RegExp/Map/Set等','和JSON.parse(JSON.stringify())完全等价','只能拷贝数组'], answer:1, explain:'structuredClone是JS原生深拷贝API，支持循环引用、Date/RegExp/Map/Set/ArrayBuffer等；JSON法丢函数、丢循环引用。'},
+  {q:'Proxy相比Object.defineProperty的优势是？', level:'进阶', options:['兼容性更好','Proxy直接代理整个对象，可拦截数组下标/新增属性/删除等更多操作','语法更简单','不需要配合Reflect使用'], answer:1, explain:'defineProperty只能劫持单个属性，需递归+监听数组变异方法；Proxy代理整个对象，拦截13种操作，Vue3响应式核心。'},
+  {q:'WeakMap与Map的主要区别是？', level:'进阶', options:['WeakMap键可以是任意类型','WeakMap键必须是对象，且为弱引用不阻止GC，不可枚举','WeakMap有size属性','WeakMap支持clear()遍历所有键'], answer:1, explain:'WeakMap键仅接受对象且为弱引用（无其他引用时自动被GC回收），没有size、无法遍历，适合存私有数据/缓存。'},
+  {q:'Map相比普通Object的优势是？', level:'进阶', options:['Map存取更快永远比Object好','Map键可为任意类型、保持插入顺序、直接迭代、有size属性快速获取长度','Object的key不会被转字符串','Map语法更短'], answer:1, explain:'Map键保持插入顺序、支持任意类型键、迭代方便（for...of/entries）、size属性直接取长度；Object键只能是Symbol/String。'},
+  {q:'DOM querySelector与getElementsByClassName的重要区别是？', level:'进阶', options:['querySelector返回的是静态NodeList，后者返回的是动态HTMLCollection','都是静态集合完全一样','querySelector性能总是更好','后者支持CSS选择器'], answer:0, explain:'getElementsBy*返回动态集合（DOM变化实时更新）；querySelectorAll返回静态NodeList（快照不变）。'},
+  {q:'Vue3中computed与watch的核心区别是？', level:'进阶', options:['computed有缓存、依赖声明式、返回值用；watch监听副作用、可immediate/deep','watch有缓存更适合算派生值','computed不可读取','watch不能监听嵌套属性'], answer:0, explain:'computed基于依赖缓存，多次访问只在依赖变时重算，用于派生数据；watch用于监听变化后执行副作用（如请求、修改）。'},
+  {q:'unknown与any的区别正确的是？', level:'高级', options:['完全一样都任意类型','unknown需先类型断言/收窄才能使用；any完全放弃检查随意用','any更安全推荐','unknown不能赋值给任何类型'], answer:1, explain:'unknown是类型安全的any，必须先做类型判断（typeof/instanceof/自定义守卫）才能操作；any跳过所有类型检查，可能掩盖错误。'},
+  {q:'Core Web Vitals三大核心指标不包含？', level:'高级', options:['LCP最大内容绘制','FID首次输入延迟','CLS累积布局偏移','TBT总阻塞时间'], answer:3, explain:'三大Core Web Vitals是LCP（加载）、FID（交互，正被INP替代）、CLS（视觉稳定性）；TBT/TTI是其他辅助指标。'},
+  {q:'Tree Shaking生效的必要条件是？', level:'高级', options:['必须CommonJS模块','必须ES Module（import/export）静态语法，配合构建工具sideEffects声明','只要压缩就生效','所有格式均可'], answer:1, explain:'Tree Shaking依赖ESM的静态结构分析（import/export不可动态），package.json中sideEffects标记无副作用文件，未被使用的export会被移除。'},
+  {q:'XSS三种类型中DOM型XSS的特点？', level:'高级', options:['服务端拼接HTML返回导致','前端JS直接将不可信数据插入DOM（如innerHTML），全程不经过服务器','用户提交后数据库存储再渲染','仅IE浏览器存在'], answer:1, explain:'DOM型XSS是纯前端漏洞：location.hash/URL参数/userInput等未经转义直接赋值innerHTML/document.write/src等，恶意脚本在客户端执行。'},
+  {q:'CORS预检请求OPTIONS包含哪个关键请求头？', level:'高级', options:['Access-Control-Allow-Origin','Access-Control-Request-Method / Access-Control-Request-Headers','Origin','以上都对'], answer:1, explain:'预检OPTIONS会携带Access-Control-Request-Method（将用的非简单方法如PUT）和Request-Headers（自定义头），服务端返回对应Allow头确认。'},
+  {q:'webpack loader与plugin的区别？', level:'高级', options:['loader处理文件转换（如babel转译JS）；plugin扩展构建流程任一环（如打包优化、资源管理、注入变量）','plugin处理单个文件转换','loader可监听整个构建生命周期','两者功能完全一致'], answer:0, explain:'loader是文件转换器（输入文件输出新内容，链式调用）；plugin基于Tapable钩子在编译各阶段注入逻辑，功能更强大可做loader做不到的事。'}
+  ],
+
+  backend: [
+    {
+      q: 'Python 中用于定义抽象基类的模块是？',
+      level: '基础',
+      options: ['abc', 'sys', 'os', 're'],
+      answer: 0,
+      explain: 'abc 模块（Abstract Base Classes）定义抽象基类，用 @abstractmethod 装饰抽象方法。'
+    },
+    {
+      q: 'Flask 中注册路由的装饰器是？',
+      level: '基础',
+      options: ['@app.url', '@app.route', '@app.path', '@app.view'],
+      answer: 1,
+      explain: '@app.route(path, methods=[...]) 是 Flask 注册路由的装饰器。'
+    },
+    {
+      q: 'MySQL 默认的事务隔离级别是？',
+      level: '进阶',
+      options: ['读未提交', '读已提交', '可重复读', '串行化'],
+      answer: 2,
+      explain: 'MySQL 默认可重复读（REPEATABLE READ），通过 MVCC 和间隙锁解决幻读。'
+    },
+    {
+      q: 'SQL 中 LEFT JOIN 的特点是？',
+      level: '进阶',
+      options: ['只返回匹配行', '保留左表全部行', '保留右表全部行', '返回两表全部行'],
+      answer: 1,
+      explain: 'LEFT JOIN 保留左表全部行，右表无匹配则为 NULL；INNER JOIN 只返回匹配行。'
+    },
+    {
+      q: 'Redis 中用于实现排行榜的数据类型是？',
+      level: '进阶',
+      options: ['String', 'Hash', 'List', 'ZSet'],
+      answer: 3,
+      explain: 'ZSet（有序集合）按 score 排序，天然适合排行榜，ZADD/ZREVRANGE 实现。'
+    },
+    {
+      q: '缓存雪崩的常见解决方案是？',
+      level: '进阶',
+      options: ['缓存空值', '过期时间加随机值', '互斥锁', '布隆过滤器'],
+      answer: 1,
+      explain: '雪崩是大量 key 同时失效；过期时间加随机值避免同时失效；空值防穿透；互斥锁防击穿。'
+    },
+    {
+      q: 'Docker 中后台运行容器的参数是？',
+      level: '进阶',
+      options: ['-it', '-d', '-p', '-v'],
+      answer: 1,
+      explain: '-d 后台运行（detached）；-it 交互式；-p 端口映射；-v 挂载卷。'
+    },
+    {
+      q: 'Dockerfile 中指定容器启动命令的是？',
+      level: '基础',
+      options: ['RUN', 'CMD', 'ENTRYPOINT', 'CMD 或 ENTRYPOINT'],
+      answer: 3,
+      explain: 'CMD 和 ENTRYPOINT 都可指定启动命令；ENTRYPOINT 不会被 docker run 覆盖，CMD 会。'
+    },
+    {
+      q: 'Nginx 实现负载均衡的指令是？',
+      level: '基础',
+      options: ['proxy_pass', 'upstream', 'location', 'server'],
+      answer: 1,
+      explain: 'upstream 定义后端服务器组，proxy_pass 引用该组实现负载均衡。'
+    },
+    {
+      q: 'HTTP 请求方法中用于创建资源的是？',
+      level: '基础',
+      options: ['GET', 'POST', 'PUT', 'DELETE'],
+      answer: 1,
+      explain: 'POST 通常用于创建资源（非幂等）；PUT 用于整体更新/创建（幂等）；GET 查询；DELETE 删除。'
+    },
+    {
+      q: 'Python 装饰器的本质是？',
+      level: '高级',
+      options: ['一个类', '一个接收函数返回函数的高阶函数', '一个语法糖关键字', '一个内置模块'],
+      answer: 1,
+      explain: '装饰器本质是高阶函数，接收函数作为参数返回新函数，@语法是语法糖。'
+    },
+    {
+      q: 'GitLab CI 中定义流水线阶段的顶级关键字是？',
+      level: '基础',
+      options: ['jobs', 'stages', 'pipeline', 'steps'],
+      answer: 1,
+      explain: '.gitlab-ci.yml 中 stages 定义阶段顺序，每个 job 通过 stage 关键字归属到某阶段。'
+    },
+    {
+      q: '数据库索引遵循的原则是？',
+      level: '高级',
+      options: ['最左前缀', '最右前缀', '随机匹配', '全表扫描'],
+      answer: 0,
+      explain: '组合索引遵循最左前缀原则，查询必须从索引最左列开始才能使用索引。'
+    },
+  { q: 'Python中list和tuple的主要区别是什么？', level: '基础', options: ['list和tuple都是可变的', 'list可变(可增删改)，tuple不可变', 'list不可变，tuple可变', '两者都不可变，仅语法不同'], answer: 1, explain: 'list是可变序列支持增删改元素，tuple是不可变序列，创建后元素不可修改，常用于不可变配置。' },
+  { q: '以下哪个是正确的Python推导式语法？', level: '基础', options: ['[x*2 for x in range(5)] 是列表推导式', '{x: x**2 for x in range(3)} 是集合推导式', '{x for x in "abc"} 是字典推导式', '推导式只能生成list类型'], answer: 0, explain: '方括号[]是列表推导，{k:v}是字典推导，{v}是集合推导，三种数据结构都支持推导式。' },
+  { q: 'Python生成器(yield)的主要优势是什么？', level: '基础', options: ['惰性生成值，每次返回一个并暂停，节省大量内存', '一次性将所有值加载到内存中处理更快', 'yield和return功能完全相同', 'generator不能用for循环遍历'], answer: 0, explain: 'yield惰性求值，生成器一次只产生一个值并暂停状态，特别适合处理大数据集/无限流。' },
+  { q: 'Python装饰器中functools.wraps的作用是什么？', level: '基础', options: ['保留被装饰函数的__name__、__doc__等元信息', '让装饰器执行得更快', '将函数变成类装饰器', '让装饰器支持多层嵌套'], answer: 0, explain: '不使用wraps装饰的wrapper会覆盖原函数名和文档，@wraps(func)可将元信息从原函数复制到包装函数。' },
+  { q: 'Python GIL全局解释器锁对任务类型的影响？', level: '基础', options: ['GIL主要影响CPU密集型，IO密集型(网络/磁盘)可正常并发', 'GIL导致Python完全无法做任何并发', '多线程可绕过GIL处理CPU密集', 'GIL只在PyPy解释器中存在'], answer: 0, explain: 'CPU密集用multiprocessing多进程利用多核；IO密集型线程释放GIL等待外部IO，多线程/协程有效。' },
+  { q: '面向对象OOP的三大核心特性是？', level: '基础', options: ['封装、继承、多态', '抽象、组合、聚合', '多态、递归、泛型', '封装、重载、重写'], answer: 0, explain: '三大特性：封装(访问控制隐藏实现)、继承(extends复用父类)、多态(Override/Overload不同表现)。' },
+  { q: 'Java中抽象类(abstract class)和接口(interface)的区别？', level: '基础', options: ['抽象类可以有具体方法实现，JDK8前接口只能有抽象方法', '两者都可以用new直接实例化', '一个类只能实现一个接口', '抽象类不能有构造方法'], answer: 0, explain: '抽象类可包含抽象+具体实现，类单继承；JDK8前接口只常量+抽象方法，类可多实现implements。' },
+  { q: 'Java ArrayList和LinkedList在性能上的特点？', level: '基础', options: ['ArrayList随机访问O(1)快，LinkedList中间插入删除更优', 'LinkedList随机访问O(1)', 'ArrayList中间插入删除O(1)', '两者底层都是数组实现'], answer: 0, explain: 'ArrayList基于动态数组，下标访问快；LinkedList基于双向链表，头尾/中间插入只需调整指针无需移动元素。' },
+  { q: 'Go语言goroutine和OS线程的主要区别？', level: '基础', options: ['goroutine由Go runtime调度，比OS线程轻量得多(初始栈2KB)', 'goroutine和OS线程一一对应', '一个程序最多几百个goroutine', 'goroutine之间不能通信'], answer: 0, explain: 'goroutine是用户态协程，M:N调度模型，资源占用小可轻松创建数万，channel实现CSP通信。' },
+  { q: 'Go中多个defer语句的执行顺序？', level: '基础', options: ['后进先出(LIFO)栈顺序，最后声明的先执行', '按代码书写从上到下顺序', '随机顺序执行', 'defer在函数开始前执行'], answer: 0, explain: 'defer将函数压入栈结构，函数return前按逆序(后写先执行)弹出执行；参数在声明时即求值。' },
+  { q: 'Go中make和new的区别？', level: '基础', options: ['make创建slice/map/channel引用类型并初始化；new分配零值内存返回指针', 'make和new完全相同可互换', 'new返回的是值类型', 'make创建任何类型都可以'], answer: 0, explain: 'make仅用于三种内置引用类型，初始化内部数据结构；new(T)分配T类型零值内存返回*T指针。' },
+  { q: 'SQL语言分类中，CREATE/ALTER/DROP属于哪一类？', level: '基础', options: ['DDL数据定义语言', 'DML数据操纵语言', 'DCL数据控制语言', 'TCL事务控制语言'], answer: 0, explain: 'DDL定义库表结构；DML操作数据(INSERT/UPDATE/DELETE/SELECT)；DCL权限(GRANT/REVOKE)；TCL事务(COMMIT/ROLLBACK)。' },
+  { q: 'PRIMARY KEY主键和UNIQUE NOT NULL的区别？', level: '基础', options: ['一个表只能一个主键，但可以多个UNIQUE NOT NULL约束', '主键允许NULL值', 'UNIQUE约束不会创建索引', '两者完全等价无区别'], answer: 0, explain: '主键=唯一+非空+一表一个+默认聚集索引；UNIQUE可多个、默认非聚集索引，单列时加NOT NULL语义类似。' },
+  { q: '数据库事务的ACID特性指的是？', level: '基础', options: ['原子性Atomic、一致性Consistent、隔离性Isolated、持久性Durable', '自动、并发、独立、可恢复', '关联、完整、索引、持久', '属性、约束、标识、默认值'], answer: 0, explain: 'A全成或全败；C数据约束不破坏；I并发事务互不干扰；D提交后永久保存即使宕机。' },
+  { q: 'Redis中SETNX命令的典型应用场景？', level: '基础', options: ['key不存在才设置成功，可实现分布式锁', '批量设置多个key-value对', '设置过期时间并返回旧值', '将字符串类型转为数字'], answer: 0, explain: 'SETNX=SET if Not eXists，原子操作，返回1=获取锁成功，返回0=锁被占；配合EXPIRE防止死锁。' },
+  { q: '缓存三大问题：穿透、击穿、雪崩，描述正确的是？', level: '基础', options: ['穿透=查不存在key；击穿=热点key过期；雪崩=大量key同时过期', '三者都是数据库挂了', '三者都是黑客攻击', '三者解决方式完全相同'], answer: 0, explain: '穿透：布隆过滤器/空缓存；击穿：互斥锁/热点永不过期；雪崩：随机TTL/缓存高可用集群。' },
+  { q: 'Docker中Volume和Bind Mount的区别？', level: '基础', options: ['Volume由Docker管理生命周期(-v name:/path)，Bind Mount直接挂载宿主机路径(-v /host:/cont)', 'Bind Mount适合生产持久化数据库', 'Volume不能在容器间共享', '两者是完全同一种东西'], answer: 0, explain: 'Volume(命名卷)Docker管理，生产推荐；Bind Mount(绑定挂载)适合开发时挂载源码热更。' },
+  { q: 'Nginx location匹配的优先级从高到低？', level: '基础', options: ['=精确 > ^~前缀跳过正则 > ~区分大小写正则 > ~*不区分 > 无前缀普通', '正则最高，=精确最低', '按代码书写顺序匹配', '~*优先级高于^~'], answer: 0, explain: '精确匹配=最高；^~匹配后不再找正则；正则按书写顺序；最后最长普通前缀匹配兜底。' },
+  { q: '典型CI/CD流水线Pipeline的标准阶段顺序是？', level: '基础', options: ['build构建 → test测试 → deploy部署', 'deploy → build → test', 'test → deploy → build', 'deploy → test → build'], answer: 0, explain: '标准顺序：checkout拉代码→build编译打包→test单元/集成→deploy部署到环境，前阶段失败则中止。' },
+  { q: 'Python处理CPU密集型任务时，multiprocessing和threading的区别？', level: '进阶', options: ['多进程有独立解释器可绕过GIL，多线程共享GIL无法并行CPU任务', '多线程能并行CPU密集', '多进程间数据共享比多线程简单', '两者完全一样'], answer: 0, explain: 'multiprocessing每个子进程独立Python解释器独立GIL，真正多核并行；threading共享一个GIL串行执行CPU代码。' },
+  { q: 'Flask和Django的主要架构差异？', level: '进阶', options: ['Flask微框架需自选组件，Blueprint模块化；Django全栈自带ORM/Admin/MTV', '两者都是微框架', '两者都是全栈框架MTV', 'Django没有ORM'], answer: 0, explain: 'Flask微型灵活(核心少插件多)，Blueprint拆分模块，App Factory模式；Django全能框架自带ORM/admin/auth/form等。' },
+  { q: 'Java Stream API中map、filter、collect的作用？', level: '进阶', options: ['map转换每个元素，filter过滤，collect是终止操作收集结果为集合', '三个都是中间操作', '三个都是终止操作', 'filter用于聚合分组'], answer: 0, explain: '中间操作(lazy):map/filter/flatMap/sorted；终止操作(eager触发计算):collect(Collectors.toList/groupingBy)/forEach/count。' },
+  { q: 'Java中Checked Exception和RuntimeException的区别？', level: '进阶', options: ['Checked必须显式throws或try-catch，RuntimeException不强制处理', 'NullPointerException属于Checked', 'IOException属于RuntimeException', '两者都在编译期强制检查'], answer: 0, explain: '受检异常(编译期):IOException/SQLException强制throws/try；运行时异常:NPE/ClassCast/IndexOutOfBounds可选处理。' },
+  { q: 'Go无缓冲channel和有缓冲channel的区别？', level: '进阶', options: ['无缓冲读写必须同时就绪否则阻塞；有缓冲满前写不阻塞空后读阻塞', '有缓冲channel不会死锁', 'channel只能同步不能传数据', 'close后的channel不能再读任何数据'], answer: 0, explain: '无缓冲=同步(握手)；有缓冲=异步队列；close后仍可读剩余数据，读完获零值且ok=false，重复写会panic。' },
+  { q: 'Express中间件的执行顺序和错误处理中间件签名？', level: '进阶', options: ['按注册顺序执行；错误中间件必须4参数(err,req,res,next)放在最后', '中间件顺序无所谓', '错误中间件和普通中间件签名相同', '错误中间件放最前面'], answer: 0, explain: '中间件洋葱模型先写先执行；错误中间件首参必须是err，next(err)才进入错误链路，否则跳过。' },
+  { q: 'MySQL联合索引(a,b,c)的最左前缀原则？', level: '进阶', options: ['查询条件必须包含a(最左列)索引才可能生效，b+c单独查不走索引', '查询含b和c就可用索引', '最左前缀规则只适用于单列索引', '范围查询后的列也可用索引'], answer: 0, explain: '联合索引按a→b→c排序树；必须带a才能走索引；a+b+c全列中范围查询(a>=5)右边列索引失效。' },
+  { q: 'MySQL InnoDB默认事务隔离级别及幻读解决方案？', level: '进阶', options: ['默认REPEATABLE READ，用MVCC快照读+next-key lock间隙锁解决幻读', '默认Read Committed', '默认Serializable', 'InnoDB完全没解决幻读'], answer: 0, explain: '4个级别：RU脏读→RC不可重复读→RR(默认)→Serializable；RR下普通SELECT快照读MVCC，当前读加next-key lock防幻读。' },
+  { q: 'Redis Cluster数据分片原理？', level: '进阶', options: ['共16384固定哈希槽，CRC16(key)%16384定位槽，不同节点各自负责部分槽', '用一致性哈希环分片', '槽数可动态增减', '每个节点都有全量数据'], answer: 0, explain: 'Redis Cluster固定槽分片，节点持有槽子集；扩容/缩容需迁移槽，不是一致性哈希，集群模式不支持多key操作跨槽。' },
+  { q: 'Docker多阶段构建的核心作用？', level: '进阶', options: ['多个FROM阶段编译，COPY --from提取产物，丢弃编译依赖大幅减小镜像', '让镜像构建更快', '多阶段会让镜像变大', '只能编译Go语言'], answer: 0, explain: 'FROM ... AS builder编译阶段安装依赖+编译；FROM scratch/alpine运行阶段仅COPY二进制/文件，镜像从几百M降到几M。' },
+  { q: '常见HTTP状态码含义正确的一组是？', level: '进阶', options: ['401未认证/403无权限/429限流/502BadGw/503不可用/504网关超时', '403=用户未登录', '500=上游服务挂了', '404=服务器崩溃'], answer: 0, explain: '4xx客户端:400参数/401鉴权缺token/403登录了没权限/404资源/409冲突/422校验/429限流；5xx服务端:500内部/502下游错/503停机/504超时。' },
+  { q: 'HTTP方法中哪些是幂等的？', level: '进阶', options: ['GET/PUT/DELETE/HEAD/OPTIONS幂等，POST非幂等', 'POST幂等', 'PUT每次创建不同结果所以非幂等', '幂等=不修改数据'], answer: 0, explain: '幂等=多次调用结果相同；安全=不修改。安全+幂等:GET/HEAD/OPTIONS；仅幂等:PUT(整体替换)/DELETE；非幂等:POST(多次创建多条)。' },
+  { q: 'CAP定理在分布式系统中的取舍理解？', level: '高级', options: ['P网络分区客观必选，C一致性和A可用性二选一：ZK/HBase选CP，Eureka/Cassandra选AP', '可同时满足CAP三者', '分区容错=磁盘分区', '强一致系统一定高可用'], answer: 0, explain: 'CAP不可三角；网络故障分区必面对，CP牺牲部分可用性保数据一致(强一致需阻塞)，AP牺牲强一致保服务可用(最终一致)。' },
+  { q: '雪花算法Snowflake生成的分布式ID结构组成？', level: '高级', options: ['64位:1位符号+41位毫秒时间戳+10位workerId+12位序列号，整体趋势递增', '64位UUID随机数', '32位IP+32位自增', '纯字符串时间戳'], answer: 0, explain: 'Snowflake:1bit正号+41bit毫秒(约69年)+10bit机器号(1024节点)+12bit序列号(每ms 4096个)，long整数，趋势自增且去中心化。' },
+  { q: '熔断器Circuit Breaker的三种状态流转？', level: '高级', options: ['Closed(正常统计)→失败率超阈值→Open(快速失败不调下游)→冷却→Half-open(放少量探测)→Closed/Open', '状态流转随机', 'Open状态直接调下游', 'Half-open放所有请求'], answer: 0, explain: 'Sentinel/Hystrix熔断器防止级联雪崩：Closed采样→Open熔断快速失败→Half-open探测恢复，防止长时间熔断也防止一恢复就冲垮。' },
+  { q: 'REST、GraphQL、gRPC三种API风格的对比？', level: '高级', options: ['REST HTTP+JSON通用；GraphQL按需查询灵活；gRPC Protobuf+HTTP2高性能微服务', 'GraphQL只能查询不能写', 'gRPC用JSON传输', 'REST必须用POST查询'], answer: 0, explain: 'REST资源导向简单通用；GraphQL单端点自定义字段减少过度获取；gRPC二进制序列化+多路复用，跨语言IDL生成代码，性能是REST 5-10倍。' },
+  { q: 'Kafka消费者组(Consumer Group)的offset和投递语义？', level: '高级', options: ['同组一分区只分配一个消费者；offset存__consumer_offsets；enable.auto.commit默认=至少一次(at-least-once)可能重复消费', 'offset存在consumer本地内存', '同一分区可被组内多个消费者同时消费', '自动提交=Exactly Once'], answer: 0, explain: 'Consumer Group实现广播/单播；分区数=组内最大并行度；手动提交offset或事务+幂等生产者可实现Exactly-Once语义。' },
+  { q: '常见发布策略蓝绿、金丝雀、滚动、重建的区别？', level: '高级', options: ['蓝绿=两套环境切换；金丝雀=按比例逐步放量；滚动=逐个替换Pod；重建=先停旧再启新', '四种完全等价', '金丝雀和蓝绿完全相同', '重建发布零停机'], answer: 0, explain: '蓝绿(资源双份切换快成本高)；金丝雀灰度(1%→10%→50%→100%风险可控)；滚动(k8s默认maxSurge/maxUnavailable控制节奏)；重建(简单但停机)。' }
+  ]
+};
