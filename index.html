@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>运维学习平台 | Ops Learning</title>
+    <link rel="stylesheet" href="styles.css?v=9">
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <span class="logo-text">运维学习平台</span>
+            </div>
+            <nav class="nav">
+                <a href="#" class="nav-item active" data-page="home">首页</a>
+                <a href="#" class="nav-item" data-page="learn">学习中心</a>
+                <a href="#" class="nav-item" data-page="quiz">题库练习</a>
+                <a href="#" class="nav-item" data-page="progress">学习进度</a>
+            </nav>
+            <div class="user-area">
+                <button class="btn btn-ghost" id="loginBtn">登录</button>
+                <div class="user-info hidden" id="userInfo">
+                    <span class="avatar" id="userAvatar">U</span>
+                    <span class="username" id="userName">访客</span>
+                    <button class="btn btn-text" id="logoutBtn">退出</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main">
+        <!-- 首页 -->
+        <section class="page active" id="page-home">
+            <div class="hero">
+                <h1 class="hero-title">一站式运维学习平台</h1>
+                <p class="hero-subtitle">网络 · Linux · 前端 · 后端 · Shell脚本，全面覆盖运维知识体系</p>
+                <div class="hero-stats">
+                    <div class="stat">
+                        <div class="stat-num" id="statTopics">0</div>
+                        <div class="stat-label">知识点</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-num" id="statQuestions">0</div>
+                        <div class="stat-label">练习题</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-num">5</div>
+                        <div class="stat-label">学科方向</div>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-lg" id="startLearnBtn">开始学习</button>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">学习方向</h2>
+                <div class="category-grid" id="categoryGrid"></div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">平台特色</h2>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">📚</div>
+                        <h3>系统化知识</h3>
+                        <p>五大方向分级知识点，从基础到高级循序渐进</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">✍️</div>
+                        <h3>实战题库</h3>
+                        <p>精选题目配合详细解析，巩固所学知识</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📊</div>
+                        <h3>进度追踪</h3>
+                        <p>实时记录学习进度，量化成长轨迹</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🏆</div>
+                        <h3>成就激励</h3>
+                        <p>解锁徽章成就，保持学习动力</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 学习中心 -->
+        <section class="page" id="page-learn">
+            <div class="page-header">
+                <h1 class="page-title">学习中心</h1>
+                <p class="page-desc">选择学科方向，浏览分级知识点</p>
+            </div>
+            <div class="learn-layout">
+                <aside class="learn-sidebar">
+                    <h3 class="sidebar-title">学科分类</h3>
+                    <div class="category-tabs" id="learnTabs"></div>
+                    <div class="filter-group">
+                        <h4 class="filter-title">难度筛选</h4>
+                        <label class="filter-item"><input type="radio" name="level" value="all" checked> 全部</label>
+                        <label class="filter-item"><input type="radio" name="level" value="基础"> 基础</label>
+                        <label class="filter-item"><input type="radio" name="level" value="进阶"> 进阶</label>
+                        <label class="filter-item"><input type="radio" name="level" value="高级"> 高级</label>
+                    </div>
+                </aside>
+                <div class="learn-content">
+                    <div class="topic-list" id="topicList"></div>
+                </div>
+                <aside class="learn-detail" id="learnDetail">
+                    <div class="empty-detail">
+                        <div class="empty-icon">📖</div>
+                        <p>点击左侧知识点查看详细内容</p>
+                    </div>
+                </aside>
+            </div>
+        </section>
+
+        <!-- 题库练习 -->
+        <section class="page" id="page-quiz">
+            <div class="page-header">
+                <h1 class="page-title">题库练习</h1>
+                <p class="page-desc">选择学科开始练习，检验学习成果</p>
+            </div>
+            <div id="quizHome">
+                <div class="quiz-category-grid" id="quizCategoryGrid"></div>
+            </div>
+            <div id="quizDifficulty" class="hidden">
+                <button class="btn btn-text" id="diffBackBtn">← 返回学科</button>
+                <div class="diff-panel" id="diffPanel"></div>
+            </div>
+            <div id="quizPlayer" class="hidden">
+                <div class="quiz-header">
+                    <button class="btn btn-text" id="quizBackBtn">← 返回</button>
+                    <div class="quiz-progress">
+                        <span id="quizCurrent">1</span> / <span id="quizTotal">10</span>
+                        <span class="quiz-level-tag" id="quizLevelTag"></span>
+                    </div>
+                    <div class="quiz-score">
+                        得分：<span id="quizScore">0</span>
+                    </div>
+                </div>
+                <div class="quiz-progress-bar">
+                    <div class="quiz-progress-fill" id="quizProgressFill"></div>
+                </div>
+                <div class="quiz-body" id="quizBody"></div>
+                <div class="quiz-footer hidden" id="quizFooter">
+                    <button class="btn btn-primary" id="quizNextBtn">下一题</button>
+                </div>
+            </div>
+            <div id="quizResult" class="hidden">
+                <div class="result-card">
+                    <div class="result-emoji" id="resultEmoji">🎉</div>
+                    <h2 class="result-title">练习完成！</h2>
+                    <p class="result-sub" id="resultSub"></p>
+                    <div class="result-score">
+                        <span class="result-score-num" id="resultScore">0</span>
+                        <span class="result-score-total">/ <span id="resultTotal">0</span></span>
+                    </div>
+                    <p class="result-msg" id="resultMsg"></p>
+                    <div class="result-actions">
+                        <button class="btn btn-primary" id="quizRetryBtn">再练一次</button>
+                        <button class="btn btn-ghost" id="quizChangeLevelBtn">换个难度</button>
+                        <button class="btn btn-ghost" id="quizHomeBtn">返回题库</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 学习进度 -->
+        <section class="page" id="page-progress">
+            <div class="page-header">
+                <h1 class="page-title">学习进度</h1>
+                <p class="page-desc">追踪你的学习足迹与成就</p>
+            </div>
+            <div class="progress-overview">
+                <div class="progress-stat-card">
+                    <div class="progress-stat-icon">📚</div>
+                    <div class="progress-stat-info">
+                        <div class="progress-stat-num" id="learnedCount">0</div>
+                        <div class="progress-stat-label">已学知识点</div>
+                    </div>
+                </div>
+                <div class="progress-stat-card">
+                    <div class="progress-stat-icon">✍️</div>
+                    <div class="progress-stat-info">
+                        <div class="progress-stat-num" id="answeredCount">0</div>
+                        <div class="progress-stat-label">已答题数</div>
+                    </div>
+                </div>
+                <div class="progress-stat-card">
+                    <div class="progress-stat-icon">🎯</div>
+                    <div class="progress-stat-info">
+                        <div class="progress-stat-num" id="correctRate">0%</div>
+                        <div class="progress-stat-label">正确率</div>
+                    </div>
+                </div>
+                <div class="progress-stat-card">
+                    <div class="progress-stat-icon">🔥</div>
+                    <div class="progress-stat-info">
+                        <div class="progress-stat-num" id="streakDays">0</div>
+                        <div class="progress-stat-label">连续学习(天)</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">各学科进度</h2>
+                <div class="category-progress" id="categoryProgress"></div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">成就徽章</h2>
+                <div class="badge-grid" id="badgeGrid"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 登录弹窗 -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <button class="modal-close" id="loginCloseBtn">×</button>
+            <h2 class="modal-title">登录 / 注册</h2>
+            <p class="modal-desc">登录后可同步学习进度</p>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label class="form-label">用户名</label>
+                    <input type="text" class="form-input" id="loginUsername" placeholder="请输入用户名" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">密码</label>
+                    <input type="password" class="form-input" id="loginPassword" placeholder="请输入密码" required>
+                </div>
+                <div class="form-error hidden" id="loginError"></div>
+                <button type="submit" class="btn btn-primary btn-block">登录 / 注册</button>
+            </form>
+            <p class="modal-tip">提示：演示版，任意用户名密码即可登录</p>
+        </div>
+    </div>
+
+    <!-- 知识点详情弹窗(移动端) -->
+    <div class="modal" id="topicModal">
+        <div class="modal-content modal-lg">
+            <button class="modal-close" id="topicCloseBtn">×</button>
+            <div id="topicModalBody"></div>
+        </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div class="toast" id="toast"></div>
+
+    <footer class="footer">
+        <p>运维学习平台 © 2026 | 网络 · Linux · 前端 · 后端 · Shell脚本 学习与练习</p>
+    </footer>
+
+    <script src="data.js?v=9"></script>
+    <script src="app.js?v=9"></script>
+</body>
+</html>
