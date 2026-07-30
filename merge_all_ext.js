@@ -36,6 +36,20 @@ const extFiles = [
   ['ext2_java.js', 'java'],
   ['ext2_mysql.js', 'mysql'],
   ['ext2_sql.js', 'sql'],
+  // Third batch extensions
+  ['ext3_linux.js', 'linux'],
+  ['ext3_shell.js', 'shell'],
+  ['ext3_mysql.js', 'mysql'],
+  ['ext3_sql.js', 'sql'],
+  // Fourth batch extensions
+  ['ext4_network.js', 'network'],
+  ['ext4_linux.js', 'linux'],
+  ['ext4_shell.js', 'shell'],
+  ['ext4_mysql.js', 'mysql'],
+  ['ext4_sql.js', 'sql'],
+  ['ext4_python.js', 'python'],
+  ['ext4_backend.js', 'backend'],
+  ['ext4_frontend.js', 'frontend'],
 ];
 
 // Parse a single ext file: returns { topics, questions }

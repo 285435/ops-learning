@@ -283,6 +283,62 @@ const KNOWLEDGE = {
         "level": "进阶",
         "content": "**DHCP 作用**\n- Dynamic Host Configuration Protocol\n- 自动分配 IP 地址、子网掩码、网关、DNS\n- 集中管理 IP，避免冲突，减少手工配置\n- 基于 UDP，服务端 67，客户端 68\n\n**DHCP 工作流程（DORA）**\n1. **Discover**：客户端广播 DHCPDISCOVER 寻找服务器\n   - 源 IP 0.0.0.0，目标 255.255.255.255\n   - 客户端无 IP 时用 MAC 标识\n2. **Offer**：服务器单播/广播 DHCPOFFER 提供 IP\n   - 含建议 IP、租约时间、网关、DNS\n3. **Request**：客户端广播 DHCPREQUEST 确认接受\n   - 广播通知所有服务器，避免多服务器冲突\n4. **Ack**：服务器 DHCPACK 确认分配\n   - 客户端收到后 ARP 检测 IP 是否冲突\n\n**租约机制**\n- IP 不是永久分配，有租约时间（lease time）\n- 客户端在租约 50% 时尝试续租（unicast）\n- 87.5% 时广播寻找其他服务器\n- 租约到期未续：释放 IP\n- 客户端主动释放：DHCPRELEASE\n\n**DHCP 报文结构**\n- op：消息类型（1 请求 / 2 响应）\n- htype/hlen：硬件类型/长度（以太网 1/6）\n- xid：事务 ID（一次 DORA 相同）\n- ciaddr/yiaddr/siaddr/giaddr：客户端/你的/服务器/网关 IP\n- chaddr：客户端 MAC\n- options：TLV 格式选项（网关/DNS/租约/主机名等）\n\n**DHCP 中继（Relay）**\n- 跨网段获取 IP\n- 路由器收到广播 DHCPDISCOVER 转为单播发给 DHCP 服务器\n- giaddr 字段记录客户端网段\n- 服务器据此分配对应网段 IP\n\n**DHCP 选项（Options）**\n- 1 子网掩码 / 3 路由器 / 6 DNS / 12 主机名\n- 51 租约时间 / 58 T1 续租 / 59 T2 重绑\n- 53 消息类型（Discover/Offer/Request/Ack 等）\n- 54 DHCP 服务器标识\n- 82 中继代理信息（Option 82）\n\n**DHCP 安全**\n- 伪造 DHCP 服务器：分配错误 IP/网关，中间人攻击\n- DHCP Snooping：交换机只信任指定端口\n- 动态 ARP 检测（DAI）：基于 Snooping 表\n- IP Source Guard：防止 IP 伪造\n\n**DHCPv6**\n- IPv6 环境的 DHCP\n- SLAAC（无状态自动配置）更常用\n- 有状态 DHCPv6：分配地址 + 其他配置\n- 无状态 DHCPv6：SLAAC 分配地址，DHCP 仅给 DNS 等",
         "example": "# 查看本机 DHCP 获取的 IP（Linux）\ndhclient -v eth0\n# 或\nip addr show eth0\n\n# 查看租约文件\ncat /var/lib/dhcp/dhclient.leases\n# 或\ncat /var/lib/NetworkManager/*.lease\n\n# 释放并重新获取\ndhclient -r eth0  # 释放\ndhclient eth0     # 重新获取\n\n# DHCP 服务器配置（isc-dhcp-server）\n# /etc/dhcp/dhcpd.conf\n/* subnet 192.168.1.0 netmask 255.255.255.0 {\n  range 192.168.1.100 192.168.1.200;\n  option routers 192.168.1.1;\n  option domain-name-servers 8.8.8.8, 114.114.114.114;\n  option domain-name \"example.com\";\n  default-lease-time 600;\n  max-lease-time 7200;\n}\n\n# 静态绑定（MAC 绑定 IP）\nhost server1 {\n  hardware ethernet 00:11:22:33:44:55;\n  fixed-address 192.168.1.10;\n} */\n\n# 启动 DHCP 服务\nsystemctl start isc-dhcp-server\n\n# 抓包分析 DHCP\ntcpdump -i eth0 -n 'port 67 or port 68' -v\n# 可看到 Discover -> Offer -> Request -> Ack 流程\n\n# Windows 查看\n# ipconfig /all       显示完整 DHCP 信息\n# ipconfig /release   释放\n# ipconfig /renew     重新获取\n\n# 思科交换机 DHCP Snooping 配置\n/* ! 全局开启\nip dhcp snooping\nip dhcp snooping vlan 10,20\n! 信任上联口（接 DHCP 服务器）\ninterface GigabitEthernet0/1\n  ip dhcp snooping trust\n! 限速防攻击\ninterface GigabitEthernet0/2\n  ip dhcp snooping limit rate 100 */\n\n# 查看租约\ncat /var/lib/dhcp/dhcpd.leases\n# 显示 IP/MAC/起始/结束时间/状态"
+      },
+      {
+        "id": "network-sdn",
+        "title": "SDN 软件定义网络与 OpenFlow",
+        "level": "高级",
+        "content": "**SDN 核心架构**\n\n1. **数据平面（Data Plane）**\n   - 交换机/路由器负责数据包转发\n   - 基于流表（Flow Table）进行匹配转发\n   - OpenFlow 协议：控制器与交换机之间的标准南向接口\n\n2. **控制平面（Control Plane）**\n   - SDN 控制器：网络的大脑，集中管理全网策略\n   - 主流控制器：OpenDaylight、ONOS、Ryu、Floodlight\n   - 北向接口（Northbound API）：向应用层提供网络编程接口\n\n3. **应用平面（Application Plane）**\n   - 负载均衡、流量工程、安全策略等应用\n   - 通过 REST API 与控制器交互\n\n**OpenFlow 流表结构**\n- Match Fields：入端口、VLAN、MAC、IP、TCP/UDP 端口等\n- Priority：流表项优先级\n- Counters：匹配计数器\n- Instructions：动作指令（转发、丢弃、修改头部、发送到控制器）\n- Timeout：空闲超时和硬超时\n- Cookie：控制器标识用\n\n**SDN 优势**\n- 集中控制，全局视图\n- 灵活编程，快速创新\n- 降低设备复杂度\n- 支持网络虚拟化（NV）和网络功能虚拟化（NFV）",
+        "example": "# Open vSwitch (OVS) 基本操作\n# 创建网桥\novs-vsctl add-br br0\n\n# 添加端口\novs-vsctl add-port br0 eth0\novs-vsctl add-port br0 veth0\n\n# 设置控制器\novs-vsctl set-controller br0 tcp:192.168.1.10:6653\n\n# 查看流表\novs-ofctl dump-flows br0\n\n# 手动添加流表项\novs-ofctl add-flow br0 \"in_port=1,dl_dst=00:11:22:33:44:55,actions=output:2\"\n\n# 删除所有流表\novs-ofctl del-flows br0\n\n# Ryu 控制器简单应用（Python）\n# from ryu.base import app_manager\n# from ryu.controller import ofp_event\n# from ryu.controller.handler import set_ev_cls\n# class SimpleSwitch(app_manager.RyuApp):\n#     @set_ev_cls(ofp_event.EventOFPPacketIn)\n#     def packet_in_handler(self, ev):\n#         # 处理未知数据包\n#         pass"
+      },
+      {
+        "id": "network-sase",
+        "title": "SASE 安全访问服务边缘",
+        "level": "高级",
+        "content": "**SASE 定义**\n- Gartner 2019 年提出的网络与安全融合架构\n- Secure Access Service Edge\n- 将网络（SD-WAN）与安全（SWG、CASB、ZTNA、FWaaS）融合为云服务\n\n**SASE 核心组件**\n\n1. **SD-WAN**\n   - 软件定义广域网\n   - 智能选路、应用感知、链路聚合\n\n2. **SWG（Secure Web Gateway）**\n   - 安全 Web 网关\n   - URL 过滤、恶意软件检测、数据防泄漏\n\n3. **CASB（Cloud Access Security Broker）**\n   - 云访问安全代理\n   - 位于用户和云服务之间，监控和控制云应用访问\n\n4. **ZTNA（Zero Trust Network Access）**\n   - 零信任网络访问\n   - 永不信任，始终验证\n   - 基于身份和上下文的访问控制\n\n5. **FWaaS（Firewall as a Service）**\n   - 云原生防火墙服务\n   - 下一代防火墙能力云化交付\n\n**SASE 优势**\n- 简化架构，统一策略\n- 降低延迟（PoP 点就近接入）\n- 弹性扩展，按需订阅\n- 适合分布式办公和云原生企业",
+        "example": "# SASE 架构部署示意\n# 1. 边缘 PoP 点全球分布\n#    - 用户通过最近 PoP 接入\n#    - PoP 提供 SD-WAN + 安全栈\n\n# 2. ZTNA 访问流程\n#    User -> Identity Provider (OIDC/SAML) -> ZTNA Controller -> Application\n#    - 设备信任评估\n#    - 用户身份验证\n#    - 最小权限授权\n#    - 持续风险评估\n\n# 3. CASB 部署模式\n#    - API 模式：扫描云应用数据\n#    - 代理模式：实时监控流量\n#    - 反向代理模式：免客户端部署\n\n# 主流 SASE 厂商\n# - Cloudflare One\n# - Zscaler\n# - Palo Alto Prisma\n# - Cato Networks\n# - Fortinet SASE"
+      },
+      {
+        "id": "network-zero-trust",
+        "title": "零信任网络架构",
+        "level": "高级",
+        "content": "**零信任核心原则**\n- 永不信任，始终验证（Never Trust, Always Verify）\n- 假设网络已被攻破\n- 最小权限原则\n- 微隔离（Micro-segmentation）\n\n**零信任三大支柱**\n\n1. **用户身份验证**\n   - MFA 多因素认证\n   - 自适应身份验证（基于风险）\n   - SSO 单点登录\n   - 持续会话验证\n\n2. **设备信任**\n   - 设备指纹识别\n   - EDR/XDR 集成\n   - 设备健康状态检查\n   - TPM/安全启动验证\n\n3. **网络微隔离**\n   - 基于身份的访问控制（非网络位置）\n   - 东西向流量管控\n   - 应用级分段\n   - 动态策略调整\n\n**零信任架构组件**\n- **Policy Engine**：策略决策引擎\n- **Policy Administrator**：策略执行点\n- **PEP（Policy Enforcement Point）**：网络/应用/数据层执行\n\n**实施路径**\n1. 识别关键资产和数据流\n2. 建立身份和设备基线\n3. 部署微隔离\n4. 实施持续监控和分析\n5. 自动化响应和修复",
+        "example": "# 零信任网络实施示例\n\n# 1. 基于身份的防火墙规则（非 IP）\n# 传统：允许 10.0.1.0/24 访问 10.0.2.0/24:443\n# 零信任：允许 user:alice@company.com + device:managed-laptop 访问 app:finance-api\n\n# 2. Kubernetes 中的零信任（Istio + mTLS）\n# apiVersion: security.istio.io/v1beta1\n# kind: PeerAuthentication\n# metadata:\n#   name: default\n# spec:\n#   mtls:\n#     mode: STRICT  # 强制双向 TLS\n\n# 3. 网络微隔离（Calico NetworkPolicy）\n# apiVersion: networking.k8s.io/v1\n# kind: NetworkPolicy\n# metadata:\n#   name: api-allow-frontend\n# spec:\n#   podSelector:\n#     matchLabels:\n#       app: api\n#   ingress:\n#   - from:\n#     - podSelector:\n#         matchLabels:\n#           app: frontend\n\n# 4. BeyondCorp 模型（Google）\n# - 访问代理（Access Proxy）替代 VPN\n# - 设备信任库存（Device Inventory）\n# - 用户/设备/上下文综合评分"
+      },
+      {
+        "id": "network-wireguard",
+        "title": "WireGuard 现代 VPN 协议",
+        "level": "进阶",
+        "content": "**WireGuard 特点**\n- 极简代码库（约 4000 行 vs OpenVPN 10万+行）\n- 内核级实现（Linux 5.6+ 内置）\n- 现代加密：Curve25519、ChaCha20、Poly1305、BLAKE2s\n- 无状态连接，快速握手\n- 高性能，低延迟\n- 易于配置（类似 SSH 的密钥管理）\n\n**与传统 VPN 对比**\n- OpenVPN/IPSec：复杂配置，重协议栈\n- WireGuard：即插即用，轻量高效\n- 支持 roaming（IP 变化自动重连）\n\n**工作原理**\n1. 每个节点有公钥/私钥对\n2. 配置对端公钥和允许的 IP\n3. 发送数据时自动完成密钥交换\n4. 保持连接：定期发送 keepalive\n\n**部署场景**\n- 远程办公替代传统 VPN\n- 云服务器组网（Mesh VPN）\n- K8s CNI（如 Cilium 支持 WireGuard 加密）\n- 容器跨主机通信加密",
+        "example": "# WireGuard 快速配置\n\n# 1. 生成密钥对\nwg genkey | tee privatekey | wg pubkey > publickey\n\n# 2. 服务端配置 /etc/wireguard/wg0.conf\n# [Interface]\n# PrivateKey = <服务器私钥>\n# Address = 10.200.200.1/24\n# ListenPort = 51820\n# PostUp = iptables -A FORWARD -i wg0 -j ACCEPT\n# PostDown = iptables -D FORWARD -i wg0 -j ACCEPT\n\n# [Peer]\n# PublicKey = <客户端公钥>\n# AllowedIPs = 10.200.200.2/32\n\n# 3. 启动\nwg-quick up wg0\nsystemctl enable wg-quick@wg0\n\n# 4. 查看状态\nwg show\n\n# 5. 跨平台客户端\n# - Windows/macOS: WireGuard 官方客户端\n# - iOS/Android: App Store 下载\n# - Linux: wg-quick\n\n# Mesh 组网工具：Tailscale / Headscale（基于 WireGuard）\n# tailscale up --login-server https://headscale.example.com"
+      },
+      {
+        "id": "network-quic-http3",
+        "title": "QUIC 与 HTTP/3 协议",
+        "level": "高级",
+        "content": "**QUIC 核心特性**\n- 基于 UDP 的传输协议\n- 内置 TLS 1.3（0-RTT 或 1-RTT 握手）\n- 连接迁移（Connection Migration）：IP 变化不影响连接\n- 无队头阻塞（Head-of-Line Blocking）：多流独立传输\n- 前向纠错（FEC）\n- 更快的握手速度\n\n**HTTP/3 = HTTP over QUIC**\n- IETF 标准化（RFC 9114）\n- 浏览器支持：Chrome、Firefox、Safari、Edge\n- 服务端支持：Nginx、Caddy、Cloudflare、Fastly\n\n**与 TCP+TLS+HTTP/2 对比**\n| 特性 | TCP+TLS+HTTP/2 | QUIC+HTTP/3 |\n|------|----------------|-------------|\n| 握手延迟 | 2-3 RTT | 0-1 RTT |\n| 队头阻塞 | TCP 层阻塞 | 流独立 |\n| 连接迁移 | 不支持 | 支持 |\n| 中间设备 | 友好 | 可能被 UDP 限制 |\n\n**部署挑战**\n- 企业防火墙可能限制 UDP\n- QUIC 流量可能被限速\n- 负载均衡需要支持 QUIC\n- 网络诊断工具需适配",
+        "example": "# Nginx 启用 HTTP/3（1.25+）\nserver {\n    listen 443 quic reuseport;\n    listen 443 ssl;\n    \n    ssl_certificate     /path/to/cert.pem;\n    ssl_certificate_key /path/to/key.pem;\n    \n    # 启用 0-RTT\n    ssl_early_data on;\n    \n    # 通告客户端支持 HTTP/3\n    add_header Alt-Svc 'h=\":443\"; ma=86400';\n    \n    location / {\n        root /var/www;\n    }\n}\n\n# Caddy（原生支持 HTTP/3）\n# Caddyfile\nexample.com {\n    bind 0.0.0.0\n    tls /path/to/cert.pem /path/to/key.pem\n    file_server\n}\n\n# 测试 HTTP/3\ncurl --http3 -I https://cloudflare.com\n\n# Chrome 查看协议\n# DevTools -> Network -> Protocol 列显示 h3"
+      },
+      {
+        "id": "network-ebpf-net",
+        "title": "eBPF 网络可观测与加速",
+        "level": "高级",
+        "content": "**eBPF 网络应用**\n- Linux 内核字节码虚拟机\n- 无需修改内核或加载模块\n- 安全、高效、事件驱动\n\n**网络场景**\n\n1. **可观测性**\n   - tcpconnect/tcpaccept：跟踪 TCP 连接\n   - tcplife：跟踪 TCP 会话生命周期\n   - tcpretrans：跟踪 TCP 重传\n   - bpftrace 一行命令分析网络\n\n2. **性能加速**\n   - XDP（eXpress Data Path）：网卡驱动层包处理\n   - 绕过内核网络栈，DPDK 的轻量替代\n   - 高达 10-20 倍性能提升\n\n3. **安全**\n   - 实时网络策略执行\n   - DDoS 缓解\n   - L3-L7 过滤\n\n**工具生态**\n- BCC（BPF Compiler Collection）：Python/Lua 前端\n- bpftrace：类 awk 的高级跟踪语言\n- Cilium：基于 eBPF 的 K8s CNI\n- Katran：Facebook L4 负载均衡\n- Pixie：K8s 可观测平台",
+        "example": "# eBPF 网络诊断工具\n\n# 1. 跟踪 TCP 连接\nbpftrace -e 'kprobe:tcp_connect { printf(\"PID=%d comm=%s\\n\", pid, comm); }'\n\n# 2. 统计 TCP 重传\ntcpretrans-bpfcc\n\n# 3. XDP 程序加载（丢弃所有 UDP）\n# clang -O2 -target bpf -c xdp_drop_udp.c -o xdp_drop_udp.o\n# ip link set dev eth0 xdp obj xdp_drop_udp.o sec xdp\n\n# 4. Cilium Hubble 观测 K8s 网络\nhubble observe --pod frontend --protocol http\nhubble observe --verdict DROPPED\n\n# 5. 网络延迟热力图（bpftrace）\nbpftrace -e '\nkprobe:tcp_sendmsg\n/arg1/\n{\n    @start[tid] = nsecs;\n}\n\nkretprobe:tcp_sendmsg\n/@start[tid]/\n{\n    @latency_us = hist((nsecs - @start[tid]) / 1000);\n    delete(@start[tid]);\n}\n'\n\n# 6. Katran 负载均衡（Facebook）\n# 基于 XDP 的 L4 LB，单机处理数千万连接"
+      },
+      {
+        "id": "network-cloud-vpc",
+        "title": "云网络 VPC 与混合云组网",
+        "level": "高级",
+        "content": "**VPC（Virtual Private Cloud）核心概念**\n- 公有云中的隔离私有网络\n- 完全控制 IP 地址范围、子网、路由表、网络 ACL\n- 主流云：AWS VPC、Azure VNet、阿里云 VPC、腾讯云 VPC\n\n**VPC 关键组件**\n\n1. **子网（Subnet）**\n   - 可用区级别资源\n   - 公网子网（含 NAT 网关/IGW 路由）\n   - 私网子网（仅内部通信）\n\n2. **路由表（Route Table）**\n   - 控制子网内流量走向\n   - 自定义路由：指向 NAT、VPN、对等连接、Transit Gateway\n\n3. **安全组 vs NACL**\n   - 安全组：实例级、有状态、仅允许规则\n   - NACL：子网级、无状态、允许+拒绝规则\n\n4. **NAT 网关**\n   - 私网实例访问公网\n   - 高可用、自动扩展、按流量计费\n\n**混合云连接方案**\n- **VPN**：IPSec/SSL VPN，低成本，高延迟\n- **专线**：AWS Direct Connect、Azure ExpressRoute，低延迟高可靠\n- **SD-WAN**：智能选路，混合链路\n- **云企业网（CEN）**：多云/多地域全互联",
+        "example": "# AWS VPC 架构示例\n# 1. 创建 VPC\naws ec2 create-vpc --cidr-block 10.0.0.0/16\n\n# 2. 创建子网\naws ec2 create-subnet --vpc-id vpc-xxx --cidr-block 10.0.1.0/24 --availability-zone us-east-1a\n\n# 3. 创建 Internet 网关并附加\naws ec2 create-internet-gateway\naws ec2 attach-internet-gateway --internet-gateway-id igw-xxx --vpc-id vpc-xxx\n\n# 4. 路由表配置\naws ec2 create-route --route-table-id rtb-xxx --destination-cidr-block 0.0.0.0/0 --gateway-id igw-xxx\n\n# 5. 安全组\naws ec2 create-security-group --group-name web-sg --description \"Web SG\" --vpc-id vpc-xxx\naws ec2 authorize-security-group-ingress --group-id sg-xxx --protocol tcp --port 80 --cidr 0.0.0.0/0\n\n# Terraform 定义 VPC\n# resource \"aws_vpc\" \"main\" {\n#   cidr_block = \"10.0.0.0/16\"\n# }\n\n# 对等连接（VPC Peering）\n# 两个 VPC 之间私有通信，不经过公网"
+      },
+      {
+        "id": "network-5g-core",
+        "title": "5G 核心网与服务化架构",
+        "level": "高级",
+        "content": "**5G 核心网（5GC）演进**\n- 从 4G EPC 的专用硬件到 5G 的云原生微服务\n- SBA（Service Based Architecture）：基于服务的架构\n- 控制面与媒体面完全分离（CUPS）\n- 支持网络切片（Network Slicing）\n\n**5GC 关键网元**\n\n1. **AMF（Access and Mobility Management Function）**\n   - 接入和移动性管理\n   - 替代 4G MME 的部分功能\n\n2. **SMF（Session Management Function）**\n   - 会话管理、IP 地址分配\n   - 策略执行、UPF 选择\n\n3. **UPF（User Plane Function）**\n   - 用户面数据转发\n   - 可下沉到边缘（MEC）\n\n4. **PCF（Policy Control Function）**\n   - 策略控制\n\n5. **AUSF/UDM**\n   - 认证和用户数据管理\n\n**网络切片**\n- eMBB：增强移动宽带（高清视频、AR/VR）\n- uRLLC：超可靠低延迟（工业控制、自动驾驶）\n- mMTC：海量机器通信（物联网）\n- 同一物理基础设施，逻辑隔离的不同网络\n\n**边缘计算（MEC）**\n- UPF 下沉到边缘数据中心\n- 数据本地处理，降低延迟\n- 与云计算协同",
+        "example": "# 5G 网络切片概念\n# 一个物理网络 -> 多个逻辑切片\n\n# 切片 1：eMBB（带宽型）\n# - 高带宽 UPF\n# - 宽松延迟策略\n\n# 切片 2：uRLLC（延迟敏感型）\n# - 边缘 UPF\n# - 本地分流，不回传核心\n# - 99.999% 可靠性\n\n# 切片 3：mMTC（物联网）\n# - 支持海量连接\n# - 低功耗优化\n\n# Kubernetes 管理 5G 核心网网元\n# helm install amf ./amf-chart\n# helm install smf ./smf-chart\n# helm install upf ./upf-chart\n\n# Open5GS 开源 5G 核心网\n# docker-compose up -d 快速部署测试环境\n\n# 边缘计算架构\n# UE -> gNB -> Edge UPF -> Edge App Server\n#       |-> 中心 UPF -> Internet/Cloud"
       }
     ]
   },
@@ -507,6 +563,62 @@ const KNOWLEDGE = {
         "level": "进阶",
         "content": "**systemd Timer**\n- systemd 的定时任务机制\n- 替代传统 cron\n- 更灵活、更可靠、日志集成\n- 每个定时器关联一个 service 单元\n\n**Timer 类型**\n1. **实时定时器（Realtime）**：基于日历时间\n   - OnCalendar：类似 cron\n   - 可精确到微秒\n2. **单调定时器（Monotonic）**：基于系统启动时间\n   - OnBootSec：启动后多久\n   - OnStartupSec：systemd 启动后多久\n   - OnUnitActiveSec：上次激活后多久\n   - OnUnitInactiveSec：上次停止后多久\n\n**Timer 单元文件**\n```\n[Unit]\nDescription=My backup timer\n\n[Timer]\nOnCalendar=daily\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n```\n\n**Persistent=true**\n- 系统关机期间错过的任务，开机后立即补执行\n- cron 做不到这点\n\n**OnCalendar 格式**\n- daily → *-*-* 00:00:00\n- weekly → Mon *-*-* 00:00:00\n- hourly → *-*-* *:00:00\n- *-*-* 02:00:00 → 每天 2 点\n- Mon *-*-* 09:00:00 → 每周一 9 点\n- *-*-1 00:00:00 → 每月1号\n- *-01-01 00:00:00 → 每年元旦\n\n**与 cron 对比**\n| 特性 | systemd Timer | cron |\n|------|--------------|------|\n| 依赖管理 | 可依赖其他服务 | 无 |\n| 日志 | journalctl 统一查看 | 分散 |\n| 环境变量 | 继承 systemd 环境 | 最小环境 |\n| 错过执行 | Persistent 可补 | 丢失 |\n| 精度 | 微秒级 | 分钟级 |\n| 资源控制 | cgroups 限制 | 无 |\n| 开机执行 | OnBootSec | @reboot |\n\n**管理命令**\n- systemctl list-timers --all\n- systemctl start/stop/enable/disable xxx.timer\n- systemctl status xxx.timer",
         "example": "# 创建定时器: 每天凌晨2点备份\n# /etc/systemd/system/backup.service\n'''\n[Unit]\nDescription=Daily backup\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/backup.sh\n'''\n\n# /etc/systemd/system/backup.timer\n'''\n[Unit]\nDescription=Run backup daily at 2am\n\n[Timer]\nOnCalendar=*-*-* 02:00:00\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n'''\n\nsudo systemctl daemon-reload\nsudo systemctl enable --now backup.timer\n\n# 查看所有定时器\nsystemctl list-timers --all\n# NEXT                          LEFT          LAST                          PASSED       UNIT           ACTIVATES\n# Fri 2024-02-02 02:00:00 CST   10h left      Thu 2024-02-01 02:00:01 CST   13h ago      backup.timer   backup.service\n\n# 查看定时器日志\njournalctl -u backup.service\njournalctl -u backup.timer\n\n# 即时触发一次（测试）\nsystemctl start backup.service\n\n# 复杂日历示例\n# 每15分钟\nOnCalendar=*:0/15\n\n# 工作日早9点晚6点\nOnCalendar=Mon..Fri 9,18:00\n\n# 每月1日和15日\nOnCalendar=*-*-1,15 00:00:00\n\n# 每3天\nOnCalendar=*-* 00:00:00\nOnUnitActiveSec=3d\n\n# 系统启动5分钟后执行\n'''\n[Timer]\nOnBootSec=5min\n'''\n\n# 上次执行后间隔1小时再次执行\n'''\n[Timer]\nOnUnitActiveSec=1h\n'''\n\n# 每10秒（精度远高于 cron）\n'''\n[Timer]\nOnCalendar=*-*-* *:*:0/10\n'''\n\n# 随机延迟（避免同时执行）\n'''\n[Timer]\nOnCalendar=daily\nRandomizedDelaySec=1h\n'''\n\n# 配合资源限制\n'''\n[Service]\nExecStart=/usr/local/bin/heavy-job.sh\nCPUQuota=50%\nMemoryMax=1G\n'''"
+      },
+      {
+        "id": "linux-ebpf",
+        "title": "eBPF Linux 内核可观测与编程",
+        "level": "高级",
+        "content": "**eBPF 概述**\n- Extended Berkeley Packet Filter，Linux 内核字节码虚拟机\n- 无需修改内核源码或加载内核模块\n- 安全：加载前通过验证器（Verifier）检查\n- 高效：JIT 编译为本地机器码\n\n**eBPF 程序类型**\n- kprobe/kretprobe：内核函数跟踪\n- uprobe/uretprobe：用户态函数跟踪\n- tracepoint：内核静态跟踪点\n- fentry/fexit：BPF 跟踪函数入口/退出\n- XDP：网卡驱动层包处理\n- tc：流量控制\n- cgroup/skb：cgroup 网络过滤\n- LSM：Linux 安全模块钩子\n\n**工具链**\n- BCC（BPF Compiler Collection）：Python/C++ 前端\n- bpftrace：类 DTrace 的高级语言\n- libbpf：C/C++ 库，支持 CO-RE（Compile Once Run Everywhere）\n- bpftool：查看和管理 BPF 程序/映射\n\n**应用场景**\n- 性能分析：CPU、内存、IO、网络延迟\n- 安全监控：系统调用审计、异常行为检测\n- 网络加速：DDoS 防护、负载均衡\n- 容器可观测：Cilium、Pixie",
+        "example": "# eBPF 快速入门\n\n# 1. 查看系统支持的程序类型\nbpftool feature\n\n# 2. BCC 工具集（系统级诊断）\nexecsnoop-bpfcc    # 跟踪新进程执行\nopensnoop-bpfcc    # 跟踪文件打开\nbiosnoop-bpfcc     # 跟踪磁盘 IO\ntcpconnect-bpfcc   # 跟踪 TCP 连接\n\n# 3. bpftrace 一行命令\nbpftrace -e 'tracepoint:syscalls:sys_enter_openat { printf(\"%s opened %s\\n\", comm, str(args->filename)); }'\n\n# 4. 自定义 eBPF 程序（C）\n# // hello.bpf.c\n# #include <linux/bpf.h>\n# #include <bpf/bpf_helpers.h>\n# SEC(\"tracepoint/syscalls/sys_enter_execve\")\n# int hello(void *ctx) {\n#     bpf_printk(\"Hello eBPF!\");\n#     return 0;\n# }\n# char _license[] SEC(\"license\") = \"GPL\";\n\n# 5. 加载并查看输出\n# clang -target bpf -c hello.bpf.c -o hello.bpf.o\n# bpftool prog load hello.bpf.o /sys/fs/bpf/hello\n# cat /sys/kernel/debug/tracing/trace_pipe"
+      },
+      {
+        "id": "linux-iouring",
+        "title": "io_uring 异步 IO 革命",
+        "level": "高级",
+        "content": "**io_uring 背景**\n- Linux 5.1 引入，由 Jens Axboe 设计\n- 解决传统 Linux AIO 的诸多限制\n- 统一块设备和网络异步 IO\n- 性能可超越 SPDK（用户态驱动）\n\n**核心设计**\n\n1. **双环形队列**\n   - Submission Queue（SQ）：用户提交请求\n   - Completion Queue（CQ）：内核返回结果\n   - 共享内存，避免系统调用开销\n\n2. **Polling 模式**\n   - IORING_SETUP_IOPOLL：设备轮询，绕过中断\n   - IORING_SETUP_SQPOLL：内核线程轮询提交队列\n   - 极致性能下可实现零系统调用\n\n3. **Buffer Ring（Linux 5.19+）**\n   - 预注册缓冲区，避免内存拷贝\n   - 支持多缓冲区接收（recvmultishot）\n\n**性能对比**\n| 方案 | 延迟 | 吞吐量 | CPU 占用 |\n|------|------|--------|----------|\n| sync read | 高 | 低 | 高 |\n| aio | 中 | 中 | 中 |\n| io_uring | 极低 | 极高 | 低 |\n\n**应用场景**\n- 高性能数据库（如 ScyllaDB）\n- 游戏服务器\n- 高频交易\n- 代理/缓存服务器（如 nginx 实验性支持）",
+        "example": "# io_uring 示例（liburing）\n\n# 1. 基本读写\nstruct io_uring ring;\nio_uring_queue_init(32, &ring, 0);\n\nstruct io_uring_sqe *sqe = io_uring_get_sqe(&ring);\nio_uring_prep_read(sqe, fd, buf, size, offset);\nio_uring_sqe_set_data(sqe, userdata);\nio_uring_submit(&ring);\n\nstruct io_uring_cqe *cqe;\nio_uring_wait_cqe(&ring, &cqe);\n// 处理完成事件\nio_uring_cqe_seen(&ring, cqe);\nio_uring_queue_exit(&ring);\n\n# 2. 高级特性：链式操作\n# sqe1 -> sqe2（sqe2 在 sqe1 完成后执行）\n# io_uring_sqe_set_flags(sqe2, IOSQE_IO_LINK);\n\n# 3. 批量提交\n# io_uring_submit_and_wait(&ring, min_complete);\n\n# 4. 用户态轮询\n# io_uring_queue_init(4096, &ring, IORING_SETUP_SQPOLL);\n\n# 5. 查看 io_uring 性能\n# fio --ioengine=io_uring --iodepth=256 --direct=1 --rw=randread"
+      },
+      {
+        "id": "linux-cgroup-v2",
+        "title": "Cgroup v2 与统一资源管理",
+        "level": "高级",
+        "content": "**Cgroup v2 演进**\n- Linux 4.5 引入，统一 v1 的多个独立层次结构\n- RHEL 9 / Ubuntu 22.04 默认启用\n- 解决 v1 中控制器归属混乱问题\n\n**v1 vs v2 核心差异**\n\n| 特性 | v1 | v2 |\n|------|-----|-----|\n| 层次结构 | 每个控制器独立 | 统一单树 |\n| 进程归属 | 可属于不同 cgroup | 只能属于一个 cgroup |\n| 根进程 | 可移出 | 必须属于某个 cgroup |\n| 委托 | 复杂 | 支持安全委托给非特权用户 |\n| 新功能 | 有限 | PSI、更精细的内存控制 |\n\n**v2 关键控制器**\n- cpu：CFS 带宽、权重\n- cpuset：CPU 和内存节点绑定\n- memory：内存限制、swap 控制、OOM 策略\n- io：块设备 IO 限制\n- pids：进程数限制\n- rdma：RDMA 资源限制\n- misc：其他资源\n\n**PSI（Pressure Stall Information）**\n- Linux 4.20+/v2 支持\n- 实时反馈 CPU/内存/IO 资源压力\n- /proc/pressure/cpu, memory, io\n- 用于智能资源调度和扩容决策",
+        "example": "# Cgroup v2 操作\n\n# 1. 查看当前 cgroup 文件系统\nmount | grep cgroup\n# cgroup2 on /sys/fs/cgroup type cgroup2 (rw,nosuid,nodev,noexec,relatime)\n\n# 2. 创建 cgroup 并限制资源\nmkdir /sys/fs/cgroup/myapp\necho \"+cpu +memory +io\" > /sys/fs/cgroup/myapp/cgroup.subtree_control\n\n# 3. 设置限制\necho \"100000000\" > /sys/fs/cgroup/myapp/memory.max  # 100MB\necho \"50000 100000\" > /sys/fs/cgroup/myapp/cpu.max  # 0.5 CPU\necho \"8:0 rbps=1048576\" > /sys/fs/cgroup/myapp/io.max  # 限制 sda 读取 1MB/s\n\n# 4. 将进程加入 cgroup\necho 12345 > /sys/fs/cgroup/myapp/cgroup.procs\n\n# 5. 查看 PSI\ncat /proc/pressure/memory\n# some avg10=0.00 avg60=0.00 avg300=0.00 total=1234567\n\n# 6. systemd 管理（自动使用 v2）\n# systemctl set-property nginx.service CPUQuota=50% MemoryMax=100M\n\n# 7. Docker 使用 cgroup v2\n# docker run --memory=100m --cpus=0.5 nginx"
+      },
+      {
+        "id": "linux-namespaces-advanced",
+        "title": "Linux Namespace 深度与容器隔离",
+        "level": "高级",
+        "content": "**Linux Namespaces（8种）**\n\n1. **Mount（mnt）**\n   - 隔离文件系统挂载点\n   - pivot_root / chroot 实现容器根文件系统\n\n2. **UTS**\n   - 隔离主机名和域名\n   - sethostname 在容器内独立\n\n3. **IPC**\n   - 隔离 System V IPC 和 POSIX 消息队列\n   - 容器间共享内存隔离\n\n4. **PID**\n   - 隔离进程 ID 空间\n   - PID 1 的特性和信号处理\n   - PID namespace 嵌套\n\n5. **Network（net）**\n   - 隔离网络设备、IP、端口、路由表\n   - veth pair + bridge 连接容器网络\n   - iptables/nftables 隔离\n\n6. **User**\n   - 隔离用户和组 ID\n   - UID/GID 映射：容器内 root 映射到宿主机普通用户\n   - 提升容器安全性\n\n7. **Cgroup（cgroup_ns）**\n   - 隐藏 cgroup 路径\n   - 防止容器内看到宿主机 cgroup 信息\n\n8. **Time**\n   - Linux 5.6+ 支持\n   - 隔离 boot time 和 monotonic clock\n\n**Namespace 操作**\n- clone() 带 CLONE_NEW* 标志\n- unshare() 脱离当前 namespace\n- setns() 加入现有 namespace\n- /proc/<pid>/ns/ 查看 namespace",
+        "example": "# Namespace 实验\n\n# 1. 创建新 PID namespace\nunshare --fork --pid --mount-proc /bin/sh\n# 在容器内 ps 只看到自己和内核线程\n\n# 2. 创建新 Network namespace\nip netns add testns\nip netns exec testns ip link set lo up\nip netns exec testns ip addr add 10.0.0.1/24 dev lo\n\n# 3. veth pair 连接两个 namespace\nip link add veth0 type veth peer name veth1\nip link set veth1 netns testns\nip addr add 10.0.0.2/24 dev veth0\nip link set veth0 up\nip netns exec testns ip addr add 10.0.0.3/24 dev veth1\nip netns exec testns ip link set veth1 up\n\n# 4. 查看进程的 namespace\nls -la /proc/self/ns/\nls -la /proc/1/ns/\n\n# 5. 进入容器的 namespace\nnsenter --target <pid> --mount --uts --ipc --net --pid /bin/sh\n\n# 6. UID 映射（rootless 容器）\n# echo \"0 1000 1\" > /proc/<pid>/uid_map  # 容器 root = 宿主机 UID 1000"
+      },
+      {
+        "id": "linux-systemd-new",
+        "title": "systemd 新特性与现代管理",
+        "level": "高级",
+        "content": "**systemd 演进（2020+）**\n- systemd 250+ 版本新特性\n- 现代 Linux 系统的标准初始化系统\n\n**新特性概览**\n\n1. **systemd-homed（systemd 245+）**\n   - 用户主目录的 portable 管理\n   - 支持 LUKS 加密、自动挂载\n   - 用户记录可随目录迁移\n\n2. **systemd-oomd**\n   - 用户空间 OOM 杀手\n   - 基于 cgroup 的内存压力监控\n   - 更智能的进程选择策略\n   - 替代早期内核 OOM killer\n\n3. **systemd-repart**\n   - 开机时自动调整 GPT 分区大小\n   - 适合无状态/镜像化部署\n\n4. **systemd-cryptsetup + TPM2**\n   - 支持 TPM2 自动解密 LUKS\n   -  measured boot + PCR 策略\n   - 无密码自动解锁加密磁盘\n\n5. **Portable Services**\n   - 类似容器的系统服务打包\n   - 一个镜像包含服务 + 依赖\n   - 通过 systemd-portabled 管理\n\n6. **Unified Kernel Images（UKI）**\n   - systemd-stub + kernel + initrd + cmdline 合一\n   - 安全启动友好\n   - systemd 253+ 支持\n\n**systemd 性能优化**\n- systemd-analyze：启动分析\n- systemd-cgtop：cgroup 资源监控\n- systemd-run：临时运行单元\n- systemd-sysext：系统扩展层",
+        "example": "# systemd 现代特性实战\n\n# 1. systemd-homed 管理用户\nhomectl create alice --real-name=\"Alice\" --storage=luks\nhomectl activate alice\nhomectl inspect alice\n\n# 2. systemd-oomd 配置\n# /etc/systemd/oomd.conf\n# [OOM]\n# DefaultMemoryPressureDurationSec=30s\n# systemctl enable systemd-oomd\n# systemctl start systemd-oomd\n\n# 3. systemd-run 临时服务\nsystemd-run --unit=myjob --timer-property=AccuracySec=1us --on-calendar='*:0/5' /usr/local/bin/backup.sh\n\n# 4. Portable Service\n# systemd-sysext list\n# systemd-sysext merge  # 合并系统扩展\n\n# 5. TPM2 自动解密\n# systemd-cryptenroll --tpm2-device=auto /dev/sda3\n# 重启后自动用 TPM2 解锁 LUKS\n\n# 6. UKI 构建\n# objcopy \\\n#   --add-section .osrel=/etc/os-release \\\n#   --add-section .cmdline=cmdline.txt \\\n#   --add-section .linux=vmlinuz \\\n#   --add-section .initrd=initrd.img \\\n#   /usr/lib/systemd/boot/efi/linuxx64.efi.stub \\\n#   unified.efi"
+      },
+      {
+        "id": "linux-rust-tools",
+        "title": "Rust 现代系统工具链",
+        "level": "进阶",
+        "content": "**Rust 系统工具生态**\n- 内存安全、零成本抽象、高性能\n- 正在重写大量核心系统工具\n\n**文件与文本工具**\n- **ripgrep（rg）**：grep 替代，递归搜索极快，默认忽略 .gitignore\n- **fd**：find 替代，语法直观，彩色输出，快速\n- **bat**：cat 替代，语法高亮、Git 集成、行号\n- **exa/eza**：ls 替代，彩色、图标、Git 状态、树形\n- **delta**：diff 增强，语法高亮、并排对比\n\n**Shell 与终端**\n- **nushell**：结构化数据 Shell（表格操作）\n- **atuin**：Shell 历史同步与搜索\n- **zellij / tmux**：终端复用器\n- **starship**：跨 Shell 提示符\n\n**系统工具**\n- **bandwhich**：进程级带宽监控\n- **procs**：ps 替代，彩色、树形、搜索\n- **bottom（btm）**：top 替代，图形化、跨平台\n- **dust**：du 替代，可视化磁盘使用\n- **hyperfine**：命令行基准测试\n- **sd**：sed 替代，直观语法\n- **choose**：cut/awk 替代\n\n**容器/K8s**\n- **crictl**：CRI 工具\n- **kind/minikube**：本地 K8s\n- **helm**：K8s 包管理",
+        "example": "# Rust 现代工具实战\n\n# ripgrep\nrg 'pattern' --type py -C 3  # Python 文件中搜索，上下文3行\nrg -u 'TODO'  # 不忽略隐藏文件\n\n# fd\nfd '.*\\.log$' /var/log  # 查找日志文件\nfd -e py -x black {}  # 对所有 py 文件执行 black\n\n# bat\nbat app.py --theme=TwoDark  # 带语法高亮查看\nbat --diff  # 显示 Git diff\n\n# exa\neza -la --git --icons  # 彩色+Git状态+图标\neza -T --level=2  # 树形显示\n\n# procs\nprocs --tree  # 进程树\nprocs --watch  # 实时刷新\n\n# dust\ndust -d 2 /var  # 限制深度2\n\n# bottom\nbtm --basic  # 基础模式\n\n# 一键安装（cargo）\ncargo install ripgrep fd-find bat exa procs bottom dust hyperfine sd choose\n\n# 或大部分发行版已打包\n# apt install ripgrep fd-find bat exa  # Debian/Ubuntu"
+      },
+      {
+        "id": "linux-confidential-computing",
+        "title": "机密计算与可信执行环境",
+        "level": "高级",
+        "content": "**机密计算（Confidential Computing）**\n- 保护使用中数据（Data in Use）\n- CPU 级别的硬件可信执行环境（TEE）\n- 即使 root/管理员也无法窥探内存\n\n**主流 TEE 技术**\n\n1. **Intel SGX（Software Guard Extensions）**\n   - 用户态 Enclave\n   - 小内存限制（EPC 128MB 原始，后来扩展）\n   - 需 SDK 开发\n\n2. **AMD SEV（Secure Encrypted Virtualization）**\n   - 全虚拟机加密\n   - SEV-SNP：防止管理程序篡改内存\n   - 对应用透明\n\n3. **ARM TrustZone / CCA**\n   - TrustZone：安全世界 vs 正常世界\n   - CCA（Confidential Compute Architecture）：Realm\n\n4. **Intel TDX / AMD SEV-TES**\n   - 机密虚拟机\n   - 整个 VM 内存加密\n\n**云厂商支持**\n- AWS Nitro Enclaves\n- Azure Confidential Computing（DCsv3/ECasv5）\n- 阿里云神龙机密计算\n- 华为云擎天 Enclave\n\n**应用场景**\n- 金融：加密交易处理\n- 医疗：隐私数据计算\n- AI：联邦学习、隐私保护推理\n- 区块链：可信预言机、MPC",
+        "example": "# 机密计算实践\n\n# 1. 检查 CPU 支持\ncpuid | grep -i sgx  # Intel SGX\ndmesg | grep -i sev  # AMD SEV\n\n# 2. Linux SGX 驱动\nls /dev/sgx*  # /dev/sgx_enclave, /dev/sgx_provision\n\n# 3. Gramine（SGX 运行时）\n# 无需修改代码即可在 SGX 中运行应用\ngramine-sgx ./app\n\n# 4. AMD SEV 虚拟机\n# qemu-system-x86_64 \\\n#   -enable-kvm \\\n#   -cpu EPYC-Milan-v2 \\\n#   -machine confidential-guest-support=sev0 \\\n#   -object sev-guest,id=sev0,cbitpos=47,reduced-phys-bits=1\n\n# 5. AWS Nitro Enclaves\n# aws ec2 run-instances \\\n#   --enclave-options 'Enabled=true' \\\n#   --image-id ami-xxxx\n\n# 6. 机密容器（Confidential Containers）\n# Kata Containers + SEV/SEV-SNP/TDX\n# kubectl apply -f cc-runtimeclass.yaml"
+      },
+      {
+        "id": "linux-live-patching",
+        "title": "Linux 内核热补丁技术",
+        "level": "高级",
+        "content": "**内核热补丁（Live Patching）**\n- 不停机修复内核安全漏洞\n- 替换运行中的内核函数\n- 适用于高可用场景\n\n**主流技术**\n\n1. **kpatch（Red Hat）**\n   - 基于 ftrace\n   - 使用 livepatch 子系统\n   - 官方支持 RHEL、CentOS Stream、Fedora\n\n2. **KernelCare（CloudLinux）**\n   - 商业方案\n   - 支持更多发行版\n   - 自动补丁分发\n\n3. **SUSE Kgraft**\n   - SUSE 方案\n   - 类似 kpatch\n\n4. **livepatch 子系统（内核内置）**\n   - CONFIG_LIVEPATCH=y\n   - /sys/kernel/livepatch/\n\n**限制与风险**\n- 只能修改函数实现，不能修改数据结构\n- 复杂补丁可能无法热更新\n- 需要充分测试兼容性\n- 多个补丁叠加可能产生冲突\n\n**现代演进**\n- 自动热补丁分发（Canonical Livepatch、KernelCare）\n- eBPF 辅助验证补丁安全性\n- 容器场景：节点热补丁无需影响 Pod",
+        "example": "# kpatch 使用\n\n# 1. 安装\n# yum install kpatch-dnf\n# kpatch install kernel-5.14.0-xxx\n\n# 2. 手动加载补丁模块\nkpatch load /path/to/kpatch-module.ko\n\n# 3. 查看已加载补丁\nkpatch list\ncat /sys/kernel/livepatch/*/enabled\n\n# 4. 卸载补丁\nkpatch unload kpatch_xxx\n\n# 5. 生成补丁模块（开发）\n# kpatch-build -t vmlinux patch.diff\n\n# 6. Canonical Livepatch（Ubuntu）\n# sudo canonical-livepatch enable <token>\n# canonical-livepatch status\n\n# 7. 检查补丁是否生效\n# 对比 /proc/kallsyms 中函数地址\ncat /proc/kallsyms | grep patched_function"
       }
     ]
   },
@@ -647,6 +759,48 @@ const KNOWLEDGE = {
         "level": "进阶",
         "content": "**为什么需要状态管理**\n- 组件间共享状态复杂\n- props 层层传递繁琐\n- 全局状态、异步数据统一管理\n\n**Redux 三大原则**\n1. 单一数据源：整个应用 state 存于一个 store\n2. State 只读：只能通过 dispatch action 改变\n3. 纯函数修改：reducer (state, action) => newState\n\n**Redux 数据流**\n- dispatch(action) → reducer 处理 → 返回新 state → 视图更新\n- Action：{ type, payload }\n- Reducer：纯函数，根据 type 返回新 state\n- Store：createStore(reducer) / configureStore\n\n**Redux Toolkit（RTK，推荐）**\n- configureStore：替代 createStore\n- createSlice：自动生成 action/reducer\n- createAsyncThunk：处理异步\n- createEntityAdapter：集合状态管理\n\n**Middleware**\n- redux-thunk：处理异步（默认内置）\n- redux-saga：基于 generator，复杂异步流\n- redux-observable：基于 RxJS\n\n**Pinia（Vue 3 推荐）**\n- Vue 官方推荐状态管理\n- 比 Vuex 更简洁\n- defineStore 定义\n- 支持 Composition API\n- 完整 TS 支持\n- 模块化自动\n\n**Pinia vs Vuex**\n- 无 mutation，直接修改 state\n- 更好的 TS 支持\n- 更简洁的 API\n- 更好的 Devtools 集成\n\n**Context vs Redux**\n- Context：适合低频更新的全局状态（主题、用户）\n- Redux：适合高频更新、复杂交互\n- Context 更新会导致所有消费者重渲染\n\n**Zustand / Jotai**\n- 现代轻量级方案\n- 无样板代码\n- 基于 hooks",
         "example": "// === Redux Toolkit (React) ===\n/* import { configureStore, createSlice, createAsyncThunk } from '@reduxjs/toolkit';\n\n// 异步 thunk\nconst fetchUser = createAsyncThunk('user/fetch', async (id) => {\n  const res = await fetch(`/api/users/${id}`);\n  return res.json();\n});\n\n// Slice\nconst userSlice = createSlice({\n  name: 'user',\n  initialState: { data: null, loading: false, error: null },\n  reducers: {\n    clearUser: (state) => { state.data = null; },\n  },\n  extraReducers: (builder) => {\n    builder\n      .addCase(fetchUser.pending, (state) => { state.loading = true; })\n      .addCase(fetchUser.fulfilled, (state, action) => {\n        state.loading = false;\n        state.data = action.payload;\n      })\n      .addCase(fetchUser.rejected, (state, action) => {\n        state.loading = false;\n        state.error = action.error.message;\n      });\n  },\n});\n\nexport const { clearUser } = userSlice.actions;\nexport const store = configureStore({\n  reducer: { user: userSlice.reducer },\n});\n\n// 组件使用\nimport { useSelector, useDispatch } from 'react-redux';\nfunction UserComp() {\n  const { data, loading } = useSelector(s => s.user);\n  const dispatch = useDispatch();\n  useEffect(() => { dispatch(fetchUser(1)); }, []);\n  if (loading) return <div>loading...</div>;\n  return <div>{data?.name}</div>;\n} */\n\n// === Pinia (Vue 3) ===\n/* import { defineStore } from 'pinia';\n\n// Composition API 风格\nexport const useUserStore = defineStore('user', () => {\n  const user = ref(null);\n  const loading = ref(false);\n\n  async function fetchUser(id) {\n    loading.value = true;\n    try {\n      const res = await fetch(`/api/users/${id}`);\n      user.value = await res.json();\n    } finally {\n      loading.value = false;\n    }\n  }\n\n  function clear() { user.value = null; }\n\n  return { user, loading, fetchUser, clear };\n});\n\n// 组件使用\nimport { useUserStore } from '@/stores/user';\nimport { storeToRefs } from 'pinia';\n\nconst userStore = useUserStore();\nconst { user, loading } = storeToRefs(userStore);  // 保持响应性\nuserStore.fetchUser(1); */\n\n// === Zustand (轻量) ===\n/* import { create } from 'zustand';\n\nconst useStore = create((set) => ({\n  count: 0,\n  user: null,\n  increment: () => set(s => ({ count: s.count + 1 })),\n  setUser: (user) => set({ user }),\n}));\n\nfunction Counter() {\n  const count = useStore(s => s.count);\n  const increment = useStore(s => s.increment);\n  return <button onClick={increment}>{count}</button>;\n} */"
+      },
+      {
+        "id": "frontend-next-nuxt",
+        "title": "Next.js 14 / Nuxt 3 全栈框架",
+        "level": "高级",
+        "content": "**Next.js 14 新特性**\n- App Router（稳定）：基于 React Server Components\n- Server Actions：服务端函数直接在前端调用\n- 部分预渲染（Partial Prerendering，实验性）\n- Turbopack（Rust 编写，替代 Webpack）\n- Image/Font/Script 优化组件\n\n**React Server Components（RSC）**\n- 服务端渲染组件，不打包到客户端\n- 可直接访问数据库/文件系统\n- 减少客户端 JavaScript 体积\n- 'use client' 标记客户端组件\n\n**Nuxt 3 特性**\n- Vue 3 + Vite + Nitro（服务端引擎）\n- 文件系统路由、自动导入\n- 混合渲染：SSR/SSG/CSR/ISR\n- Nuxt Islands：部分 hydration\n- Nitro：跨平台部署（Node/Deno/Workers）\n\n**对比**\n| 特性 | Next.js 14 | Nuxt 3 |\n|------|------------|--------|\n| 框架 | React | Vue |\n| 路由 | App Router | 文件系统 |\n| 服务端 | Node/Vercel | Nitro（多平台） |\n| RSC | 有 | Nuxt Islands |\n| 构建 | Webpack/Turbopack | Vite |",
+        "example": "// Next.js 14 App Router\n// app/page.tsx (Server Component)\nimport { db } from '@/lib/db'\n\nexport default async function Home() {\n  const posts = await db.query('SELECT * FROM posts')\n  return (\n    <main>\n      {posts.map(post => <PostCard key={post.id} post={post} />)}\n    </main>\n  )\n}\n\n// Server Action\n// app/actions.ts\n'use server'\nexport async function createPost(formData: FormData) {\n  await db.query('INSERT INTO posts ...', [...])\n  revalidatePath('/')\n}\n\n// Nuxt 3\n// pages/index.vue\n<script setup>\nconst { data: posts } = await useFetch('/api/posts')\n</script>\n<template>\n  <div>\n    <PostCard v-for=\"post in posts\" :key=\"post.id\" :post=\"post\" />\n  </div>\n</template>\n\n// server/api/posts.get.ts\nexport default defineEventHandler(async (event) => {\n  return await useStorage().getItem('posts')\n})\n\n// 混合渲染配置\n// nuxt.config.ts\nexport default defineNuxtConfig({\n  routeRules: {\n    '/': { prerender: true },\n    '/admin/**': { ssr: false }\n  }\n})"
+      },
+      {
+        "id": "frontend-wasm",
+        "title": "WebAssembly 与 Rust 前端",
+        "level": "高级",
+        "content": "**WebAssembly（Wasm）**\n- 浏览器内运行接近原生性能的二进制格式\n- 与 JavaScript 互操作\n- 安全沙箱、可移植、紧凑\n- Wasm 2.0：SIMD、多内存、异常处理\n\n**适用场景**\n- 高性能计算：图像/视频处理、游戏、加密\n- 复用现有代码库（C/C++/Rust）\n- 插件系统（Figma、AutoCAD Web）\n\n**Rust 前端生态**\n- **WASM-BINDGEN**：Rust <-> JS 绑定\n- **WASM-PACK**：构建和发布 Wasm 包\n- **Yew**：React-like 框架（Rust）\n- **Leptos**：现代 Rust 全栈框架\n- **Dioxus**：跨平台 Rust UI（Web/桌面/移动）\n\n**Wasm 运行时**\n- WASI（WebAssembly System Interface）：服务端 Wasm\n- WasmEdge：云原生 Wasm 运行时\n- WAMR：轻量嵌入式\n\n**组件模型（Component Model）**\n- WebAssembly 的模块化标准\n- 语言无关的可组合组件\n- 未来跨语言复用",
+        "example": "# Rust + Wasm 示例\n\n# 1. 安装工具\ncargo install wasm-pack\n\n# 2. Rust 库\n# src/lib.rs\nuse wasm_bindgen::prelude::*;\n\n#[wasm_bindgen]\npub fn fibonacci(n: u32) -> u32 {\n    match n {\n        0 => 0,\n        1 => 1,\n        _ => fibonacci(n - 1) + fibonacci(n - 2),\n    }\n}\n\n# 3. 构建\nwasm-pack build --target web\n\n# 4. 前端使用\n# import init, { fibonacci } from './pkg/fibonacci.js';\n# await init();\n# console.log(fibonacci(40));  // 比 JS 快数倍\n\n# Yew 框架\n# use yew::prelude::*;\n# #[function_component(App)]\n# fn app() -> Html {\n#     html! { <h1>{\"Hello Yew!\"}</h1> }\n# }\n# yew::Renderer::<App>::new().render();\n\n# Leptos\n# #[component]\n# fn App() -> impl IntoView {\n#     let (count, set_count) = create_signal(0);\n#     view! { <button on:click=move |_| set_count.update(|n| *n + 1)>\"Click me\"</button> }\n# }\n\n# WasmEdge 服务端\n# wasmedge app.wasm"
+      },
+      {
+        "id": "frontend-micro-frontend",
+        "title": "微前端架构实践",
+        "level": "高级",
+        "content": "**微前端定义**\n- 将前端应用拆分为独立部署的子应用\n- 团队自治、技术栈独立、独立发布\n- 类比微服务的前端版本\n\n**集成方案**\n\n1. **iframe**\n   - 简单隔离，但体验差、通信麻烦\n\n2. **Web Components**\n   - 原生组件化，Shadow DOM 隔离样式\n   - Lit、Stencil 框架\n\n3. **Module Federation（Webpack 5）**\n   - 运行时动态加载远程模块\n   - 共享依赖（react、vue 单例）\n   - 最主流方案\n\n4. **qiankun / single-spa**\n   - 国产（qiankun）和国外（single-spa）框架\n   - JS Sandbox（Proxy）隔离\n   - 样式隔离（Shadow DOM / Scoped CSS）\n   - 应用间通信\n\n**挑战**\n- 共享依赖版本冲突\n- 全局样式污染\n- 路由协调\n- 公共依赖提取\n- 构建优化",
+        "example": "# 微前端实践\n\n# 1. Module Federation\n# shell/webpack.config.js\nconst { ModuleFederationPlugin } = require('webpack').container;\nmodule.exports = {\n  plugins: [\n    new ModuleFederationPlugin({\n      name: 'shell',\n      remotes: {\n        app1: 'app1@http://localhost:3001/remoteEntry.js',\n        app2: 'app2@http://localhost:3002/remoteEntry.js',\n      },\n      shared: { react: { singleton: true }, 'react-dom': { singleton: true } },\n    }),\n  ],\n};\n\n// 使用远程组件\nconst RemoteButton = React.lazy(() => import('app1/Button'));\n\n# 2. qiankun\nimport { registerMicroApps, start } from 'qiankun';\n\nregisterMicroApps([\n  {\n    name: 'vue-app',\n    entry: '//localhost:8080',\n    container: '#container',\n    activeRule: '/vue',\n  },\n  {\n    name: 'react-app',\n    entry: '//localhost:3000',\n    container: '#container',\n    activeRule: '/react',\n  },\n]);\nstart();\n\n# 3. Web Components\nclass MyElement extends HTMLElement {\n  connectedCallback() {\n    this.attachShadow({ mode: 'open' });\n    this.shadowRoot.innerHTML = `<style>:host { color: red; }</style><slot></slot>`;\n  }\n}\ncustomElements.define('my-element', MyElement);"
+      },
+      {
+        "id": "frontend-state-modern",
+        "title": "现代状态管理（Zustand/Jotai/Signal）",
+        "level": "高级",
+        "content": "**状态管理演进**\n- Redux：中心化、可预测，但样板代码多\n- MobX：响应式，自动追踪依赖\n- Context API：React 内置，适合低频更新\n- 现代轻量方案：Zustand、Jotai、Valtio\n\n**Zustand**\n- 极简 API，无 Provider 包裹\n- 基于 hooks\n- 支持中间件：持久化、日志、immer\n- TypeScript 友好\n\n**Jotai**\n- 原子化状态管理\n- Recoil 的轻量替代\n- 派生原子（derived atoms）\n- 支持异步原子\n\n**Signals**\n- SolidJS / Preact / Angular 16+\n- 细粒度响应式，不依赖 VDOM diff\n- 自动订阅/取消订阅\n- 性能极佳\n\n**React Compiler（React 19 实验）**\n- 自动记忆化，无需 useMemo/useCallback\n- 编译时优化而非运行时\n\n**对比**\n| 库 | 大小 | 范式 | 适用 |\n|----|------|------|------|\n| Redux | 大 | 集中式 | 复杂应用 |\n| Zustand | 极小 | 集中式 | 中小型 |\n| Jotai | 小 | 原子化 | 派生状态多 |\n| Valtio | 小 | 代理式 | 可变状态 |",
+        "example": "// Zustand\nimport { create } from 'zustand'\nimport { persist } from 'zustand/middleware'\n\nconst useStore = create(persist(\n  (set) => ({\n    count: 0,\n    inc: () => set((state) => ({ count: state.count + 1 })),\n  }),\n  { name: 'my-store' }\n))\n\nfunction Counter() {\n  const { count, inc } = useStore()\n  return <button onClick={inc}>{count}</button>\n}\n\n// Jotai\nimport { atom, useAtom } from 'jotai'\n\nconst countAtom = atom(0)\nconst doubledAtom = atom((get) => get(countAtom) * 2)\n\nfunction Counter() {\n  const [count, setCount] = useAtom(countAtom)\n  const [doubled] = useAtom(doubledAtom)\n  return <div>{count} * 2 = {doubled}</div>\n}\n\n// Preact Signals\nimport { signal, computed } from '@preact/signals-react'\n\nconst count = signal(0)\nconst doubled = computed(() => count.value * 2)\n\nfunction Counter() {\n  return <button onClick={() => count.value++}>{doubled}</button>\n}\n\n// React Compiler（实验性）\n// 自动优化，无需手动 useMemo\n// 'use memo' 指令（React 19）"
+      },
+      {
+        "id": "frontend-build-tools",
+        "title": "现代构建工具（Vite/Turbopack/Rsbuild）",
+        "level": "高级",
+        "content": "**构建工具演进**\n- Webpack：功能全面，但配置复杂、构建慢\n- Vite：ESM 原生，极速 HMR，生产 Rollup\n- Turbopack：Webpack 继任者，Rust 编写\n- Rsbuild：Rspack 的封装，Webpack 替代\n- Bun：内置 bundler，超快\n\n**Vite 核心**\n- 开发：esbuild 预构建依赖，原生 ESM\n- 生产：Rollup 打包，高度优化\n- HMR 极速（模块级替换）\n- 插件生态兼容 Rollup\n\n**Rspack / Rsbuild**\n- 字节跳动开源\n- Rust 编写的 Webpack 兼容 bundler\n- 支持 Loader/Plugin 生态迁移\n- Rsbuild：开箱即用的构建工具（类似 Vite）\n\n**Turbopack**\n- Next.js 14 默认（开发模式）\n- Rust + 增量计算\n- 声称比 Webpack 快 700x，比 Vite 快 10x\n- 目前仅 Next.js 深度集成\n\n**Bun**\n- 全能 JS 运行时 + 打包器 + 测试运行器\n- Zig 编写，极致性能\n- 兼容 Node.js API\n- 内置 bundler、transpiler、package manager",
+        "example": "# 现代构建工具\n\n# Vite\nnpm create vite@latest my-app -- --template react-ts\ncd my-app && npm install && npm run dev\n\n# vite.config.ts\nimport { defineConfig } from 'vite'\nimport react from '@vitejs/plugin-react'\nexport default defineConfig({\n  plugins: [react()],\n  build: {\n    rollupOptions: {\n      output: {\n        manualChunks: {\n          vendor: ['react', 'react-dom'],\n        },\n      },\n    },\n  },\n})\n\n# Rsbuild\nnpm create rsbuild@latest\n\n# Turbopack（Next.js）\nnext dev --turbo\n\n# Bun\nbun install\nbun run dev\nbun build ./index.tsx --outdir ./out\n\n# 构建性能对比（大致）\n# Webpack: 30s\n# Vite: 3s\n# Rspack: 5s\n# Turbopack: 1s\n# Bun: 2s"
+      },
+      {
+        "id": "frontend-pwa-optimization",
+        "title": "PWA、性能优化与 Core Web Vitals",
+        "level": "高级",
+        "content": "**PWA（Progressive Web App）**\n- Service Worker：离线缓存、后台同步、推送通知\n- Web App Manifest：安装到主屏幕\n- Workbox：Google 的 Service Worker 工具库\n\n**Core Web Vitals（CWV）**\n- Google 搜索排名因素\n\n1. **LCP（Largest Contentful Paint）**\n   - 最大内容绘制 < 2.5s（良好）\n   - 优化：图片压缩、预加载、CDN、字体优化\n\n2. **INP（Interaction to Next Paint）**\n   - 交互到下一次绘制 < 200ms\n   - 替代 FID（First Input Delay）\n   - 优化：减少主线程阻塞、事件委托优化\n\n3. **CLS（Cumulative Layout Shift）**\n   - 累积布局偏移 < 0.1\n   - 优化：图片/视频指定尺寸、字体预加载、避免插入内容\n\n**性能优化技术**\n- 代码分割：React.lazy、动态 import\n- 资源预加载：preload、prefetch、modulepreload\n- 图片优化：WebP/AVIF、srcset、懒加载\n- 字体优化：font-display: swap、子集化\n- 减少重排重绘：CSS containment、will-change\n- 长任务拆分：yield to main（scheduler）",
+        "example": "// PWA + 性能优化\n\n// 1. Service Worker（Workbox）\n// sw.ts\nimport { precacheAndRoute } from 'workbox-precaching'\nimport { NetworkFirst } from 'workbox-strategies'\nimport { registerRoute } from 'workbox-routing'\n\nprecacheAndRoute(self.__WB_MANIFEST)\nregisterRoute(\n  ({ request }) => request.destination === 'image',\n  new NetworkFirst({ cacheName: 'images' })\n)\n\n// 2. Web App Manifest\n// manifest.json\n{\n  \"name\": \"My App\",\n  \"short_name\": \"MyApp\",\n  \"start_url\": \"/\",\n  \"display\": \"standalone\",\n  \"icons\": [{ \"src\": \"/icon.png\", \"sizes\": \"192x192\" }]\n}\n\n// 3. 图片优化\n<img\n  src=\"image.webp\"\n  srcSet=\"image-400.webp 400w, image-800.webp 800w\"\n  sizes=\"(max-width: 600px) 400px, 800px\"\n  loading=\"lazy\"\n  decoding=\"async\"\n  width=\"800\"\n  height=\"600\"\n/>\n\n// 4. 代码分割\nconst HeavyChart = React.lazy(() => import('./HeavyChart'))\n\n// 5. 字体优化\n<link rel=\"preload\" href=\"/font.woff2\" as=\"font\" type=\"font/woff2\" crossorigin>\n<style>\n  @font-face {\n    font-family: 'MyFont';\n    src: url('/font.woff2') format('woff2');\n    font-display: swap;\n  }\n</style>\n\n// 6. 长任务拆分\nimport { scheduleCallback } from 'scheduler'\n\nfunction processLargeArray(items) {\n  const chunk = items.splice(0, 100)\n  chunk.forEach(processItem)\n  if (items.length > 0) {\n    scheduleCallback(processLargeArray, items)\n  }\n}"
       }
     ]
   },
@@ -836,6 +990,48 @@ const KNOWLEDGE = {
         "level": "高级",
         "content": "**可观测性三支柱**\n1. 日志（Logging）：离散事件记录\n2. 指标（Metrics）：聚合数值时序数据\n3. 链路追踪（Tracing）：请求跨服务调用链\n\n**日志（Logging）**\n- ELK/EFK：Elasticsearch + Logstash/Fluentd + Kibana\n- Loki + Grafana：轻量级日志系统\n- 日志级别：DEBUG/INFO/WARN/ERROR/FATAL\n- 结构化日志（JSON）便于查询\n- 关键字段：timestamp/level/request_id/trace_id/user_id\n- 采样：高 QPS 场景日志采样\n\n**指标（Metrics）**\n- Prometheus + Grafana：事实标准\n- 指标类型：Counter（只增）/ Gauge（可增减）/ Histogram（分布）/ Summary（分位数）\n- PromQL 查询语言\n- 拉取模式（pull）：Prometheus 主动抓取 /metrics\n- Push Gateway：短任务推送\n- AlertManager：告警\n\n**常用指标**\n- RED：Rate（QPS）/ Errors（错误率）/ Duration（延迟）\n- USE：Utilization（使用率）/ Saturation（饱和度）/ Errors（错误）\n- 业务指标：订单量、活跃用户、转化率\n\n**链路追踪（Tracing）**\n- OpenTelemetry：CNCF 标准，统一 Logs/Metrics/Traces\n- Jaeger / Zipkin / SkyWalking：追踪系统\n- Trace：一次完整请求\n- Span：一次服务调用\n- 上下文传播：W3C Trace Context（traceparent 头）\n- 采样：全量追踪开销大，按比例采样\n\n**三者关联**\n- trace_id 串联日志和追踪\n- Exemplar：指标中关联 trace\n- 统一仪表盘：Grafana 集成三者\n\n**告警体系**\n- 黄金信号：延迟/流量/错误/饱和度\n- 多级告警：P0 立即 / P1 工作时间 / P2 周报\n- 告警收敛：避免告警风暴\n- Runbook：告警处理手册\n- SLI/SLO/SLA：服务质量目标\n\n**实施要点**\n- 标准化：统一日志格式、命名规范\n- 自动埋点：SDK/字节码注入\n- 采样策略：业务关键全量，其他采样\n- 成本控制：日志保留期、指标降采样\n- 安全：脱敏、访问控制",
         "example": "// === 日志（结构化）===\nimport logging, json\nlogger = logging.getLogger('app')\n\ndef log_request(request_id, user_id, action):\n    logger.info(json.dumps({\n        'timestamp': datetime.utcnow().isoformat(),\n        'level': 'INFO',\n        'request_id': request_id,\n        'trace_id': get_trace_id(),  # 关联追踪\n        'user_id': user_id,\n        'action': action,\n        'duration_ms': 42,\n    }))\n\n// === Prometheus 指标（Python）===\nfrom prometheus_client import Counter, Histogram, start_http_server\n\nhttp_requests = Counter('http_requests_total', 'Total HTTP requests',\n    ['method', 'endpoint', 'status'])\nhttp_duration = Histogram('http_duration_seconds',\n    'HTTP request duration', ['endpoint'],\n    buckets=[0.01, 0.05, 0.1, 0.5, 1, 5])\n\n@app.route('/api/users')\ndef get_users():\n    start = time.time()\n    try:\n        result = query_db()\n        http_requests.labels('GET', '/api/users', '200').inc()\n        return result\n    except Exception:\n        http_requests.labels('GET', '/api/users', '500').inc()\n        raise\n    finally:\n        http_duration.labels('/api/users').observe(time.time() - start)\n\nstart_http_server(9090)  # 暴露 /metrics\n\n// === PromQL 查询 ===\n// QPS\nrate(http_requests_total[1m])\n// 错误率\nsum(rate(http_requests_total{status=~\"5..\"}[5m]))\n  / sum(rate(http_requests_total[5m]))\n// P99 延迟\nhistogram_quantile(0.99, rate(http_duration_seconds_bucket[5m]))\n\n// === OpenTelemetry 追踪（Java）===\n/* import io.opentelemetry.api.trace.Tracer;\nimport io.opentelemetry.api.trace.Span;\n\n@RestController\npublic class OrderController {\n    @Autowired Tracer tracer;\n\n    @PostMapping(\"/orders\")\n    public Order create(@RequestBody OrderRequest req) {\n        Span span = tracer.spanBuilder(\"create-order\").startSpan();\n        try (var scope = span.makeCurrent()) {\n            span.setAttribute(\"user.id\", req.getUserId());\n            // 业务逻辑\n            Order order = orderService.create(req);\n            span.setAttribute(\"order.id\", order.getId());\n            return order;\n        } catch (Exception e) {\n            span.recordException(e);\n            throw e;\n        } finally {\n            span.end();\n        }\n    }\n} */\n\n// === Grafana 仪表盘配置 ===\n// 数据源：Prometheus / Loki / Jaeger\n// 变量：$service / $env\n// 面板：QPS / 错误率 / P99 延迟 / 错误日志 / 追踪链接\n\n// === 告警规则（Prometheus）===\n/* groups:\n- name: api-alerts\n  rules:\n  - alert: HighErrorRate\n    expr: |\n      sum(rate(http_requests_total{status=~\"5..\"}[5m]))\n        / sum(rate(http_requests_total[5m])) > 0.05\n    for: 5m\n    labels: { severity: critical }\n    annotations:\n      summary: \"API error rate > 5%\"\n      description: \"{{$labels.endpoint}} error rate is {{ $value | humanizePercentage }}\" */"
+      },
+      {
+        "id": "backend-microservices",
+        "title": "微服务架构设计模式",
+        "level": "高级",
+        "content": "**微服务核心特征**\n- 单一职责：每个服务聚焦一个业务能力\n- 独立部署：服务间松耦合\n- 分布式数据：每个服务拥有自己的数据库\n- 去中心化治理：技术栈异构\n\n**设计模式**\n\n1. **API 网关**\n   - 统一入口：路由、认证、限流、熔断\n   - Kong、APISIX、Envoy、Spring Cloud Gateway\n\n2. **服务发现**\n   - 客户端发现：Eureka + Ribbon\n   - 服务端发现：Consul + Nginx/Envoy\n   - K8s DNS + Service\n\n3. **配置中心**\n   - Spring Cloud Config、Nacos、Apollo\n   - 配置热更新、版本管理、灰度发布\n\n4. **熔断与限流**\n   - 熔断：Hystrix/Resilience4j/Sentinel\n   - 限流：令牌桶、漏桶、分布式限流\n\n5. ** Saga 分布式事务**\n   - 编排式（Choreography）：事件驱动\n   - 协调式（Orchestration）：中央协调器\n   - 补偿事务处理一致性\n\n6. **CQRS 与事件溯源**\n   - 命令与查询分离\n   - Event Sourcing：状态由事件流重建",
+        "example": "# 微服务架构示例\n\n# 1. API Gateway（Kong）配置\n# curl -X POST http://localhost:8001/services \\\n#   --data name=order-service \\\n#   --data url=http://order:8080\n# curl -X POST http://localhost:8001/services/order-service/routes \\\n#   --data 'paths[]=/orders'\n\n# 2. 服务注册（Consul）\n# service.json\n# {\n#   \"service\": {\n#     \"name\": \"payment\",\n#     \"tags\": [\"v1\"],\n#     \"port\": 8080,\n#     \"check\": {\"http\": \"http://localhost:8080/health\", \"interval\": \"10s\"}\n#   }\n# }\n\n# 3. Resilience4j 熔断（Java）\n# CircuitBreakerConfig config = CircuitBreakerConfig.custom()\n#   .failureRateThreshold(50)\n#   .waitDurationInOpenState(Duration.ofMillis(1000))\n#   .build();\n\n# 4. Saga 编排（Temporal/Camunda）\n# 定义工作流：创建订单 -> 扣减库存 -> 支付 -> 发货\n# 每一步失败执行补偿：退款 -> 恢复库存 -> 取消订单\n\n# 5. 事件总线（Kafka）\n# 订单服务发布 OrderCreated 事件\n# 库存服务订阅并处理\n# 支付服务订阅并处理"
+      },
+      {
+        "id": "backend-service-mesh",
+        "title": "服务网格 Istio 与 Envoy",
+        "level": "高级",
+        "content": "**服务网格（Service Mesh）**\n- 基础设施层，处理服务间通信\n- Sidecar 代理：与应用容器同 Pod 运行\n- 流量管理、安全、可观测性下沉到平台\n\n**Istio 架构**\n\n1. **数据平面**\n   - Envoy Proxy：Sidecar，L4/L7 代理\n   - 拦截所有入站/出站流量\n   - mTLS、负载均衡、熔断、重试\n\n2. **控制平面**\n   - istiod：Pilot（配置分发）+ Citadel（证书）+ Galley（配置验证）\n   - 通过 xDS API 向 Envoy 推送配置\n\n**核心能力**\n\n1. **流量管理**\n   - VirtualService：路由规则（权重、Header、重试）\n   - DestinationRule：负载均衡、连接池、异常检测\n   - Gateway：边缘入口\n\n2. **安全**\n   - 自动 mTLS（双向 TLS）\n   - AuthorizationPolicy：L4/L7 访问控制\n   - PeerAuthentication：加密策略\n\n3. **可观测性**\n   - 自动指标（Prometheus）\n   - 分布式追踪（Jaeger/Zipkin）\n   - 访问日志\n\n**替代方案**\n- Linkerd：更轻量，Rust 编写\n- Cilium Service Mesh：eBPF 加速，无 Sidecar",
+        "example": "# Istio 配置示例\n\n# 1. 流量拆分（金丝雀）\napiVersion: networking.istio.io/v1beta1\nkind: VirtualService\nmetadata:\n  name: reviews\nspec:\n  hosts:\n  - reviews\n  http:\n  - route:\n    - destination:\n        host: reviews\n        subset: v1\n      weight: 90\n    - destination:\n        host: reviews\n        subset: v2\n      weight: 10\n\n# 2. 自动 mTLS\napiVersion: security.istio.io/v1beta1\nkind: PeerAuthentication\nmetadata:\n  name: default\nspec:\n  mtls:\n    mode: STRICT\n\n# 3. 访问控制\napiVersion: security.istio.io/v1beta1\nkind: AuthorizationPolicy\nmetadata:\n  name: allow-frontend\nspec:\n  selector:\n    matchLabels:\n      app: api\n  action: ALLOW\n  rules:\n  - from:\n    - source:\n        principals: [\"cluster.local/ns/default/sa/frontend\"]\n\n# 4. 故障注入（混沌测试）\n# - fault:\n#     delay:\n#       percentage:\n#         value: 10.0\n#       fixedDelay: 5s\n\n# 5. 查看 Envoy 配置\nistioctl proxy-config cluster <pod>\nistioctl proxy-config route <pod>"
+      },
+      {
+        "id": "backend-serverless",
+        "title": "Serverless 与 FaaS 架构",
+        "level": "高级",
+        "content": "**Serverless 定义**\n- 无服务器：开发者不管理服务器\n- 自动扩缩容、按调用计费\n- 事件驱动，函数粒度\n\n**FaaS（Function as a Service）**\n- AWS Lambda、Azure Functions、Google Cloud Functions\n- 阿里云函数计算、腾讯云 SCF\n- Knative：K8s 原生 Serverless\n- OpenFaaS：开源 FaaS 平台\n\n**架构要点**\n\n1. **冷启动（Cold Start）**\n   - 首次调用需要初始化运行时\n   - 解决方案：Provisioned Concurrency、Keep-alive、精简运行时\n   - 自定义运行时（Custom Runtime）降低启动时间\n\n2. **状态管理**\n   - 函数无状态，状态外置\n   - DynamoDB / Redis / S3\n   - 临时磁盘（/tmp）有限\n\n3. **事件源**\n   - API Gateway、HTTP 触发\n   - 消息队列（SQS/Kafka/EventBridge）\n   - 对象存储事件（S3 上传）\n   - 定时触发（Cron）\n\n4. **限制与优化**\n   - 执行时长限制（通常 15 分钟）\n   - 内存/CPU 线性关系\n   - 打包体积优化（Layer、精简依赖）\n\n**Serverless 容器**\n- AWS Fargate、Azure Container Instances\n- 无需管理节点，按资源使用计费",
+        "example": "# Serverless 实践\n\n# 1. AWS Lambda（Python）\n# lambda_function.py\ndef handler(event, context):\n    return {'statusCode': 200, 'body': 'Hello'}\n\n# 2. SAM / Serverless Framework 部署\n# template.yaml\n# Resources:\n#   HelloFunction:\n#     Type: AWS::Serverless::Function\n#     Properties:\n#       CodeUri: hello/\n#       Handler: app.handler\n#       Runtime: python3.11\n#       Events:\n#         HelloApi:\n#           Type: Api\n#           Properties:\n#             Path: /hello\n#             Method: get\n\n# 3. Knative Service\napiVersion: serving.knative.dev/v1\nkind: Service\nmetadata:\n  name: hello\nspec:\n  template:\n    spec:\n      containers:\n      - image: gcr.io/my/hello\n        env:\n        - name: TARGET\n          value: World\n\n# 4. 冷启动优化\n# - 使用 Lambda Power Tuning 找到最优内存配置\n# - 使用 Lambda Layers 共享依赖\n# - 使用 SnapStart（Java）预初始化\n\n# 5. OpenFaaS\n# faas-cli new --lang python hello\n# faas-cli up -f hello.yml"
+      },
+      {
+        "id": "backend-event-driven",
+        "title": "事件驱动架构与消息队列",
+        "level": "高级",
+        "content": "**事件驱动架构（EDA）**\n- 松耦合、可扩展、响应式\n- 生产者 -> 事件总线 -> 消费者\n- 事件溯源：状态由事件序列重建\n\n**消息队列选型**\n\n| 特性 | Kafka | RabbitMQ | RocketMQ | Pulsar |\n|------|-------|----------|----------|--------|\n| 吞吐量 | 极高 | 中 | 高 | 极高 |\n| 延迟 | ms | ms | ms | 极低 |\n| 持久化 | 磁盘日志 | 队列 | 磁盘 | 分层存储 |\n| 多租户 | 弱 | 中 | 强 | 强 |\n| 地理复制 | MirrorMaker | Shovel | 弱 | 原生 |\n| 流处理 | Kafka Streams | 无 | 无 | Pulsar Functions |\n| 协议 | 自有 | AMQP | 自有 | 自有 |\n\n**Kafka 深度**\n- Topic -> Partition -> Segment\n- ISR（In-Sync Replicas）：保证不丢消息\n- 消费者组：分区只能被组内一个消费者消费\n- Exactly-Once：幂等生产者 + 事务\n\n**云消息服务**\n- AWS SQS / SNS / EventBridge\n- Azure Service Bus / Event Grid\n- 阿里云 MNS / EventBridge",
+        "example": "# Kafka 实践\n\n# 1. 创建 Topic\nkafka-topics.sh --create --topic orders --partitions 6 --replication-factor 3 --bootstrap-server kafka:9092\n\n# 2. 生产者\nfrom kafka import KafkaProducer\nproducer = KafkaProducer(bootstrap_servers='kafka:9092')\nproducer.send('orders', b'order-data', key=b'user-123')\n\n# 3. 消费者组\nfrom kafka import KafkaConsumer\nconsumer = KafkaConsumer('orders', group_id='payment-group', bootstrap_servers='kafka:9092')\nfor msg in consumer:\n    process(msg)\n\n# 4. 事务（Exactly-Once）\nproducer.init_transactions()\nproducer.begin_transaction()\nproducer.send('orders', ...)\nproducer.send('payments', ...)\nproducer.commit_transaction()\n\n# 5. 流处理（Kafka Streams / ksqlDB）\n# ksqlDB\nCREATE STREAM orders (id STRING, amount DOUBLE) WITH (kafka_topic='orders', value_format='json');\nCREATE TABLE hourly_sales AS\n  SELECT windowstart, SUM(amount) FROM orders\n  WINDOW TUMBLING (SIZE 1 HOUR)\n  GROUP BY windowstart;\n\n# 6. 死信队列（DLQ）\n# 消费失败 N 次后发送到 orders.dlq Topic\n# 人工或自动补偿处理"
+      },
+      {
+        "id": "backend-api-gateway",
+        "title": "API 网关与 BFF 模式",
+        "level": "高级",
+        "content": "**API 网关职责**\n- 统一入口：路由、版本管理\n- 横切关注点：认证、鉴权、限流、熔断\n- 协议转换：REST <-> gRPC <-> GraphQL\n- 缓存、日志、监控\n\n**主流网关**\n- Kong：OpenResty + Lua，插件丰富\n- Apache APISIX：国产，云原生，性能高\n- Envoy：C++，Service Mesh 数据面\n- Traefik：云原生，自动服务发现\n- Spring Cloud Gateway：Java 生态\n\n**BFF（Backend for Frontend）**\n- 为不同前端（Web/iOS/Android）定制 API\n- 聚合多个微服务数据\n- 减少前端请求次数\n- 处理前端特定逻辑（字段映射、格式化）\n\n**GraphQL BFF**\n- 前端灵活查询所需字段\n- 单一端点替代多个 REST API\n- Schema Stitching / Federation：多服务 Schema 合并\n\n**gRPC 网关**\n- 内部服务间 gRPC 通信\n- 对外暴露 REST/JSON（grpc-gateway）\n- Protobuf 定义统一契约",
+        "example": "# API Gateway 配置\n\n# 1. Kong 路由+插件\ncurl -X POST http://localhost:8001/services \\\n  --data name=user-service \\\n  --data url=http://user:8080\n\ncurl -X POST http://localhost:8001/services/user-service/routes \\\n  --data 'paths[]=/api/users'\n\n# 添加限流插件\ncurl -X POST http://localhost:8001/services/user-service/plugins \\\n  --data name=rate-limiting \\\n  --data config.minute=100\n\n# 2. APISIX 路由\n# curl http://localhost:9180/apisix/admin/routes/1 \\\n#   -H 'X-API-KEY: edd1c9f034335f136f87ad84b625c8f1' \\\n#   -X PUT -d '{\n#     \"uri\": \"/api/users/*\",\n#     \"upstream\": {\"type\": \"roundrobin\", \"nodes\": {\"user:8080\": 1}}\n#   }'\n\n# 3. GraphQL Schema\ntype Query {\n  user(id: ID!): User\n  orders(userId: ID!): [Order]\n}\ntype User {\n  id: ID!\n  name: String!\n  email: String!\n}\n\n# 4. gRPC-gateway\n# api.proto\n# service UserService {\n#   rpc GetUser(GetUserRequest) returns (User) {\n#     option (google.api.http) = { get: \"/v1/users/{id}\" };\n#   }\n# }\n\n# 生成 REST 网关\n# protoc -I . --grpc-gateway_out . --grpc-gateway_opt logtostderr=true api.proto"
+      },
+      {
+        "id": "backend-security-modern",
+        "title": "现代后端安全实践",
+        "level": "高级",
+        "content": "**供应链安全**\n- 依赖漏洞：Log4j、xz 后门事件\n- SBOM（Software Bill of Materials）：软件物料清单\n- SLSA（Supply-chain Levels for Software Artifacts）\n- Sigstore：免费签名和验证（cosign）\n\n**认证与授权**\n- OAuth 2.1 / PKCE：授权码 + 挑战\n- OpenID Connect（OIDC）：身份层\n- JWT 安全：短有效期、刷新令牌、JWE 加密\n- mTLS：服务间双向认证\n\n**机密管理**\n- HashiCorp Vault：动态凭据、密钥轮转\n- AWS Secrets Manager / Azure Key Vault\n- 避免硬编码密钥（12-factor）\n\n**应用安全**\n- WAF（Web Application Firewall）：ModSecurity、Coraza\n- RASP（Runtime Application Self-Protection）\n- 输入验证、参数化查询、输出编码\n- 限速、防重放、防爆破\n\n**零信任后端**\n- 每个服务都需认证和授权\n- SPIFFE/SPIRE：工作负载身份\n- 短期凭据、自动轮换",
+        "example": "# 现代后端安全实践\n\n# 1. Sigstore/cosign 签名镜像\ncosign generate-key-pair\ncosign sign --key cosign.key myregistry/myapp:v1.0\ncosign verify --key cosign.pub myregistry/myapp:v1.0\n\n# 2. SBOM 生成\nsyft packages myapp:latest -o spdx-json > sbom.spdx.json\n\n# 3. Vault 动态数据库凭据\nvault secrets enable database\nvault write database/config/my-mysql \\\n  plugin_name=mysql-rotate-root \\\n  connection_url=\"{{username}}:{{password}}@tcp(db:3306)/\" \\\n  allowed_roles=\"app\"\n\nvault read database/creds/app  # 获取临时 1h 有效凭据\n\n# 4. OAuth 2.1 + PKCE（SPA/移动应用）\n# 1. 生成 code_verifier + code_challenge\n# 2. /authorize?code_challenge=xxx&code_challenge_method=S256\n# 3. /token 交换时提交 code_verifier\n\n# 5. SPIFFE/SPIRE 工作负载身份\n# SPIRE Agent 为每个 Pod 发放 SVID（SPIFFE Verifiable Identity Document）\n# 服务间 mTLS 使用 SVID 自动认证\n\n# 6. 安全 Headers\n# X-Content-Type-Options: nosniff\n# X-Frame-Options: DENY\n# Content-Security-Policy: default-src 'self'\n# Strict-Transport-Security: max-age=31536000"
       }
     ]
   },
@@ -1067,6 +1263,48 @@ const KNOWLEDGE = {
         "level": "高级",
         "content": "**高级文本处理场景**\n\n1. **多文件批量处理**\n   - find + sed -i 批量替换\n   - 备份原文件：sed -i.bak\n   - 跨目录递归处理\n\n2. **CSV/TSV 处理**\n   - awk -F, 处理 CSV\n   - 处理含引号的字段（复杂 CSV）\n   - 推荐使用 csvkit（Python）或 mlr（Miller）\n\n3. **JSON 处理**\n   - jq：命令行 JSON 处理器\n   - jq '.key | .nested' 提取字段\n   - jq '.[] | select(.age > 18)' 过滤\n   - jq -s 'add' 合并多个 JSON\n\n4. **XML/HTML 处理**\n   - xmlstarlet\n   - pup（HTML）\n   - hxselect\n   - 简单提取可用 grep/sed/awk（不推荐复杂 HTML）\n\n5. **YAML 处理**\n   - yq（类似 jq）\n   - Python + PyYAML\n\n**文本编码处理**\n- file -i 检测编码\n- iconv 转换编码\n- enca 智能检测编码\n- dos2unix/unix2dos 换行符转换\n\n**文本-diff 与补丁**\n- diff -u 统一格式\n- patch 应用补丁\n- wdiff 单词级 diff\n- colordiff 彩色输出\n\n**随机与采样**\n- shuf 随机打乱\n- sort -R 随机排序\n- awk 'NR % 10 == 0' 每隔 N 行采样\n- head/tail 组合提取中间行",
         "example": "# 批量替换多文件中的字符串\nfind . -name '*.conf' -exec sed -i 's/old_domain/new_domain/g' {} +\n\n# JSON 处理（jq）\ncurl -s api.example.com/data | jq '.users[] | {name: .name, email: .email}'\n\n# 处理 CSV 并计算平均值\nawk -F, 'NR>1 {sum+=$3; count++} END {print \"Avg:\" sum/count}' data.csv\n\n# 文本编码转换\niconv -f GBK -t UTF-8 input.txt > output.txt\n\n# 随机抽取 100 行\nshuf large_file.txt | head -n 100\n\n# diff 并生成补丁\ndiff -u file1.txt file2.txt > patch.diff\npatch file1.txt < patch.diff\n\n# 提取中间行（1000-2000 行）\nsed -n '1000,2000p' large_file.txt\nawk 'NR>=1000 && NR<=2000' large_file.txt\n\n# 多列排序\nsort -t, -k2,2nr -k1,1 data.tsv\n\n# 去重并保持顺序\nawk '!seen[$0]++' file.txt\n\n# 用 printf 格式化输出\nawk '{printf \"%-10s %5d %8.2f\\n\", $1, $2, $3}' data.txt"
+      },
+      {
+        "id": "shell-modern-cli",
+        "title": "现代 CLI 工具链（fzf/bat/fd/ripgrep）",
+        "level": "进阶",
+        "content": "**现代 CLI 工具革命**\n- Rust/Go 重写传统 Unix 工具\n- 更快、更安全、更友好的输出\n\n**核心工具**\n\n1. **fzf（模糊查找器）**\n   - 交互式模糊匹配\n   - 与 Shell 历史、文件、进程深度集成\n   - Ctrl+R 历史搜索、Alt+C 目录跳转\n   - 预览窗口支持\n\n2. **ripgrep（rg）**\n   - 递归搜索代码\n   - 自动遵循 .gitignore\n   - 多线程、内存映射、极快\n\n3. **fd**\n   - find 的直观替代\n   - 默认忽略隐藏文件和 gitignore\n   - 彩色输出、并行执行\n\n4. **bat**\n   - cat 的语法高亮版\n   - Git 集成（显示修改标记）\n   - 自动分页\n\n5. **eza**\n   - ls 的现代替代\n   - 图标、Git 状态、树形视图\n\n6. **zoxide**\n   - cd 的智能替代\n   - 基于访问频率的目录跳转\n   - z foo 即可跳转到最常访问的 foo 目录",
+        "example": "# fzf 实战\n# 1. 历史命令搜索（绑定 Ctrl+R）\n# eval \"$(fzf --bash)\"\n\n# 2. 文件查找并编辑\nvim $(fzf)\n\n# 3. 进程 kill\nkill $(ps aux | fzf | awk '{print $2}')\n\n# 4. 带预览的文件搜索\nfzf --preview 'bat --color=always {}'\n\n# 5. git branch 切换\ngit branch | fzf | xargs git checkout\n\n# zoxide\nz /var/log  # 跳转到 /var/log\nz log       # 模糊匹配跳转到最常访问的 log 目录\nzi          # 交互式选择目录\n\n# fd + bat 组合\nfd '.*\\.py$' | xargs bat --theme=Dracula\n\n# rg 高级用法\nrg 'class\\s+\\w+' -t py --stats  # Python 中搜索类定义\nrg -C 3 'TODO|FIXME'            # 上下文3行"
+      },
+      {
+        "id": "shell-k8s-ops",
+        "title": "Kubernetes 运维脚本实战",
+        "level": "高级",
+        "content": "**K8s Shell 运维场景**\n\n1. **Pod 诊断**\n   - kubectl get pods --all-namespaces -o wide\n   - kubectl describe pod / logs / events\n   - kubectl exec -it <pod> -- /bin/sh\n\n2. **批量操作**\n   - kubectl get pods -l app=frontend -o name | xargs kubectl delete\n   - 跨命名空间操作\n\n3. **资源清理**\n   - 清理 Evicted/Completed/Failed Pod\n   - 清理未使用的 ConfigMap/Secret\n   - 清理旧版本 ReplicaSet\n\n4. **监控与告警**\n   - kubectl top nodes/pods\n   - 自定义资源使用报表\n\n5. **调试技巧**\n   - 临时 debug 容器（kubectl debug）\n   - 网络诊断 Pod（nicolaka/netshoot）\n   - 复制问题 Pod（kubectl cp）\n\n**工具集成**\n- kubectx / kubens：快速切换集群/命名空间\n- stern：多 Pod 日志聚合\n- k9s：终端 UI 管理 K8s\n- helm：包管理",
+        "example": "#!/bin/bash\n# K8s 运维脚本集\n\n# 1. 清理所有 Evicted Pod\nkubectl get pods --all-namespaces --field-selector=status.phase=Failed | grep Evicted | \\\n  awk '{print $2 \" --namespace=\" $1}' | xargs -L1 kubectl delete pod\n\n# 2. 查看 CrashLoopBackOff 原因\nkubectl get pods --all-namespaces | grep CrashLoopBackOff | \\\n  while read ns pod rest; do\n    echo \"=== $ns/$pod ===\"\n    kubectl logs -n $ns $pod --previous 2>/dev/null | tail -20\n  done\n\n# 3. 资源使用 Top 10 Pod\nkubectl top pods --all-namespaces --sort-by=cpu | head -11\n\n# 4. 查找没有资源限制的 Pod\nkubectl get pods --all-namespaces -o json | \\\n  jq '.items[] | select(.spec.containers[].resources.limits == null) | .metadata.name'\n\n# 5. 批量进入 Pod 执行命令\nkubectl get pods -l app=worker -o name | \\\n  xargs -I {} kubectl exec {} -- ps aux\n\n# 6. 网络诊断\nkubectl run tmp-shell --rm -i --tty --image nicolaka/netshoot -- /bin/bash\n# 在容器内：tcpdump, ngrep, curl, iperf 等\n\n# 7. stern 聚合日志\nstern -l app=frontend --since 10m"
+      },
+      {
+        "id": "shell-terraform-ansible",
+        "title": "IaC 脚本：Terraform 与 Ansible",
+        "level": "高级",
+        "content": "**基础设施即代码（IaC）**\n- 用代码定义和管理基础设施\n- 版本控制、可复现、可审计\n\n**Terraform**\n- HashiCorp 出品，多云编排\n- HCL 声明式语言\n- 状态管理（terraform.tfstate）\n- 执行计划（plan）后应用（apply）\n- 模块化管理\n\n**Ansible**\n- RedHat 出品，无代理（SSH/PowerShell）\n- YAML 剧本（Playbook）\n- 幂等性：多次执行结果一致\n- 角色（Role）组织复用\n- 动态库存（Dynamic Inventory）\n\n**Terraform vs Ansible**\n- Terraform：资源编排（创建/销毁基础设施）\n- Ansible：配置管理（安装软件、配置文件）\n- 最佳实践：Terraform 创建资源 -> Ansible 配置应用\n\n**现代工具**\n- Pulumi：编程语言定义基础设施（TS/Python/Go）\n- CDKTF：Terraform 的 CDK\n- Crossplane：K8s 原生 IaC",
+        "example": "# Terraform 快速示例\n# main.tf\n# provider \"aws\" {\n#   region = \"us-east-1\"\n# }\n# resource \"aws_instance\" \"web\" {\n#   ami           = \"ami-0c55b159cbfafe1f0\"\n#   instance_type = \"t3.micro\"\n#   tags = { Name = \"web-server\" }\n# }\n\nterraform init\nterraform plan\nterraform apply\nterraform destroy\n\n# Ansible Playbook\n# ---\n# - hosts: webservers\n#   become: yes\n#   tasks:\n#     - name: Install nginx\n#       apt: name=nginx state=present\n#     - name: Start nginx\n#       service: name=nginx state=started enabled=yes\n\nansible-playbook -i inventory.ini site.yml\n\n# Terraform + Ansible 组合\n# Terraform 输出 IP，Ansible 动态库存使用\nterraform output -json | jq -r '.web_ips.value[]' > inventory"
+      },
+      {
+        "id": "shell-gitops",
+        "title": "GitOps 与 CI/CD Shell 脚本",
+        "level": "高级",
+        "content": "**GitOps 理念**\n- 以 Git 为唯一可信源（Single Source of Truth）\n- 声明式基础设施和应用配置\n- 自动同步：Git 变更 -> 自动部署\n- 回滚 = Git revert\n\n**GitOps 工具**\n\n1. **ArgoCD**\n   - K8s 原生 GitOps\n   - 自动/手动同步\n   - 多集群管理\n   - 支持 Helm/Kustomize/Jsonnet\n\n2. **Flux**\n   - CNCF 毕业项目\n   - 控制器模式\n   - 与 GitHub/GitLab 深度集成\n\n3. **Tekton / Jenkins / GitHub Actions**\n   - CI 流水线\n   - 构建镜像 -> 推送 -> 更新 Git 配置\n\n**CI/CD 脚本实践**\n- 语义化版本自动打 tag\n- 镜像构建多阶段、多架构\n- 变更检测：只部署修改的服务\n- 蓝绿/金丝雀发布脚本\n- 健康检查与自动回滚",
+        "example": "#!/bin/bash\n# GitOps 部署脚本示例\n\n# 1. 更新镜像 tag 并提交\nAPP=$1\nVERSION=$2\n\nsed -i \"s|image: ${APP}:.*|image: ${APP}:${VERSION}|g\" k8s/${APP}/deployment.yaml\ngit add k8s/${APP}/deployment.yaml\ngit commit -m \"deploy(${APP}): bump to ${VERSION}\"\ngit push origin main\n\n# 2. ArgoCD 同步（手动触发）\nargocd app sync ${APP}\nargocd app wait ${APP} --health\n\n# 3. CI 中的镜像构建\ndocker buildx build \\\n  --platform linux/amd64,linux/arm64 \\\n  -t registry/${APP}:${VERSION} \\\n  --push .\n\n# 4. 金丝雀发布（使用 Flagger）\nkubectl apply -f canary.yaml\n# Flagger 自动分析 Prometheus 指标，渐进式切换流量\n\n# 5. 自动回滚脚本\n#!/bin/bash\nfor i in {1..10}; do\n  http_code=$(curl -s -o /dev/null -w \"%{http_code}\" http://app/health)\n  if [ \"$http_code\" != \"200\" ]; then\n    echo \"Health check failed, rolling back...\"\n    git revert HEAD --no-edit\n    git push\n    exit 1\n  fi\n  sleep 5\ndone"
+      },
+      {
+        "id": "shell-container-ops",
+        "title": "容器与容器运行时脚本",
+        "level": "高级",
+        "content": "**容器运行时演进**\n- Docker -> containerd -> 各种 OCI 运行时\n- runc：标准 OCI 运行时\n- crun：C 编写，更快启动\n- gVisor：用户态内核，额外隔离\n- Kata Containers：轻量 VM，强隔离\n- Firecracker：AWS 开源 microVM\n\n**containerd 操作**\n- ctr：containerd 原始 CLI（调试用）\n- nerdctl：Docker 兼容 CLI for containerd\n- crictl：CRI 工具（K8s 调试）\n\n**Podman**\n- Daemonless（无守护进程）\n- Rootless（无 root 运行容器）\n- Docker CLI 兼容\n- Systemd 集成（podman generate systemd）\n\n**镜像优化**\n- 多阶段构建\n- distroless / scratch 基础镜像\n- 镜像层缓存优化\n- BuildKit 高级特性\n- 镜像安全扫描（Trivy、Snyk）",
+        "example": "# 容器运维脚本\n\n# 1. nerdctl（containerd 的 docker 兼容工具）\nnerdctl run -d --name nginx -p 80:80 nginx\nnerdctl ps\nnerdctl exec -it nginx sh\n\n# 2. Podman rootless\npodman run -d --name web --userns=keep-id -p 8080:80 nginx\npodman generate systemd --new --name web > ~/.config/systemd/user/web.service\nsystemctl --user enable --now web\n\n# 3. 清理 dangling 镜像\ndocker image prune -f\nnerdctl image prune -f\n\n# 4. 批量导出镜像\ndocker images --format '{{.Repository}}:{{.Tag}}' | grep myapp | \\\n  while read img; do docker save $img > $(echo $img | tr '/:' '_').tar; done\n\n# 5. 镜像安全扫描\ntrivy image nginx:latest\n\n# 6. BuildKit 多平台构建\ndocker buildx create --use --name multi\ndocker buildx build --platform linux/amd64,linux/arm64 -t myapp:latest --push .\n\n# 7. crictl 调试 K8s\ncrictl ps\ncrictl pods\ncrictl logs <container-id>\ncrictl exec -it <container-id> /bin/sh"
+      },
+      {
+        "id": "shell-terminal-modern",
+        "title": "现代终端与 Shell 环境",
+        "level": "进阶",
+        "content": "**现代终端工具**\n\n1. **Zellij / tmux**\n   - 终端复用器：分屏、会话持久化\n   - Zellij：Rust 编写，插件系统，布局配置\n   - tmux：经典，高度可定制\n\n2. **Starship**\n   - 跨 Shell 极简提示符\n   - 显示 Git 分支、语言版本、执行时间\n   - 配置简单，速度快\n\n3. **Warp / Fig**\n   - 现代终端 IDE\n   - AI 辅助命令补全\n   - 块编辑、协作功能\n\n4. **Direnv**\n   - 进入目录自动加载环境变量\n   - .envrc 文件管理项目环境\n   - 离开目录自动卸载\n\n5. **Mise（原 rtx）**\n   - 多语言版本管理器（替代 asdf）\n   - 项目级 .tool-versions\n   - 自动安装和切换\n\n6. **Atuin**\n   - Shell 历史同步和搜索\n   - 云端/自托管同步\n   - 智能补全\n\n**Shell 选择**\n- Bash：默认兼容\n- Zsh + Oh My Zsh：丰富插件\n- Fish：开箱即用，语法不同\n- Nushell：结构化数据",
+        "example": "# 现代终端配置\n\n# Zellij 布局\n# layout.kdl\n# layout {\n#     pane split_direction=\"vertical\" {\n#         pane\n#         pane split_direction=\"horizontal\" {\n#             pane\n#             pane\n#         }\n#     }\n# }\n\n# Starship 配置 ~/.config/starship.toml\n# [directory]\n# truncation_length = 3\n# [git_branch]\n# symbol = \"\\ue0a0 \"\n\n# Direnv\n# cd /project && direnv allow\n# .envrc:\n# export AWS_PROFILE=dev\n# export DATABASE_URL=postgres://localhost/dev\n# layout python\n\n# Mise\n# echo 'nodejs 20' > .tool-versions\n# mise install\n# node -v  # 20.x\n\n# Atuin\neval \"$(atuin init bash)\"\n# Ctrl+R 调出 Atuin 历史搜索界面\n\n# Tmux 会话管理\ntmux new -s work\ntmux attach -t work\ntmux split-window -h\ntmux list-sessions"
       }
     ]
   },
@@ -1270,6 +1508,48 @@ const KNOWLEDGE = {
         "level": "高级",
         "content": "**元编程概述**\n- 编写能操作代码的代码\n- 动态修改/创建类和函数\n- Python 元编程手段：装饰器、元类、描述符、__init_subclass__、__class_getitem__\n\n**元类（Metaclass）**\n- 类的类，type 是默认元类\n- class Foo: 等价于 Foo = type('Foo', (), {})\n- 自定义元类继承 type\n- __new__：创建类（控制类创建）\n- __init__：初始化类\n- __call__：实例创建时调用（控制 __new__/__init__）\n\n**元类应用场景**\n- ORM：自动注册模型、生成字段\n- 插件系统：自动发现注册类\n- 单例模式\n- 接口/抽象类强制\n- 自动添加方法\n\n**__init_subclass__（3.6+）**\n- 替代元类的轻量方案\n- 父类定义后，子类创建时自动调用\n- cls 是子类\n- 适合简单的类层级控制\n\n**描述符协议**\n- __get__(self, obj, objtype=None)\n- __set__(self, obj, value)\n- __delete__(self, obj)\n- 数据描述符：同时定义 __get__ 和 __set__\n- 非数据描述符：只有 __get__\n- property 是描述符的简化形式\n\n**描述符查找优先级**\n1. 数据描述符\n2. 实例 __dict__\n3. 非数据描述符\n4. 类 __dict__\n\n**__class_getitem__**\n- 支持类参数化，如 List[int]\n- 3.9+ 用于原生泛型\n\n**import hooks**\n- sys.meta_path：自定义导入器\n- PEP 302/451 导入系统扩展",
         "example": "# 元类：自动收集所有子类\nclass PluginMeta(type):\n    def __init__(cls, name, bases, namespace):\n        super().__init__(name, bases, namespace)\n        if not hasattr(cls, '_plugins'):\n            cls._plugins = []\n        else:\n            cls._plugins.append(cls)\n\nclass Plugin(metaclass=PluginMeta):\n    def run(self): pass\n\nclass AuthPlugin(Plugin):\n    def run(self): return 'auth'\n\nclass LogPlugin(Plugin):\n    def run(self): return 'log'\n\nprint([p.__name__ for p in Plugin._plugins])\n# ['AuthPlugin', 'LogPlugin']\n\n# __init_subclass__ 替代元类\nclass Base:\n    registry = []\n    def __init_subclass__(cls, **kwargs):\n        super().__init_subclass__(**kwargs)\n        Base.registry.append(cls)\n\nclass Child1(Base): pass\nclass Child2(Base): pass\nprint([c.__name__ for c in Base.registry])\n\n# 描述符：类型校验\nclass TypedField:\n    def __init__(self, type_):\n        self.type_ = type_\n    def __set_name__(self, owner, name):\n        self.name = name\n    def __get__(self, obj, objtype=None):\n        if obj is None:\n            return self\n        return obj.__dict__.get(self.name)\n    def __set__(self, obj, value):\n        if not isinstance(value, self.type_):\n            raise TypeError(f'{self.name} must be {self.type_.__name__}')\n        obj.__dict__[self.name] = value\n\nclass User:\n    name = TypedField(str)\n    age = TypedField(int)\n\nu = User()\nu.name = 'Alice'\nu.age = 25\n# u.age = 'old'  # TypeError: age must be int\n\n# 单例元类\nclass Singleton(type):\n    _instances = {}\n    def __call__(cls, *args, **kwargs):\n        if cls not in cls._instances:\n            cls._instances[cls] = super().__call__(*args, **kwargs)\n        return cls._instances[cls]\n\nclass DB(metaclass=Singleton):\n    pass\nprint(DB() is DB())  # True\n\n# __class_getitem__\nclass Vector:\n    def __class_getitem__(cls, item):\n        return f'Vector[{item.__name__}]'\nprint(Vector[int])  # Vector[int]"
+      },
+      {
+        "id": "py-312-313",
+        "title": "Python 3.12/3.13 新特性",
+        "level": "进阶",
+        "content": "**Python 3.12 主要新特性**\n\n1. **f-string 改进**\n   - 支持任意嵌套表达式，不再有限制\n   - 支持反斜杠和 Unicode 转义\n   - 调试 f-string 更好用\n\n2. **性能提升**\n   - 整体性能提升约 5-15%\n   -  PEP 709：内联推导式，减少函数调用开销\n\n3. **类型参数语法**\n   - def func[T](x: T) -> T: ...\n   - 不再需要 typing.TypeVar\n\n4. **改进的错误消息**\n   - 更精确的 SyntaxError 提示\n   - 建议可能的修复\n\n**Python 3.13 预览特性**\n\n1. **实验性 JIT 编译器**\n   - 基于 copy-and-patch 的 JIT\n   -  configure --enable-experimental-jit\n   -  未来可能带来 2-9% 性能提升\n\n2. **改进的交互式解释器**\n   - 彩色高亮输出\n   - 多行编辑历史\n\n3. **PEP 702：标记废弃参数**\n   - @warnings.deprecated\n\n4. **移除全局解释器锁（No-GIL）实验**\n   - --disable-gil 编译选项\n   - 真正的多线程并行",
+        "example": "# Python 3.12+ 新特性\n\n# 1. 类型参数语法\ndef first[T](items: list[T]) -> T | None:\n    return items[0] if items else None\n\n# 2. f-string 任意嵌套\nvalues = [10, 20, 30]\nprint(f\"Sum: {sum(values)}, Max: {max(values)}\")\n\n# 3. PEP 709 内联推导式\n# {x: y for x, y in zip(keys, values)} 更快\n\n# 4. 改进错误消息\n# SyntaxError: invalid syntax. Did you forget parentheses?\n\n# 5. 类型别名语法\ntype Point = tuple[float, float]\ntype Vector = list[Point]\n\n# Python 3.13 JIT（实验性）\n# ./configure --enable-experimental-jit\n# make\n# python3.13 -X jit script.py\n\n# 6. @warnings.deprecated\nfrom warnings import deprecated\n@deprecated('Use new_func instead')\ndef old_func(): ...\n\n# 7. 多行 REPL 历史（3.13）\n# >>> def foo():\n# ...     return 1\n# ...\n# 上下箭头可编辑多行"
+      },
+      {
+        "id": "py-fastapi-advanced",
+        "title": "FastAPI 高级与异步生态",
+        "level": "高级",
+        "content": "**FastAPI 核心优势**\n- 基于 Starlette（ASGI）和 Pydantic\n- 自动 API 文档（OpenAPI + Swagger UI）\n- 类型提示驱动数据验证\n- 原生异步支持（async/await）\n\n**高级特性**\n\n1. **依赖注入系统**\n   - Depends：可嵌套、可缓存\n   - 安全依赖：OAuth2PasswordBearer\n   - 数据库会话管理\n\n2. **后台任务**\n   - BackgroundTasks：轻量后台执行\n   -  heavier：配合 Celery/ARQ\n\n3. **中间件与异常处理**\n   - 自定义 HTTPException\n   - 全局异常处理器\n   - CORS、GZip、TrustedHost\n\n4. **WebSocket 支持**\n   - 原生 WebSocket endpoint\n   - 结合 JWT 认证\n\n5. **Pydantic v2**\n   - Rust 核心，5-50 倍性能提升\n   - 新验证器模式\n   - ConfigDict 替代 Config 类\n\n**部署**\n- Uvicorn（ASGI）+ Gunicorn\n- Docker 多阶段构建\n- 生产环境配置：workers、keep-alive、proxy-headers",
+        "example": "# FastAPI 高级示例\nfrom fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, WebSocket\nfrom pydantic import BaseModel, ConfigDict\nfrom typing import Annotated\n\napp = FastAPI()\n\n# 依赖注入\nasync def get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get('/items/{item_id}')\nasync def read_item(\n    item_id: int,\n    db: Annotated[Session, Depends(get_db)]\n):\n    item = db.query(Item).get(item_id)\n    if not item:\n        raise HTTPException(status_code=404, detail='Item not found')\n    return item\n\n# 后台任务\ndef send_email(email: str, message: str):\n    ...\n\n@app.post('/send-notification')\nasync def notify(\n    email: str,\n    tasks: BackgroundTasks\n):\n    tasks.add_task(send_email, email, 'Hello')\n    return {'message': 'Notification sent'}\n\n# WebSocket\n@app.websocket('/ws')\nasync def websocket_endpoint(websocket: WebSocket):\n    await websocket.accept()\n    while True:\n        data = await websocket.receive_text()\n        await websocket.send_text(f'Echo: {data}')\n\n# Pydantic v2\nclass User(BaseModel):\n    model_config = ConfigDict(strict=True)\n    name: str\n    age: int\n\n# 部署\n# gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
+      },
+      {
+        "id": "py-async-advanced",
+        "title": "Python 异步编程深度",
+        "level": "高级",
+        "content": "**asyncio 深入**\n- 事件循环（Event Loop）：单线程调度协程\n- 协程（Coroutine）：async def，轻量并发\n- Task：协程的包装，事件循环调度执行\n- Future：低层级可等待对象\n\n**并发原语**\n\n1. **asyncio 同步原语**\n   - Lock、Semaphore、Event、Condition\n   - Queue：协程安全队列\n\n2. **并发执行**\n   - asyncio.gather：并行运行多个协程\n   - asyncio.wait：更灵活的控制\n   - asyncio.as_completed：按完成顺序处理\n   - asyncio.TaskGroup（3.11+）：结构化并发\n\n3. **与线程/进程结合**\n   - loop.run_in_executor：在线程池中运行同步代码\n   - ProcessPoolExecutor：CPU 密集型任务\n\n**高级模式**\n- 上下文变量（contextvars）：协程本地存储\n- 信号量限流：控制并发数\n- 优雅关闭：cancel、shutdown_asyncgens\n- 流式处理：async for、异步生成器\n\n**异步库生态**\n- HTTP：aiohttp、httpx\n- DB：asyncpg、aiomysql、motor（MongoDB）\n- Redis：aioredis\n- 任务队列：Celery、ARQ、RQ",
+        "example": "# Python 异步高级\nimport asyncio\n\n# 1. 结构化并发（3.11+）\nasync def main():\n    async with asyncio.TaskGroup() as tg:\n        tg.create_task(fetch('url1'))\n        tg.create_task(fetch('url2'))\n    print('All done')\n\n# 2. 信号量限流\nsemaphore = asyncio.Semaphore(10)\n\nasync def fetch_limited(url):\n    async with semaphore:\n        return await fetch(url)\n\n# 3. 异步上下文管理器\nclass ManagedConnection:\n    async def __aenter__(self):\n        self.conn = await create_connection()\n        return self.conn\n    async def __aexit__(self, exc_type, exc, tb):\n        await self.conn.close()\n\n# 4. 异步生成器\nasync def ticker(delay, to):\n    for i in range(to):\n        yield i\n        await asyncio.sleep(delay)\n\nasync for i in ticker(1, 5):\n    print(i)\n\n# 5. 在线程池运行同步代码\nloop = asyncio.get_running_loop()\nresult = await loop.run_in_executor(None, requests.get, 'https://api.example.com')\n\n# 6. 优雅关闭\nasync def shutdown():\n    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]\n    for task in tasks:\n        task.cancel()\n    await asyncio.gather(*tasks, return_exceptions=True)\n\n# 7. uvloop（Cython 事件循环，加速 2-4 倍）\nimport uvloop\nuvloop.install()"
+      },
+      {
+        "id": "py-mlops",
+        "title": "Python MLOps 与 AI 工程化",
+        "level": "高级",
+        "content": "**MLOps 概述**\n- ML + DevOps，机器学习工程化\n- 覆盖模型开发、训练、部署、监控全生命周期\n\n**核心组件**\n\n1. **特征工程与存储**\n   - Feast：特征存储（Feature Store）\n   - Tecton：企业级特征平台\n   - 特征版本控制、在线/离线一致性\n\n2. **实验管理**\n   - MLflow：模型/实验/参数/指标追踪\n   - Weights & Biases（W&B）：可视化实验\n   - DVC：数据版本控制（Git for Data）\n\n3. **模型训练框架**\n   - PyTorch / TensorFlow / JAX\n   - Lightning：PyTorch 高级封装\n   - Hugging Face Transformers：预训练模型\n\n4. **模型服务**\n   - TorchServe / Triton Inference Server\n   - BentoML：模型服务框架\n   - vLLM：大模型推理加速（PagedAttention）\n\n5. **监控与漂移检测**\n   - Evidently：数据漂移检测\n   - Prometheus + Grafana 监控模型指标\n\n6. **大模型工程化**\n   - LangChain / LlamaIndex：RAG 应用\n   - Ollama：本地大模型运行\n   - Text Generation Inference（TGI）",
+        "example": "# MLOps 实践\n\n# 1. MLflow 追踪实验\nimport mlflow\nmlflow.set_experiment('my-exp')\nwith mlflow.start_run():\n    mlflow.log_param('lr', 0.01)\n    mlflow.log_metric('accuracy', 0.95)\n    mlflow.sklearn.log_model(model, 'model')\n\n# 2. DVC 数据版本控制\n# dvc init\n# dvc add data/train.csv\n# git add data/train.csv.dvc\n# dvc push  # 上传到远程存储\n\n# 3. Feast 特征存储\nfrom feast import FeatureStore\nstore = FeatureStore(repo_path='.')\nfeatures = store.get_online_features(\n    features=['user:age', 'user:purchase_count'],\n    entity_rows=[{'user_id': 'u1'}]\n).to_dict()\n\n# 4. BentoML 服务模型\nimport bentoml\nbentoml.pytorch.save_model('resnet', model)\n\n# service.py\nimport bentoml\nmodel_ref = bentoml.pytorch.get('resnet:latest')\nmodel = bentoml.pytorch.load_model(model_ref)\n\n# 5. vLLM 大模型推理\nfrom vllm import LLM, SamplingParams\nllm = LLM(model='meta-llama/Llama-2-7b')\noutputs = llm.generate(['Hello, how are you?'], SamplingParams(temperature=0.7))\n\n# 6. LangChain RAG\nfrom langchain import OpenAI, VectorDBQA\nfrom langchain.embeddings import OpenAIEmbeddings\nqa = VectorDBQA.from_chain_type(\n    llm=OpenAI(),\n    chain_type='stuff',\n    vectorstore=vectorstore\n)\nqa.run('What is MLOps?')"
+      },
+      {
+        "id": "py-polars",
+        "title": "Polars 高性能数据处理",
+        "level": "高级",
+        "content": "**Polars 特点**\n- Rust 编写的 DataFrame 库\n- 比 Pandas 快 5-30 倍，内存效率更高\n- 惰性执行（Lazy Evaluation）：自动查询优化\n- 真正的多线程\n- 流式处理大文件\n\n**与 Pandas 对比**\n| 特性 | Pandas | Polars |\n|------|--------|--------|\n| 后端 | Cython | Rust + Arrow |\n| 执行模式 | Eager | Eager + Lazy |\n| 多线程 | 有限 | 原生 |\n| 大数据 | 内存限制 | 流式/分块 |\n| API | 成熟 | 现代、链式 |\n\n**核心概念**\n- DataFrame / LazyFrame\n- Expressions（表达式）：延迟计算图\n- Contexts：select、filter、group_by、with_columns\n\n**适用场景**\n- 大规模数据清洗（>10GB）\n- ETL 流水线\n- 替换 Pandas 性能瓶颈\n- 与 Apache Arrow 生态集成",
+        "example": "# Polars 实战\nimport polars as pl\n\n# 1. 读取数据（比 pd.read_csv 快数倍）\ndf = pl.read_csv('large.csv')\ndf = pl.scan_parquet('s3://bucket/*.parquet')  # 惰性扫描\n\n# 2. 链式操作\nresult = (\n    df.lazy()\n    .filter(pl.col('age') > 18)\n    .group_by('category')\n    .agg([\n        pl.col('amount').sum().alias('total'),\n        pl.col('amount').mean().alias('avg'),\n        pl.col('id').count().alias('count')\n    ])\n    .sort('total', descending=True)\n    .limit(10)\n    .collect()  # 执行优化后的查询计划\n)\n\n# 3. 窗口函数\ndf.with_columns(\n    pl.col('sales').rank(method='dense').over('region').alias('rank')\n)\n\n# 4. 字符串处理\ndf.with_columns(\n    pl.col('email').str.extract(r'(.+)@', 1).alias('username')\n)\n\n# 5. 与 Pandas 互操作\npdf = result.to_pandas()\ndf = pl.from_pandas(pdf)\n\n# 6. 流式处理（内存不足时）\nquery = pl.scan_csv('huge.csv').group_by('key').agg(pl.all().sum())\nquery.sink_parquet('output.parquet')  # 流式输出，不加载全表到内存"
+      },
+      {
+        "id": "py-type-hints",
+        "title": "Python 类型提示与静态检查",
+        "level": "进阶",
+        "content": "**类型提示演进**\n- PEP 484（3.5）-> 现代类型系统\n- typing 模块 -> typing_extensions -> 内置类型\n\n**核心类型**\n- 基本：int、str、float、bool\n- 容器：list[T]、dict[K,V]、set[T]、tuple[T,...]\n- Union：T | None（3.10+）、Union[T1,T2]\n- Optional：Optional[T] = T | None\n- Callable、Iterable、Iterator\n- Generic：TypeVar、Generic[T]\n\n**现代工具**\n- **mypy**：静态类型检查器\n- **pyright / Pylance**：微软类型检查器\n- **Ruff**：超快 Python linter（Rust 编写）\n- **basedpyright**：pyright 增强版\n\n**高级类型**\n- Protocol（结构子类型，类似接口）\n- TypedDict：字典键类型\n- NamedTuple / @dataclass\n- @overload：函数重载\n- Self（3.11+）：返回自身类型\n- TypeAlias（3.10+）：类型别名\n\n**运行时类型检查**\n- Pydantic：数据验证\n- beartype：快速运行时检查\n- typeguard：装饰器检查",
+        "example": "# Python 类型提示高级\nfrom typing import Protocol, TypedDict, overload, Self, TypeAlias\nfrom collections.abc import Iterable\n\n# Protocol（结构子类型）\nclass Drawable(Protocol):\n    def draw(self) -> None: ...\n\ndef render(items: Iterable[Drawable]) -> None:\n    for item in items:\n        item.draw()\n\n# TypedDict\nclass Movie(TypedDict):\n    name: str\n    year: int\n    rating: float\n\nm: Movie = {'name': 'Inception', 'year': 2010, 'rating': 9.0}\n\n# @overload\n@overload\ndef process(x: int) -> int: ...\n@overload\ndef process(x: str) -> str: ...\ndef process(x):\n    return x * 2\n\n# Self（3.11+）\nclass Builder:\n    def set_name(self, name: str) -> Self:\n        self.name = name\n        return self\n\n# TypeAlias\nJson: TypeAlias = dict[str, 'Json'] | list['Json'] | str | int | float | None\n\n# mypy 检查\n# mypy app.py --strict\n\n# Ruff（超快 linter + formatter）\n# ruff check .\n# ruff format .\n\n# Pydantic 运行时验证\nfrom pydantic import BaseModel, Field\nclass User(BaseModel):\n    name: str = Field(min_length=1)\n    age: int = Field(ge=0, le=150)\n    email: str\n\nuser = User(name='Alice', age=30, email='alice@example.com')"
       }
     ]
   },
@@ -2026,6 +2306,62 @@ const KNOWLEDGE = {
         "level": "进阶",
         "content": "**监控维度**\n1. **可用性**：服务是否存活、能否连接\n2. **性能**：QPS/TPS、响应时间、慢查询\n3. **资源**：CPU/内存/磁盘/IO/网络\n4. **复制**：主从状态、延迟\n5. **连接**：连接数、活跃连接、连接拒绝\n6. **锁**：锁等待、死锁\n7. **容量**：表空间、增长趋势\n\n**关键监控指标**\n- Threads_connected：当前连接数\n- Threads_running：活跃线程数\n- QPS（Questions/s）、TPS（Com_commit+Com_rollback）/s\n- Slow_queries：慢查询数\n- Innodb_rows_read/written：行读写数\n- Innodb_buffer_pool_read_requests / reads：缓冲池命中率\n- Seconds_Behind_Master：主从延迟\n- Aborted_clients/connections：异常断开\n\n**监控工具**\n1. **Prometheus + mysqld_exporter + Grafana**\n   - 业界主流方案\n   - mysqld_exporter 采集 MySQL 指标\n   - Grafana 可视化\n\n2. **Percona PMM**\n   - 基于 Prometheus 的 MySQL 监控平台\n   - 含查询分析\n\n3. **MySQL Enterprise Monitor**\n   - 官方商业产品\n\n4. **Zabbix**\n   - 传统监控方案\n\n**告警规则**\n- 连接数 > 80% max_connections\n- 慢查询数突增\n- 主从延迟 > 60s\n- 缓冲池命中率 < 95%\n- 磁盘使用率 > 80%\n- 复制中断\n- 死锁频繁\n\n**SHOW STATUS / SHOW GLOBAL STATUS**\n- 实时查看各项状态\n- SHOW STATUS LIKE 'Threads%'\n- SHOW STATUS LIKE 'Innodb%'\n\n**performance_schema**\n- MySQL 内置性能监控\n- 事件统计、锁监控、内存监控\n- sys 库提供友好视图\n\n**常用 sys 库视图**\n- sys.processlist：进程列表\n- sys.innodb_lock_waits：锁等待\n- sys.schema_index_statistics：索引使用统计\n- sys.statements_with_errors_or_warnings：错误SQL\n- sys.statements_with_full_table_scans：全表扫描SQL\n\n**日志监控**\n- error log：错误日志\n- slow query log：慢查询\n- general log：全量查询（慎用，影响性能）\n- binlog：数据变更\n\n**容量规划**\n- 监控数据增长趋势\n- 预测何时达到容量瓶颈\n- 提前规划扩容/分库分表",
         "example": "-- 关键状态查询\nSHOW GLOBAL STATUS LIKE 'Threads_connected';  -- 当前连接数\nSHOW GLOBAL STATUS LIKE 'Threads_running';    -- 活跃线程\nSHOW GLOBAL STATUS LIKE 'Slow_queries';        -- 慢查询总数\nSHOW GLOBAL STATUS LIKE 'Questions';           -- 总查询数\nSHOW GLOBAL STATUS LIKE 'Uptime';              -- 运行时间\n-- QPS = Questions / Uptime\n\n-- 缓冲池命中率\nSHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_read_requests';\nSHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_reads';\n-- 命中率 = 1 - reads/read_requests\n\n-- InnoDB 行操作\nSHOW GLOBAL STATUS LIKE 'Innodb_rows%';\n-- rows_read/read, inserted, updated, deleted\n\n-- 连接相关\nSHOW GLOBAL STATUS LIKE 'Aborted%';\nSHOW GLOBAL STATUS LIKE 'Connections';\nSHOW VARIABLES LIKE 'max_connections';\nSHOW STATUS LIKE 'Max_used_connections';\n\n-- 复制状态\nSHOW REPLICA STATUS\\G\n-- 关注 Seconds_Behind_Master, Slave_IO_Running, Slave_SQL_Running\n\n-- performance_schema 锁监控\nSELECT * FROM performance_schema.data_lock_waits;\n\n-- sys 库友好视图\n-- 谁在等待锁\nSELECT * FROM sys.innodb_lock_waits;\n\n-- 全表扫描的 SQL\nSELECT * FROM sys.statements_with_full_table_scans\nLIMIT 10;\n\n-- 冗余索引\nSELECT * FROM sys.schema_redundant_indexes;\n\n-- 未使用的索引\nSELECT * FROM sys.schema_unused_indexes;\n\n-- mysqld_exporter 配置（Prometheus）\n'''\n[client]\nuser=exporter\npassword=xxx\n\n[mysqld]\n# exporter 连接配置\n'''\n# 启动: mysqld_exporter --config.my-cnf=.my.cnf\n# Prometheus 抓取:\n#   - job_name: mysql\n#     static_configs:\n#       - targets: ['localhost:9104']\n\n-- Grafana 常用 PromQL\n-- QPS: rate(mysql_global_status_questions[1m])\n-- 连接数: mysql_global_status_threads_connected\n-- 缓冲池命中率:\n--   1 - rate(mysql_global_status_innodb_buffer_pool_reads[1m])\n--   / rate(mysql_global_status_innodb_buffer_pool_read_requests[1m])\n-- 主从延迟: mysql_global_status_seconds_behind_master\n\n-- 告警示例（Prometheus alerting rules）\n'''\n- alert: MysqlHighConnections\n  expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections > 0.8\n  for: 5m\n  labels: { severity: warning }\n  annotations: { summary: \"MySQL 连接数超80%\" }\n\n- alert: MysqlReplicationLag\n  expr: mysql_global_status_seconds_behind_master > 60\n  for: 5m\n  labels: { severity: critical }\n  annotations: { summary: \"主从延迟超60秒\" }\n'''"
+      },
+      {
+        "id": "mysql-cloud-rds",
+        "title": "云数据库 RDS 与托管服务",
+        "level": "高级",
+        "content": "**云数据库概述**\n- AWS RDS / Aurora、Azure Database、阿里云 RDS、腾讯云 CDB\n- 托管服务：自动备份、监控、补丁、高可用\n- 与自建数据库的对比\n\n**核心特性**\n\n1. **高可用架构**\n   - 主从自动切换（Multi-AZ）\n   - 跨可用区/跨地域容灾\n   - 读写分离（Proxy/中间件）\n\n2. **自动运维**\n   - 自动备份（时间点恢复 PITR）\n   - 自动补丁升级（小版本）\n   - 性能洞察（Performance Insights）\n   - 慢查询自动分析\n\n3. **扩展能力**\n   - 垂直扩展（升降配）\n   - 只读副本（Read Replica）\n   - 分片扩展（Aurora Limitless、PolarDB-X）\n\n4. **安全**\n   - IAM/角色集成\n   - SSL/TLS 强制\n   - 透明数据加密（TDE）\n   - 私有网络/VPC 隔离\n\n**Serverless 数据库**\n- Aurora Serverless / Azure SQL Serverless\n- 自动扩缩容、按使用量计费\n- 适合波动负载、开发测试环境",
+        "example": "# AWS RDS 操作\n\n# 1. 创建 MySQL 实例\naws rds create-db-instance \\\n  --db-instance-identifier mydb \\\n  --db-instance-class db.t3.micro \\\n  --engine mysql \\\n  --master-username admin \\\n  --master-user-password secret123 \\\n  --allocated-storage 20 \\\n  --availability-zone us-east-1a\n\n# 2. 创建只读副本\naws rds create-db-instance-read-replica \\\n  --db-instance-identifier mydb-replica \\\n  --source-db-instance-identifier mydb\n\n# 3. 查看性能洞察\naws rds describe-db-instances --db-instance-identifier mydb\n\n# 4. 自动备份保留期\naws rds modify-db-instance \\\n  --db-instance-identifier mydb \\\n  --backup-retention-period 7 \\\n  --apply-immediately\n\n# 阿里云 RDS\n# aliyun rds DescribeDBInstances\n# aliyun rds CreateDBInstance\n\n# Terraform\n# resource \"aws_db_instance\" \"default\" {\n#   identifier           = \"mydb\"\n#   engine               = \"mysql\"\n#   instance_class       = \"db.t3.micro\"\n#   allocated_storage    = 20\n#   username             = \"admin\"\n#   password             = var.db_password\n#   skip_final_snapshot  = true\n# }"
+      },
+      {
+        "id": "mysql-proxysql",
+        "title": "ProxySQL 与数据库中间件",
+        "level": "高级",
+        "content": "**数据库中间件作用**\n- 读写分离\n- 连接池管理\n- SQL 路由和防火墙\n- 查询缓存\n- 故障转移\n\n**ProxySQL**\n- 高性能 MySQL 代理\n- 规则引擎：基于用户、schema、查询模式的流量路由\n- 连接复用（multiplexing）：减少后端连接数\n- 查询缓存（结果集缓存）\n- 自动故障检测和切换\n\n**MySQL Router**\n- MySQL 官方中间件\n- 集成 InnoDB Cluster\n- 元数据驱动路由\n- 读写分离、负载均衡\n\n**其他中间件**\n- MaxScale（MariaDB）\n- MyCAT / ShardingSphere-Proxy（分库分表）\n- Vitess（YouTube 开源，K8s 原生）\n\n**对比**\n| 特性 | ProxySQL | MySQL Router | ShardingSphere |\n|------|----------|--------------|----------------|\n| 读写分离 | 强 | 中 | 强 |\n| 分库分表 | 无 | 无 | 强 |\n| 查询缓存 | 有 | 无 | 有 |\n| 连接池 | 强 | 弱 | 中 |\n| K8s 友好 | 中 | 中 | 强 |",
+        "example": "# ProxySQL 配置\n\n# 1. 后端服务器\nINSERT INTO mysql_servers(hostgroup_id, hostname, port) \\\n  VALUES (1, 'master.db', 3306), (2, 'slave1.db', 3306), (2, 'slave2.db', 3306);\nLOAD MYSQL SERVERS TO RUNTIME;\nSAVE MYSQL SERVERS TO DISK;\n\n# 2. 用户配置\nINSERT INTO mysql_users(username, password, default_hostgroup) \\\n  VALUES ('app_user', 'pass', 1);\nLOAD MYSQL USERS TO RUNTIME;\n\n# 3. 读写分离规则\nINSERT INTO mysql_query_rules (rule_id, active, match_pattern, destination_hostgroup, apply) \\\n  VALUES (1, 1, '^SELECT.*FOR UPDATE', 1, 1);\nINSERT INTO mysql_query_rules (rule_id, active, match_pattern, destination_hostgroup, apply) \\\n  VALUES (2, 1, '^SELECT', 2, 1);\nLOAD MYSQL QUERY RULES TO RUNTIME;\n\n# 4. 连接池监控\nSHOW STATS MYSQL CONNECTION_POOL;\nSHOW MYSQL STATUS;\n\n# 5. 查询缓存\nUPDATE mysql_query_rules SET cache_ttl=1000 WHERE rule_id=2;\n\n# MySQL Router\nmysqlrouter --bootstrap root@master:3306 --directory=/etc/mysqlrouter\nmysqlrouter --config /etc/mysqlrouter/mysqlrouter.conf"
+      },
+      {
+        "id": "mysql-heat-cold",
+        "title": "MySQL 冷热分离与归档策略",
+        "level": "高级",
+        "content": "**数据生命周期管理**\n- 热数据：频繁访问，SSD/内存数据库\n- 温数据：偶尔访问，普通磁盘\n- 冷数据：极少访问，对象存储/归档\n\n**冷热分离方案**\n\n1. **应用层双写**\n   - 写入时同时写热库和冷库\n   - 读取优先热库，未命中查冷库\n   - 逻辑复杂，一致性难保证\n\n2. **中间件路由**\n   - 根据时间戳/条件自动路由\n   - ShardingSphere、MyCAT 支持\n\n3. **分区表 + 表空间管理**\n   - 按时间分区\n   - 旧分区导出到慢存储\n   - 或 DROP PARTITION 归档\n\n4. ** Canal / Debezium 同步**\n   - 实时捕获 binlog\n   - 同步到 ClickHouse / HBase / OSS\n   - 热库删除，冷库保留\n\n**归档策略**\n- 逻辑归档：mysqldump / mydumper 导出\n- 物理归档：xtrabackup 备份旧分区\n- 归档到对象存储：S3 / OSS / MinIO\n- 使用 pt-archiver 低影响归档\n\n**压缩与列存**\n- InnoDB 透明页压缩\n- MyRocks（RocksDB 引擎）：高压缩比\n- 归档到 ClickHouse / Doris（列式分析）",
+        "example": "# 冷热分离实践\n\n# 1. 时间分区表\nCREATE TABLE orders (\n  id BIGINT PRIMARY KEY,\n  created_at DATETIME,\n  data JSON,\n  KEY idx_created (created_at)\n) PARTITION BY RANGE (YEAR(created_at)) (\n  PARTITION p2022 VALUES LESS THAN (2023),\n  PARTITION p2023 VALUES LESS THAN (2024),\n  PARTITION p2024 VALUES LESS THAN (2025)\n);\n\n# 2. 导出旧分区（归档）\nALTER TABLE orders EXCHANGE PARTITION p2022 WITH TABLE orders_2022_archive;\nmysqldump mydb orders_2022_archive > orders_2022.sql\n# 上传至 OSS/S3\naws s3 cp orders_2022.sql s3://backup-bucket/\n\n# 3. pt-archiver 低影响归档\npt-archiver \\\n  --source h=hot-db,D=mydb,t=orders \\\n  --dest h=cold-db,D=archive,t=orders \\\n  --where \"created_at < DATE_SUB(NOW(), INTERVAL 1 YEAR)\" \\\n  --limit 1000 \\\n  --commit-each \\\n  --no-delete\n\n# 4. 中间件路由配置（ShardingSphere）\n# 按 created_at 月份路由到不同数据源\n# 近3个月 -> 热库，历史 -> 冷库"
+      },
+      {
+        "id": "mysql-vector",
+        "title": "MySQL 向量扩展与 AI 应用",
+        "level": "高级",
+        "content": "**向量数据库背景**\n- AI 大模型时代，向量检索成为核心能力\n- 文本/图像/音频 embedding 为高维向量\n- 相似度检索：余弦相似度、欧氏距离、内积\n\n**MySQL 向量方案**\n\n1. **pgvector（PostgreSQL）**\n   - 业界最成熟的开源向量扩展\n   - 但非 MySQL 生态\n\n2. **MySQL 向量功能（MySQL 9.0 预览）**\n   - VECTOR 数据类型\n   - 向量距离函数\n   - 预计 9.x 正式版完善\n\n3. **MySQL + 专用向量引擎**\n   - MyScale：基于 ClickHouse + MySQL 协议\n   - TiDB Vector：TiDB 的向量索引\n   - 通过 Federated 引擎连接专用向量库\n\n4. **应用层方案**\n   - MySQL 存储元数据\n   - Milvus / Pinecone / Weaviate 存储向量\n   - 先查向量库获 ID，再查 MySQL 获详情\n\n**向量索引算法**\n- IVF（Inverted File Index）：聚类 + 倒排\n- HNSW（Hierarchical Navigable Small World）：图索引，高效近似最近邻\n- PQ（Product Quantization）：压缩向量",
+        "example": "# MySQL 9.0 VECTOR 类型（预览）\nCREATE TABLE embeddings (\n  id INT PRIMARY KEY,\n  doc_id VARCHAR(64),\n  vec VECTOR(1536)  -- OpenAI embedding 维度\n);\n\n# 插入向量\nINSERT INTO embeddings VALUES (1, 'doc1', STRING_TO_VECTOR('[0.1, 0.2, ...]'));\n\n# 向量距离查询\nSELECT id, VEC_DISTANCE_EUCLIDEAN(vec, STRING_TO_VECTOR('[0.1, 0.2, ...]')) AS dist\nFROM embeddings\nORDER BY dist\nLIMIT 10;\n\n# 实际生产：MySQL + Milvus\n# 1. Milvus 存储向量并创建 HNSW 索引\n# 2. 相似度搜索返回 ID 列表\n# 3. MySQL IN 查询补全元数据\nSELECT * FROM documents WHERE doc_id IN ('id1', 'id2', 'id3');\n\n# TiDB Vector 示例\nCREATE TABLE docs (\n  id INT PRIMARY KEY,\n  content TEXT,\n  embedding VECTOR(768)\n);\nCREATE VECTOR INDEX idx_vec ON docs(embedding);\n\nSELECT * FROM docs\nORDER BY VEC_COSINE_DISTANCE(embedding, '[...]')\nLIMIT 5;"
+      },
+      {
+        "id": "mysql-mgr",
+        "title": "MySQL Group Replication 与 InnoDB Cluster",
+        "level": "高级",
+        "content": "**MySQL 高可用演进**\n- 异步复制 -> 半同步 -> Group Replication -> InnoDB Cluster\n\n**Group Replication（MGR）**\n- 基于 Paxos 的组通信\n- 单主模式（Single-Primary）或多主模式（Multi-Primary）\n- 自动成员管理和故障检测\n- 自动故障转移（需配合 Router）\n\n**InnoDB Cluster**\n- MySQL Shell + Group Replication + MySQL Router\n- 官方推荐的高可用方案\n- 一键部署和管理\n\n**架构组件**\n\n1. **MySQL Shell**\n   - JavaScript/Python 脚本接口\n   - dba.createCluster() 创建集群\n   - cluster.addInstance() 添加节点\n\n2. **Group Replication**\n   - 数据强一致（多数派提交）\n   - 写扩展性有限（单主模式）\n   - 网络分区处理： minority 自动退服\n\n3. **MySQL Router**\n   - 应用透明连接\n   - 自动路由到主节点（写）或从节点（读）\n   - 元数据驱动\n\n**对比传统主从**\n- 主从：异步延迟、手动切换、脑裂风险\n- MGR：强一致、自动切换、无脑裂",
+        "example": "# InnoDB Cluster 部署\n\n# 1. 配置实例（每个节点）\n# my.cnf\n# server_id=1\n# gtid_mode=ON\n# enforce_gtid_consistency=ON\n# binlog_format=ROW\n# transaction_write_set_extraction=XXHASH64\n# loose-group_replication_group_name=\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\"\n\n# 2. MySQL Shell 创建集群\nmysqlsh root@primary:3306\n\njs> dba.configureInstance('root@primary:3306')\njs> var cluster = dba.createCluster('myCluster')\njs> cluster.addInstance('root@secondary1:3306')\njs> cluster.addInstance('root@secondary2:3306')\njs> cluster.status()\n\n# 3. 查看集群状态\njs> cluster.describe()\njs> cluster.status()\n# {\n#   \"clusterName\": \"myCluster\",\n#   \"defaultReplicaSet\": {\n#     \"name\": \"default\",\n#     \"primary\": \"primary:3306\",\n#     \"status\": \"OK\",\n#     \"topology\": { ... }\n#   }\n# }\n\n# 4. MySQL Router 引导\nmysqlrouter --bootstrap root@primary:3306 --directory=/etc/mysqlrouter\n\n# 5. 应用连接 Router\nmysql -u app -P 6446 -h router_host  # 读写端口\nmysql -u app -P 6447 -h router_host  # 只读端口"
+      },
+      {
+        "id": "mysql-observability",
+        "title": "MySQL 可观测性与智能诊断",
+        "level": "高级",
+        "content": "**数据库可观测性三大支柱**\n- Metrics（指标）：QPS、延迟、连接数、缓存命中率\n- Logs（日志）：慢查询、错误日志、审计日志\n- Traces（链路）：SQL 执行链路追踪\n\n**监控工具**\n\n1. **Prometheus + Grafana**\n   - mysqld_exporter 采集指标\n   - 官方/社区 Dashboard\n   - 告警规则：连接数、复制延迟、慢查询增长\n\n2. **PMM（Percona Monitoring and Management）**\n   - 开源数据库监控平台\n   - Query Analytics（QAN）\n   - 内置 Advisor 建议\n\n3. **MySQL Enterprise Monitor**\n   - 官方商业方案\n\n4. **云厂商监控**\n   - AWS RDS Performance Insights\n   - 阿里云 DAS（数据库自治服务）\n   - 腾讯云 DBbrain\n\n**智能诊断**\n- 自动索引建议\n- SQL 优化建议\n- 异常检测（基线偏离）\n- 容量预测\n\n**慢查询治理**\n- pt-query-digest 分析模式\n- 可视化火焰图（bpftrace）\n- 全链路追踪：OpenTelemetry + ProxySQL",
+        "example": "# MySQL 可观测实战\n\n# 1. mysqld_exporter 配置\n# my.cnf 启用状态统计\n# [mysqld]\n# performance_schema = ON\n# innodb_monitor_enable = all\n\n# docker run -d \\\n#   -p 9104:9104 \\\n#   -e DATA_SOURCE_NAME=\"user:pass@(db:3306)/\" \\\n#   prom/mysqld-exporter\n\n# 2. Prometheus 抓取\n# scrape_configs:\n#   - job_name: 'mysql'\n#     static_configs:\n#       - targets: ['db-exporter:9104']\n\n# 3. Grafana Dashboard\n# 导入 ID 7362（MySQL Overview）\n\n# 4. PMM 查询分析\npmm-admin add mysql --username=root --password=pass --server-url=https://pmm-server\n# Web 界面查看 QAN、Advisor\n\n# 5. 使用 bpftrace 跟踪慢查询内核路径\nbpftrace -e '\ntracepoint:mysql:query__exec__start\n/ str(args->query) != \"\"/\n{\n    @start[tid] = nsecs;\n    @query[tid] = str(args->query);\n}\n\ntracepoint:mysql:query__exec__done\n/@start[tid]/\n{\n    @latency_us = hist((nsecs - @start[tid]) / 1000);\n    delete(@start[tid]); delete(@query[tid]);\n}\n'\n\n# 6. OpenTelemetry 追踪\n# 在应用端配置 OTel JDBC Driver\n# 查看 SQL 执行全链路：应用 -> 网络 -> MySQL -> 磁盘"
+      },
+      {
+        "id": "mysql-rocksdb",
+        "title": "MyRocks 与 RocksDB 引擎",
+        "level": "高级",
+        "content": "**MyRocks 概述**\n- Facebook 基于 RocksDB 开发的 MySQL 存储引擎\n- 相比 InnoDB：更高压缩比、更低写入放大\n- 适合写密集型、空间敏感场景\n\n**RocksDB 核心特性**\n- LSM-Tree（Log-Structured Merge Tree）\n- 顺序写优化，极高写入吞吐\n- 分层压缩（Leveled Compaction）\n- 空间放大 vs 读取放大权衡\n\n**MyRocks vs InnoDB**\n| 特性 | InnoDB | MyRocks |\n|------|--------|---------|\n| 存储结构 | B+Tree | LSM-Tree |\n| 压缩比 | 2x | 3-5x |\n| 写入放大 | 高 | 低 |\n| 读取延迟 | 稳定 | 可能退化（compaction） |\n| 范围读 | 优秀 | 良好 |\n| TTL 支持 | 需应用实现 | 原生支持 |\n\n**适用场景**\n- 日志/时序数据（高写入、可接受读取波动）\n- 大规模数据归档（高压缩节省成本）\n- SSD 寿命敏感场景（减少写入放大）\n- 不适合：高并发随机读、小事务 OLTP\n\n**运维注意**\n- compaction 调优（write stall 问题）\n- bloom filter 优化点查\n- 监控 L0->L1 compaction 压力",
+        "example": "# MyRocks 使用\n\n# 1. 安装（MariaDB 10.2+ 或 Percona Server）\nINSTALL PLUGIN rocksdb SONAME 'ha_rocksdb.so';\n\n# 2. 创建表\nCREATE TABLE events (\n  id BIGINT PRIMARY KEY,\n  ts TIMESTAMP,\n  data BLOB\n) ENGINE=RocksDB\n  DEFAULT CHARSET=latin1\n  COMMENT 'rocksdb_ttl=3600';  -- TTL 1小时\n\n# 3. 查看压缩比\nSELECT\n  ENGINE,\n  SUM(DATA_LENGTH + INDEX_LENGTH) / 1024 / 1024 AS size_mb,\n  SUM(DATA_LENGTH) / 1024 / 1024 AS data_mb\nFROM information_schema.TABLES\nWHERE TABLE_SCHEMA = 'mydb'\nGROUP BY ENGINE;\n\n# 4. RocksDB 内部状态\nSHOW ENGINE ROCKSDB STATUS;\n\n# 5. 调优参数\n# rocksdb_max_background_jobs = 8\n# rocksdb_rate_limiter_bytes_per_sec = 100MB\n# rocksdb_write_buffer_size = 64MB\n\n# 6. 监控 compaction\n# 关注 RDB_COMPACTION_STATS\n# L0 文件过多会导致 read/write stall"
+      },
+      {
+        "id": "mysql-new-versions",
+        "title": "MySQL 8.4/9.0 新特性展望",
+        "level": "高级",
+        "content": "**MySQL 版本演进**\n- MySQL 8.0（2018）：窗口函数、CTE、JSON、直方图\n- MySQL 8.4（LTS）：稳定长期支持版\n- MySQL 9.0（Innovation）：快速迭代，新特性试验场\n\n**MySQL 8.4 关键特性**\n\n1. **认证插件变更**\n   - caching_sha2_password 成为默认\n   - mysql_native_password 不再默认启用\n   - 提升安全性\n\n2. **复制改进**\n   - 组复制增强\n   - 克隆插件改进\n   - 并行复制优化\n\n3. **优化器增强**\n   - 直方图改进\n   - 多范围读（MRR）优化\n\n**MySQL 9.0 新特性**\n\n1. **VECTOR 类型**\n   - 原生向量数据类型支持\n   - 为 AI 应用提供基础\n\n2. **JavaScript 存储程序（9.0 预览）**\n   - 使用 JavaScript 编写存储过程/函数\n   - 通过 GraalVM 集成\n\n3. **性能模式增强**\n   - 更细粒度等待事件\n   - 增强的语句采样\n\n4. **JSON 功能增强**\n   - 更多 JSON 函数\n   - 部分更新优化\n\n**升级注意事项**\n- 8.0 -> 8.4：主要平滑，注意认证插件\n- 8.4 -> 9.0：创新版，生产环境需谨慎\n- 使用 MySQL Shell Upgrade Checker 预检",
+        "example": "# MySQL 9.0 新特性预览\n\n# 1. VECTOR 类型\nCREATE TABLE items (\n  id INT PRIMARY KEY,\n  name VARCHAR(100),\n  embedding VECTOR(768)\n);\n\n# 2. JavaScript 存储过程（预览）\nCREATE FUNCTION js_add(a INT, b INT)\n  RETURNS INT\n  LANGUAGE JAVASCRIPT\nAS \"\"\"\n  return a + b;\n\"\"\";\n\nSELECT js_add(1, 2);\n\n# 3. 升级检查\nmysqlsh -- util check-for-server-upgrade \\\n  --user=root --host=localhost\n\n# 4. 认证插件兼容性\n# 旧客户端连接 8.4+ 可能需要升级驱动\n# 或显式启用 mysql_native_password\n# [mysqld]\n# authentication_policy = 'mysql_native_password,caching_sha2_password'\n\n# 5. 克隆插件快速构建副本\nCLONE INSTANCE FROM 'root@source:3306' IDENTIFIED BY 'pass';\n\n# 6. 直方图自动更新\nANALYZE TABLE orders UPDATE HISTOGRAM ON status, region WITH 100 BUCKETS;"
       }
     ]
   },
@@ -2215,6 +2551,62 @@ const KNOWLEDGE = {
         "level": "进阶",
         "content": "**常见去重场景**\n- 完全重复行\n- 业务键重复（如同用户多条记录）\n- 近似重复（大小写/空格差异）\n\n**查找重复**\n```sql\n-- 找重复的键\nSELECT email, COUNT(*) AS cnt\nFROM users\nGROUP BY email\nHAVING COUNT(*) > 1;\n```\n\n**删除重复保留一条**\n\n**方法1：ROW_NUMBER（推荐，8.0+）**\n```sql\nDELETE FROM users\nWHERE id NOT IN (\n  SELECT id FROM (\n    SELECT id, ROW_NUMBER() OVER(PARTITION BY email ORDER BY id) AS rn\n    FROM users\n  ) t WHERE rn = 1\n);\n```\n\n**方法2：GROUP BY + MIN(id)**\n```sql\nDELETE FROM users\nWHERE id NOT IN (\n  SELECT MIN(id) FROM users GROUP BY email\n);\n```\n\n**方法3：自连接**\n```sql\nDELETE u1 FROM users u1\nJOIN users u2 ON u1.email = u2.email AND u1.id > u2.id;\n-- 保留 id 最小的\n```\n\n**方法4：临时表**\n- 创建临时表存去重结果\n- TRUNCATE 原表\n- 插回\n- 适合大量重复\n\n**DISTINCT vs GROUP BY**\n- DISTINCT：去重显示\n- GROUP BY：去重 + 聚合\n- 性能相近\n\n**数据清洗**\n- 去除空格：TRIM/LTRIM/RTRIM\n- 大小写统一：UPPER/LOWER\n- NULL 处理：COALESCE/IFNULL\n- 异常值过滤：WHERE 条件\n- 类型转换：CAST\n\n**字符串清洗**\n- TRIM(name)：去首尾空格\n- REPLACE(name, '  ', ' ')：多个空格变一个\n- REGEXP_REPLACE：正则替换\n\n**数据校验**\n- 邮箱格式：REGEXP\n- 手机号长度\n- 日期有效性\n\n**批量更新清洗**\n- UPDATE ... SET name = TRIM(name) WHERE name != TRIM(name)\n- 分批避免大事务",
         "example": "-- 查找重复\nSELECT email, COUNT(*) AS cnt, GROUP_CONCAT(id) AS dup_ids\nFROM users\nGROUP BY email\nHAVING COUNT(*) > 1;\n\n-- 删除重复保留 id 最小（ROW_NUMBER 方式，推荐）\n-- MySQL 8.0+\nWITH dups AS (\n  SELECT id,\n    ROW_NUMBER() OVER(PARTITION BY email ORDER BY id) AS rn\n  FROM users\n)\nDELETE FROM users\nWHERE id IN (SELECT id FROM dups WHERE rn > 1);\n\n-- 方法2：自连接（保留最小 id）\nDELETE u1 FROM users u1\nINNER JOIN users u2\n  ON u1.email = u2.email AND u1.id > u2.id;\n\n-- 方法3：临时表（适合大量重复）\nCREATE TABLE users_dedup AS\nSELECT * FROM users WHERE id IN (\n  SELECT MIN(id) FROM users GROUP BY email\n);\nTRUNCATE TABLE users;\nINSERT INTO users SELECT * FROM users_dedup;\nDROP TABLE users_dedup;\n\n-- DISTINCT 去重显示\nSELECT DISTINCT department FROM employees ORDER BY department;\nSELECT DISTINCT city, country FROM users;\n\n-- 字符串清洗\n-- 去首尾空格\nUPDATE users SET name = TRIM(name) WHERE name != TRIM(name);\n-- 多空格变单空格\nUPDATE articles SET content = REGEXP_REPLACE(content, ' +', ' ');\n-- 统一大小写\nUPDATE users SET email = LOWER(TRIM(email));\n-- 去除不可见字符\nUPDATE users SET name = TRIM(BOTH '\\\\n' FROM name);\n\n-- NULL 处理\n-- 填充默认值\nUPDATE users SET nickname = '匿名' WHERE nickname IS NULL;\n-- 查询时替换\nSELECT COALESCE(nickname, name, 'unknown') AS display FROM users;\n\n-- 异常值过滤\nSELECT * FROM orders\nWHERE amount > 0\n  AND amount < 1000000  -- 过滤异常金额\n  AND created_at <= NOW()\n  AND user_id IS NOT NULL;\n\n-- 邮箱格式校验\nSELECT * FROM users\nWHERE email NOT REGEXP '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\\\.[A-Za-z]{2,}$';\n-- 手机号校验\nSELECT * FROM users\nWHERE phone NOT REGEXP '^1[3-9][0-9]{9}$';\n\n-- 找出可能重复的近似数据（大小写/空格差异）\nSELECT LOWER(TRIM(email)) AS normalized, COUNT(*) AS cnt\nFROM users\nGROUP BY LOWER(TRIM(email))\nHAVING COUNT(*) > 1;\n\n-- 合并重复用户数据（保留主记录，合并附属信息）\n-- 把重复账号的订单转移到保留账号\nUPDATE orders SET user_id = (\n  SELECT MIN(id) FROM users u2 WHERE u2.email = (\n    SELECT email FROM users WHERE id = orders.user_id\n  )\n)\nWHERE user_id IN (\n  SELECT id FROM users WHERE id NOT IN (\n    SELECT MIN(id) FROM users GROUP BY email\n  )\n);\n-- 然后删除重复用户\n\n-- 数据采样检查\nSELECT * FROM users ORDER BY RAND() LIMIT 100;  -- 随机抽样\n-- 注意 RAND() 性能差，大表用：\nSELECT * FROM users WHERE id >= (\n  SELECT FLOOR(RAND() * (SELECT MAX(id) FROM users))\n) LIMIT 100;"
+      },
+      {
+        "id": "sql-data-warehouse",
+        "title": "现代数据仓库 SQL（Snowflake/BigQuery）",
+        "level": "高级",
+        "content": "**云数据仓库特点**\n- 存算分离：存储（对象存储）与计算独立扩展\n- 弹性伸缩：按需分配计算资源\n- 零运维：自动分区、自动优化、自动备份\n\n**Snowflake 核心概念**\n\n1. **存储层**\n   - 基于对象存储（S3/Azure Blob/GCS）\n   - 列式存储 + 微分区（Micro-partitions）\n   - 自动压缩和克隆（Zero-copy cloning）\n\n2. **计算层（Virtual Warehouse）**\n   - 独立的计算集群\n   - 按秒计费，自动启停\n   - 多集群弹性扩展（Multi-cluster）\n\n3. **云服务层**\n   - 元数据管理、查询优化、认证\n\n**BigQuery 核心概念**\n- Serverless，无需管理集群\n- 按查询扫描数据量计费\n- 分区（Partitioning）和聚簇（Clustering）优化成本\n- 物化视图（Materialized Views）\n- 支持流式插入\n\n**现代数仓 SQL 特性**\n- QUALIFY：窗口函数过滤（替代子查询）\n- FLATTEN/UNNEST：处理半结构化数据\n- 时间旅行（Time Travel）：查询历史数据\n- 零拷贝克隆：CLONE 表/数据库",
+        "example": "-- Snowflake SQL\n-- 1. 创建虚拟仓库\nCREATE WAREHOUSE dev_wh WITH\n  WAREHOUSE_SIZE = 'SMALL'\n  AUTO_SUSPEND = 300\n  AUTO_RESUME = TRUE;\n\n-- 2. 零拷贝克隆（瞬间完成，不占用额外存储）\nCREATE TABLE orders_clone CLONE orders;\n\n-- 3. 时间旅行查询\nSELECT * FROM orders AT (OFFSET => -60*5);  -- 5分钟前\nSELECT * FROM orders BEFORE (STATEMENT => 'query_id');\n\n-- 4. QUALIFY（过滤窗口函数结果）\nSELECT dept, name, salary,\n  RANK() OVER (PARTITION BY dept ORDER BY salary DESC) AS rnk\nFROM employees\nQUALIFY rnk <= 3;\n\n-- BigQuery SQL\n-- 5. 分区表（按日期）\nCREATE TABLE project.dataset.events (\n  event_id STRING,\n  event_time TIMESTAMP,\n  payload JSON\n)\nPARTITION BY DATE(event_time);\n\n-- 6. 聚簇优化\nCREATE TABLE orders (\n  order_id INT64,\n  customer_id INT64,\n  order_date DATE\n)\nPARTITION BY order_date\nCLUSTER BY customer_id;\n\n-- 7. 数组展开\nSELECT name, tag\nFROM users, UNNEST(tags) AS tag;\n\n-- 8. 物化视图\nCREATE MATERIALIZED VIEW project.dataset.mv_daily_sales AS\nSELECT DATE(order_time) AS day, SUM(amount) AS total\nFROM orders\nGROUP BY 1;"
+      },
+      {
+        "id": "sql-lakehouse",
+        "title": "Lakehouse 架构与 SQL 分析",
+        "level": "高级",
+        "content": "**Lakehouse 定义**\n- Databricks 提出的架构范式\n- 数据湖（Data Lake）+ 数据仓库（Data Warehouse）的融合\n- 低成本存储（对象存储）+ 高性能分析（列式格式 + 元数据层）\n\n**核心组件**\n\n1. **对象存储**\n   - Delta Lake / Iceberg / Hudi：表格式（Table Format）\n   - 基于 Parquet 文件\n   - ACID 事务、版本控制、时间旅行\n\n2. **元数据层**\n   - Delta Log / Iceberg Manifest\n   - 记录文件列表、分区信息、统计信息\n   - 使对象存储具备表语义\n\n3. **计算引擎**\n   - Spark / Trino / Dremio / DuckDB\n   - 读取表格式元数据，执行查询\n\n**Lakehouse SQL 能力**\n- ACID 事务：MERGE、UPDATE、DELETE\n- Schema 演化：添加/修改列\n- 增量处理：读取变更数据\n- 统一批流：同一套 SQL，批处理和流处理\n\n**对比传统方案**\n| 特性 | 数据湖 | 数据仓库 | Lakehouse |\n|------|--------|----------|-----------|\n| 存储成本 | 低 | 高 | 低 |\n| 格式灵活 | 高 | 低 | 高 |\n| ACID | 无 | 有 | 有 |\n| Schema 强制 | 无 | 强 | 灵活 |\n| 性能 | 低 | 高 | 高 |",
+        "example": "-- Delta Lake SQL (Spark SQL / Databricks)\n\n-- 1. 创建 Delta 表\nCREATE TABLE events USING DELTA\nLOCATION 's3://bucket/events/';\n\n-- 2. MERGE（UPSERT）\nMERGE INTO target t\nUSING source s\nON t.id = s.id\nWHEN MATCHED THEN UPDATE SET *\nWHEN NOT MATCHED THEN INSERT *;\n\n-- 3. 时间旅行\nSELECT * FROM events TIMESTAMP AS OF '2024-01-01';\nSELECT * FROM events VERSION AS OF 1;\n\n-- 4. 优化（文件合并）\nOPTIMIZE events ZORDER BY (user_id);\n\n-- 5. 清理旧版本\nVACUUM events RETAIN 168 HOURS;\n\n-- Iceberg SQL (Trino / Spark)\nCREATE TABLE iceberg_table (\n  id BIGINT,\n  data STRING,\n  ts TIMESTAMP\n) USING iceberg\nPARTITIONED BY (days(ts));\n\n-- Schema 演化\nALTER TABLE iceberg_table ADD COLUMN new_col INT;\n\n-- DuckDB 直接查询 Parquet / Delta\nSELECT * FROM read_parquet('s3://bucket/*.parquet');\nSELECT * FROM delta_scan('s3://bucket/delta-table/');"
+      },
+      {
+        "id": "sql-vector-db",
+        "title": "向量数据库与 AI 检索 SQL",
+        "level": "高级",
+        "content": "**向量检索基础**\n- Embedding：将文本/图像/音频映射到高维向量空间\n- 相似度度量：余弦相似度、欧氏距离、点积\n- 近似最近邻（ANN）：HNSW、IVF_FLAT、IVF_PQ\n\n**主流向量数据库**\n\n1. **Milvus / Zilliz**\n   - 专为向量设计\n   - 分布式、高性能\n   - 支持多种索引类型\n\n2. **Pinecone**\n   - 全托管 SaaS\n   - 无需调参\n   - 元数据过滤\n\n3. **Weaviate**\n   - 开源，GraphQL + 向量\n   - 模块化 AI 集成\n\n4. **pgvector**\n   - PostgreSQL 扩展\n   - 最成熟的 SQL 向量方案\n\n5. **Chroma / Qdrant**\n   - 轻量级，适合小型项目\n\n**混合检索**\n- 向量相似度 + 元数据过滤\n- 重排序（Rerank）：粗排（向量）+ 精排（Cross-encoder）\n- RAG（检索增强生成）：向量检索 + LLM 生成",
+        "example": "-- pgvector SQL\n-- 1. 启用扩展\nCREATE EXTENSION vector;\n\n-- 2. 创建向量表\nCREATE TABLE documents (\n  id SERIAL PRIMARY KEY,\n  content TEXT,\n  embedding vector(1536)\n);\n\n-- 3. 创建 HNSW 索引\nCREATE INDEX ON documents USING hnsw (embedding vector_cosine_ops)\nWITH (m = 16, ef_construction = 64);\n\n-- 4. 向量相似度查询\nSELECT id, content,\n  1 - (embedding <=> '[0.1, 0.2, ...]') AS cosine_similarity\nFROM documents\nWHERE category = 'tech'  -- 元数据过滤\nORDER BY embedding <=> '[0.1, 0.2, ...]'\nLIMIT 10;\n\n-- Milvus (通过 SDK，伪 SQL)\n-- CREATE COLLECTION docs (\n--   id INT64,\n--   content VARCHAR,\n--   embedding FLOAT_VECTOR(1536)\n-- );\n-- CREATE INDEX idx ON docs(embedding) USING HNSW;\n\n-- Weaviate GraphQL\n-- {\n--   Get {\n--     Document(\n--       nearVector: {vector: [0.1, 0.2, ...]}\n--       where: {path: [\"category\"], operator: Equal, valueText: \"tech\"}\n--     ) {\n--       content\n--       _additional { certainty }\n--     }\n--   }\n-- }\n\n-- RAG 流程\n-- 1. 用户查询 -> Embedding -> 向量检索 -> Top-K 文档\n-- 2. 构建 Prompt = 系统提示 + 检索文档 + 用户问题\n-- 3. LLM 生成回答"
+      },
+      {
+        "id": "sql-streaming",
+        "title": "流处理 SQL（Flink SQL / Kafka Streams）",
+        "level": "高级",
+        "content": "**流处理 SQL 理念**\n- 用 SQL 处理实时数据流\n- 统一批处理和流处理语义\n- 事件时间（Event Time） vs 处理时间（Processing Time）\n\n**Apache Flink SQL**\n- 真正的流处理引擎\n- 精确一次（Exactly-Once）语义\n- 基于事件时间的窗口\n- 状态后端：RocksDB / Heap\n\n**核心概念**\n\n1. **动态表（Dynamic Table）**\n   - 流 = 表的 changelog\n   - INSERT/UPDATE/DELETE 持续流入\n\n2. **窗口类型**\n   - TUMBLE：滚动窗口（固定大小，不重叠）\n   - HOP：滑动窗口（固定大小，可重叠）\n   - SESSION：会话窗口（活动间隙）\n   - OVER：逐行计算窗口\n\n3. **Watermark**\n   - 容忍乱序数据\n   - 触发窗口计算\n\n4. **CDC（Change Data Capture）**\n   - Debezium + Kafka + Flink\n   - 数据库变更实时流入流处理\n\n**其他流 SQL**\n- Kafka Streams / ksqlDB\n- Spark Structured Streaming\n- Materialize / RisingWave（流式物化视图）",
+        "example": "-- Flink SQL\n\n-- 1. 创建 Kafka 源表\nCREATE TABLE user_events (\n  user_id STRING,\n  event_type STRING,\n  amount DECIMAL(10,2),\n  event_time TIMESTAMP(3),\n  WATERMARK FOR event_time AS event_time - INTERVAL '5' SECOND\n) WITH (\n  'connector' = 'kafka',\n  'topic' = 'user_events',\n  'properties.bootstrap.servers' = 'kafka:9092',\n  'format' = 'json'\n);\n\n-- 2. 滚动窗口聚合\nSELECT\n  TUMBLE_START(event_time, INTERVAL '1' HOUR) AS window_start,\n  TUMBLE_END(event_time, INTERVAL '1' HOUR) AS window_end,\n  event_type,\n  COUNT(*) AS cnt,\n  SUM(amount) AS total\nFROM user_events\nGROUP BY\n  TUMBLE(event_time, INTERVAL '1' HOUR),\n  event_type;\n\n-- 3. Top-N（每组取最新）\nSELECT * FROM (\n  SELECT *,\n    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY event_time DESC) AS rn\n  FROM user_events\n) WHERE rn <= 3;\n\n-- 4. CDC 同步（MySQL -> Kafka -> Flink）\nCREATE TABLE mysql_orders (\n  id INT,\n  status STRING,\n  PRIMARY KEY (id) NOT ENFORCED\n) WITH (\n  'connector' = 'mysql-cdc',\n  'hostname' = 'mysql',\n  'database-name' = 'db',\n  'table-name' = 'orders'\n);\n\n-- RisingWave（流式物化视图）\nCREATE MATERIALIZED VIEW mv_hourly_sales AS\nSELECT window_start, SUM(amount)\nFROM TUMBLE(events, event_time, INTERVAL '1' HOUR)\nGROUP BY window_start;"
+      },
+      {
+        "id": "sql-data-governance",
+        "title": "数据治理与 SQL 血缘追踪",
+        "level": "高级",
+        "content": "**数据治理核心**\n- 数据质量：准确性、完整性、一致性\n- 元数据管理：数据字典、业务术语\n- 数据血缘：数据从哪来、到哪去、如何转换\n- 数据安全：分级分类、脱敏、权限\n- 生命周期管理：归档、销毁\n\n**SQL 血缘追踪**\n\n1. **静态血缘（SQL 解析）**\n   - 解析 SQL 语句提取表/列依赖\n   - 工具：Apache Atlas、DataHub、OpenLineage\n   - 支持复杂场景：CTE、子查询、视图嵌套\n\n2. **动态血缘（执行追踪）**\n   - 通过执行日志/Hook 追踪实际数据流\n   - 更精确但开销大\n\n**数据质量 SQL**\n- 空值率：COUNT(*) - COUNT(col) / COUNT(*)\n- 唯一性：COUNT(DISTINCT col) / COUNT(*)\n- 范围检查：MIN/MAX/PERCENTILE\n- 格式验证：正则匹配\n- 参照完整性：外键/关联检查\n\n**数据分类与标签**\n- 敏感字段自动识别（PII：姓名、身份证、手机号）\n- 列级/行级权限控制\n- 动态数据脱敏：根据用户角色返回脱敏数据",
+        "example": "-- 数据质量检查 SQL\n\n-- 1. 空值率检查\nSELECT\n  'users.phone' AS column_name,\n  COUNT(*) AS total_rows,\n  COUNT(phone) AS non_null,\n  ROUND((COUNT(*) - COUNT(phone)) * 100.0 / COUNT(*), 2) AS null_pct\nFROM users;\n\n-- 2. 唯一性检查\nSELECT\n  COUNT(*) AS total,\n  COUNT(DISTINCT email) AS unique_emails,\n  ROUND(COUNT(DISTINCT email) * 100.0 / COUNT(*), 2) AS uniqueness_pct\nFROM users;\n\n-- 3. 数值范围异常\nSELECT * FROM orders\nWHERE amount < 0 OR amount > 1000000;\n\n-- 4. 格式验证（手机号）\nSELECT * FROM users\nWHERE phone IS NOT NULL AND phone NOT REGEXP '^1[3-9][0-9]{9}$';\n\n-- 5. 数据血缘查询（DataHub/OpenLineage）\n-- 查询某张表的上游依赖\n-- MATCH (a:Dataset)-[:DOWNSTREAM_OF]->(b:Dataset {name: 'orders'})\n-- RETURN a.name\n\n-- 6. 动态脱敏（PostgreSQL row-level security + 视图）\nCREATE VIEW users_public AS\nSELECT\n  id,\n  name,\n  CASE WHEN current_user = 'admin' THEN phone ELSE CONCAT(LEFT(phone,3),'****',RIGHT(phone,4)) END AS phone\nFROM users;\n\n-- 7. 数据分类标记\n-- UPDATE information_schema.columns\n-- SET tags = '[\"PII\", \"SENSITIVE\"]'\n-- WHERE column_name IN ('phone', 'id_card', 'email');"
+      },
+      {
+        "id": "sql-performance-modern",
+        "title": "现代数据库 SQL 性能优化",
+        "level": "高级",
+        "content": "**现代 SQL 优化技术**\n\n1. **向量化执行**\n   - 批量处理数据（一次处理 1024/4096 行）\n   - 减少解释器开销\n   - DuckDB / ClickHouse / Snowflake 采用\n\n2. **代码生成（Code Generation）**\n   - 为查询生成专门的机器码\n   - 消除虚函数调用\n   - Spark Tungsten / HyPer / Umbra\n\n3. **自适应查询执行（AQE）**\n   - Spark 3.0+：运行时优化 Join 策略、分区合并\n   - 根据实际统计调整计划\n\n4. **查询结果缓存**\n   - 云数仓自动缓存热点查询结果\n   - 物化视图自动刷新\n\n5. **索引新技术**\n   - Learned Index：用机器学习替代 B+Tree\n   - Filtered Index：带条件的索引\n   - BRIN：块范围索引（时序数据）\n\n6. **执行引擎演进**\n   - Pull 模型（传统） -> Push 模型（向量化）\n   - Volcano -> Vectorized -> CodeGen\n\n**优化诊断**\n- EXPLAIN ANALYZE：实际执行时间\n- Query Profile：算子级耗时\n- 等待事件分析",
+        "example": "-- 现代 SQL 性能优化\n\n-- 1. ClickHouse 向量化查询\nSELECT user_id, COUNT(*)\nFROM events\nWHERE event_time >= '2024-01-01'\nGROUP BY user_id\nORDER BY COUNT(*) DESC\nLIMIT 10;\n-- 内部按 65536 行批量处理\n\n-- 2. DuckDB 并行 CSV 加载\nCOPY orders FROM 's3://bucket/*.csv' (FORMAT CSV, PARALLEL true);\n\n-- 3. Snowflake 查询加速（Result Cache）\n-- 相同查询在 24 小时内再次执行直接返回缓存结果\n\n-- 4. Spark AQE\n-- SET spark.sql.adaptive.enabled = true;\n-- SET spark.sql.adaptive.coalescePartitions.enabled = true;\n\n-- 5. PostgreSQL BRIN 索引（时序数据）\nCREATE INDEX idx_events_time_brin ON events USING BRIN (event_time)\nWITH (pages_per_range = 128);\n\n-- 6. 物化视图刷新策略\n-- Snowflake: 自动后台刷新\n-- PostgreSQL: REFRESH MATERIALIZED VIEW CONCURRENTLY\n\n-- 7. 查询 Profile 分析\n-- Snowflake: EXPLAIN USING TABULAR / EXPLAIN USING JSON\n-- 查看每个算子的实际行数、耗时、分区扫描数"
+      },
+      {
+        "id": "sql-distributed",
+        "title": "分布式数据库 SQL（TiDB/OceanBase/CockroachDB）",
+        "level": "高级",
+        "content": "**分布式数据库核心挑战**\n- 数据分片（Sharding）：水平拆分数据\n- 分布式事务：ACID 跨节点保证\n- 全局时钟：事务排序和一致性\n- 在线扩缩容：无停机调整集群\n\n**TiDB 架构**\n\n1. **TiDB Server**\n   - 无状态 SQL 层\n   - 兼容 MySQL 协议\n   - 查询解析、优化、执行\n\n2. **TiKV / TiFlash**\n   - TiKV：行存，基于 RocksDB，分布式 KV\n   - TiFlash：列存，MPP 引擎，加速分析\n   - HTAP：一套数据，两种存储\n\n3. **PD（Placement Driver）**\n   - 元数据管理和调度\n   - 全局时间戳（TSO）\n   - 负载均衡和故障恢复\n\n**OceanBase**\n- 蚂蚁集团自研\n-  Paxos 共识协议\n-  存算分离/一体可选\n-  高度兼容 Oracle 和 MySQL\n\n**CockroachDB**\n-  PostgreSQL 协议兼容\n-  分布式 KV + 分布式 SQL\n-  强一致性（Raft）\n-  成本优化器（CBO）\n\n**SQL 差异**\n- 自增 ID：分布式环境下使用雪花算法\n- 全局索引：跨分片索引维护\n- 乐观锁/悲观锁选择\n- 分区策略：Hash/Range/List",
+        "example": "-- TiDB SQL\n\n-- 1. 查看执行计划（是否走 TiFlash）\nEXPLAIN ANALYZE SELECT region, SUM(amount)\nFROM orders\nGROUP BY region;\n-- ExchangeReceiver/ExchangeSender 表示 MPP 模式\n\n-- 2. 指定引擎\nSET SESSION tidb_isolation_read_engines = 'tiflash';\n\n-- 3. 在线 DDL（TiDB 特色）\nALTER TABLE orders ADD COLUMN new_col INT;\n-- 不锁表，业务无感知\n\n-- 4. 自动分片（无需手动）\nCREATE TABLE users (\n  id BIGINT PRIMARY KEY,\n  name VARCHAR(100)\n) SHARD_ROW_ID_BITS = 4;\n\n-- 5. 全局事务\nBEGIN;\nINSERT INTO orders VALUES (...);\nINSERT INTO payments VALUES (...);\nCOMMIT;\n-- 跨 TiKV 节点的分布式事务\n\n-- OceanBase\n-- 多租户架构\n-- CREATE TENANT IF NOT EXISTS t1;\n-- 一个集群多个租户，资源隔离\n\n-- CockroachDB\n-- 地理分区\n-- CREATE TABLE orders (\n--   id UUID DEFAULT gen_random_uuid(),\n--   region STRING\n--) PARTITION BY LIST (region) (\n--   PARTITION us VALUES IN ('us-east', 'us-west'),\n--   PARTITION eu VALUES IN ('eu-west')\n-- );\n-- ALTER PARTITION eu CONFIGURE ZONE USING constraints='[+region=eu-west]';"
+      },
+      {
+        "id": "sql-graph-fts",
+        "title": "图数据库与全文检索 SQL",
+        "level": "高级",
+        "content": "**图数据库**\n- 节点（Vertex）+ 边（Edge）+ 属性（Property）\n- 适合关系密集型数据：社交网络、推荐、知识图谱、风控\n- 查询语言：Gremlin、Cypher（Neo4j）、GQL（ISO 标准）\n\n**主流图数据库**\n- Neo4j：最成熟，Cypher 语言\n- TigerGraph：原生分布式，GSQL\n- NebulaGraph：开源，国产，适合超大规模\n- JanusGraph：基于存储后端（Cassandra/HBase）\n\n**全文检索（FTS）**\n- 倒排索引：词 -> 文档列表\n- 相关性评分：TF-IDF、BM25\n- 分词：中文（IK/Jieba）、英文（标准分析器）\n\n**搜索引擎**\n- Elasticsearch：分布式，REST API，生态丰富\n- OpenSearch：ES 分支（AWS 主导）\n- Meilisearch：轻量，Rust 编写\n- Typesense：开源，低延迟\n\n**SQL 与搜索结合**\n- PostgreSQL：tsvector + tsquery\n- MySQL：FULLTEXT INDEX\n- MSSQL：CONTAINS/FREETEXT\n- 专用引擎：ClickHouse 倒排索引",
+        "example": "-- Neo4j Cypher（图查询语言）\n-- 1. 查找好友的好友\nMATCH (me:Person {name: 'Alice'})-[:FRIEND]->()-[:FRIEND]->(foaf:Person)\nWHERE foaf <> me\nRETURN foaf.name;\n\n-- 2. 最短路径\nMATCH p=shortestPath(\n  (a:Person {name: 'Alice'})-[:FRIEND*]-(b:Person {name: 'Bob'})\n)\nRETURN p;\n\n-- PostgreSQL 全文检索\n-- 1. 创建搜索向量\nUPDATE articles SET search_vec = to_tsvector('chinese', title || ' ' || content);\n\n-- 2. 创建 GIN 索引\nCREATE INDEX idx_fts ON articles USING GIN (search_vec);\n\n-- 3. 查询\nSELECT title, ts_rank(search_vec, query) AS rank\nFROM articles, plainto_tsquery('chinese', '数据库优化') query\nWHERE search_vec @@ query\nORDER BY rank DESC;\n\n-- Elasticsearch SQL（有限支持）\nPOST _sql?format=txt\n{\n  \"query\": \"SELECT * FROM logs WHERE status = 500 LIMIT 10\"\n}\n\n-- MySQL FULLTEXT\nCREATE TABLE articles (\n  id INT PRIMARY KEY,\n  title VARCHAR(200),\n  body TEXT,\n  FULLTEXT INDEX ft_idx (title, body) WITH PARSER ngram\n) ENGINE=InnoDB;\n\nSELECT * FROM articles\nWHERE MATCH(title, body) AGAINST('数据库 优化' IN BOOLEAN MODE);"
       }
     ]
   }
@@ -4933,6 +5325,366 @@ const QUESTIONS = {
       ],
       "answer": 1,
       "explain": "SLAAC（无状态地址自动配置）由路由器 RA 通告前缀，客户端自行生成地址，无需 DHCP。DHCPv6 是有状态集中分配。IPv6 中 SLAAC 更常用，DHCPv6 多用于需集中管理或仅获取 DNS 等配置的场景。"
+    },
+    {
+      "q": "SDN 架构中，南向接口协议是？",
+      "level": "高级",
+      "options": [
+        "REST API",
+        "OpenFlow",
+        "NETCONF",
+        "gRPC"
+      ],
+      "answer": 1,
+      "explain": "OpenFlow 是 SDN 控制器与交换机之间的标准南向接口协议，用于下发流表。REST API 通常是北向接口。"
+    },
+    {
+      "q": "SASE 架构中，ZTNA 的全称是？",
+      "level": "高级",
+      "options": [
+        "Zero Trust Network Access",
+        "Zone Trust Network Architecture",
+        "Zero Time Network Authentication",
+        "Zone Transfer Network Agent"
+      ],
+      "answer": 0,
+      "explain": "ZTNA = Zero Trust Network Access，零信任网络访问，是 SASE 的核心组件之一。"
+    },
+    {
+      "q": "WireGuard 使用的密钥交换算法是？",
+      "level": "进阶",
+      "options": [
+        "RSA-2048",
+        "Curve25519",
+        "ECDSA P-256",
+        "Diffie-Hellman"
+      ],
+      "answer": 1,
+      "explain": "WireGuard 使用 Curve25519 进行密钥交换，ChaCha20 加密，Poly1305 认证，均为现代高效算法。"
+    },
+    {
+      "q": "HTTP/3 基于哪个传输协议？",
+      "level": "进阶",
+      "options": [
+        "TCP",
+        "SCTP",
+        "QUIC",
+        "TLS"
+      ],
+      "answer": 2,
+      "explain": "HTTP/3 基于 QUIC 协议，而 QUIC 基于 UDP。"
+    },
+    {
+      "q": "eBPF 中，XDP 在哪个层面处理数据包？",
+      "level": "高级",
+      "options": [
+        "应用层",
+        "传输层",
+        "网络层",
+        "网卡驱动层"
+      ],
+      "answer": 3,
+      "explain": "XDP（eXpress Data Path）在网卡驱动层处理数据包，可实现极高性能的包过滤和转发。"
+    },
+    {
+      "q": "云 VPC 中，安全组和 NACL 的主要区别是？",
+      "level": "进阶",
+      "options": [
+        "安全组是子网级，NACL 是实例级",
+        "安全组是有状态的，NACL 是无状态的",
+        "安全组支持拒绝规则，NACL 不支持",
+        "没有区别"
+      ],
+      "answer": 1,
+      "explain": "安全组是实例级、有状态（自动允许返回流）、仅支持允许规则；NACL 是子网级、无状态、支持允许和拒绝规则。"
+    },
+    {
+      "q": "5G 核心网采用的架构是？",
+      "level": "高级",
+      "options": [
+        "单体架构",
+        "微服务化 SBA",
+        "SOA 面向服务",
+        "单体+插件"
+      ],
+      "answer": 1,
+      "explain": "5GC 采用 SBA（Service Based Architecture），控制面网元解耦为独立的云原生微服务。"
+    },
+    {
+      "q": "QUIC 相比 TCP 的主要优势不包括？",
+      "level": "高级",
+      "options": [
+        "0-RTT 握手",
+        "连接迁移",
+        "队头阻塞消除",
+        "更高的 MTU"
+      ],
+      "answer": 3,
+      "explain": "QUIC 的优势包括快速握手、连接迁移、消除队头阻塞，但 MTU 大小不是其特性（UDP 载荷限制反而更严格）。"
+    },
+    {
+      "q": "以下哪个不是 SASE 的核心组件？",
+      "level": "高级",
+      "options": [
+        "SD-WAN",
+        "SWG",
+        "IDS",
+        "ZTNA"
+      ],
+      "answer": 2,
+      "explain": "SASE 核心组件包括 SD-WAN、SWG、CASB、ZTNA、FWaaS。传统 IDS 不是 SASE 标准组件（虽可集成）。"
+    },
+    {
+      "q": "Open vSwitch 中查看流表的命令是？",
+      "level": "进阶",
+      "options": [
+        "ovs-vsctl show",
+        "ovs-ofctl dump-flows",
+        "ovsdb-client dump",
+        "ovs-appctl fdb/show"
+      ],
+      "answer": 1,
+      "explain": "ovs-ofctl dump-flows <bridge> 用于查看 OpenFlow 流表。"
+    },
+    {
+      "q": "WireGuard 内置于 Linux 内核的版本是？",
+      "level": "进阶",
+      "options": [
+        "4.19",
+        "5.4",
+        "5.6",
+        "6.0"
+      ],
+      "answer": 2,
+      "explain": "WireGuard 于 Linux 5.6 合并入主分支，成为内核原生支持的 VPN 协议。"
+    },
+    {
+      "q": "零信任架构的核心原则是？",
+      "level": "高级",
+      "options": [
+        "边界防御",
+        "永不信任，始终验证",
+        "最小加密",
+        "最大权限"
+      ],
+      "answer": 1,
+      "explain": "零信任核心原则是 Never Trust, Always Verify（永不信任，始终验证），假设网络已被攻破。"
+    },
+    {
+      "q": "eBPF 程序运行在内核的哪个子系统？",
+      "level": "高级",
+      "options": [
+        "用户空间",
+        "内核虚拟机",
+        "硬件抽象层",
+        "系统调用层"
+      ],
+      "answer": 1,
+      "explain": "eBPF 是内核中的字节码虚拟机，提供安全、高效的事件驱动编程能力。"
+    },
+    {
+      "q": "5G 网络切片中，面向工业控制场景的是？",
+      "level": "高级",
+      "options": [
+        "eMBB",
+        "uRLLC",
+        "mMTC",
+        "VoNR"
+      ],
+      "answer": 1,
+      "explain": "uRLLC（ ultra-Reliable Low Latency Communications）面向工业控制、自动驾驶等超低延迟高可靠场景。"
+    },
+    {
+      "q": "HTTP/3 的传输层协议是？",
+      "level": "基础",
+      "options": [
+        "TCP",
+        "UDP",
+        "SCTP",
+        "DCCP"
+      ],
+      "answer": 1,
+      "explain": "HTTP/3 基于 QUIC，QUIC 基于 UDP 传输。"
+    },
+    {
+      "q": "以下哪个工具基于 eBPF 实现 K8s 网络策略？",
+      "level": "高级",
+      "options": [
+        "Flannel",
+        "Calico eBPF",
+        "Weave Net",
+        "Kube-router"
+      ],
+      "answer": 1,
+      "explain": "Calico 支持 eBPF 数据平面，提供高性能的 K8s 网络策略和服务。"
+    },
+    {
+      "q": "SD-WAN 的主要优势是？",
+      "level": "进阶",
+      "options": [
+        "专用线路保障",
+        "智能选路与应用感知",
+        "免费带宽",
+        "无需配置"
+      ],
+      "answer": 1,
+      "explain": "SD-WAN 通过软件定义实现智能选路、应用感知、链路聚合，降低 MPLS 依赖。"
+    },
+    {
+      "q": "混合云连接方案中，延迟最低的是？",
+      "level": "进阶",
+      "options": [
+        "IPSec VPN",
+        "SD-WAN",
+        "专线（Direct Connect）",
+        "公网互联网"
+      ],
+      "answer": 2,
+      "explain": "专线（如 AWS Direct Connect、Azure ExpressRoute）提供专用物理连接，延迟最低、最稳定。"
+    },
+    {
+      "q": "Tailscale 基于什么协议实现组网？",
+      "level": "进阶",
+      "options": [
+        "IPSec",
+        "OpenVPN",
+        "WireGuard",
+        "GRE"
+      ],
+      "answer": 2,
+      "explain": "Tailscale 基于 WireGuard 协议实现零配置的 Mesh VPN 组网。"
+    },
+    {
+      "q": "NAT 网关的主要作用是？",
+      "level": "基础",
+      "options": [
+        "公网访问私网",
+        "私网实例访问公网",
+        "DNS 解析",
+        "负载均衡"
+      ],
+      "answer": 1,
+      "explain": "NAT 网关让私有子网的实例能够访问公网，同时阻止公网直接访问私网实例。"
+    },
+    {
+      "q": "5G 核心网中，负责会话管理的是？",
+      "level": "高级",
+      "options": [
+        "AMF",
+        "SMF",
+        "UPF",
+        "PCF"
+      ],
+      "answer": 1,
+      "explain": "SMF（Session Management Function）负责会话管理、IP 地址分配、UPF 选择。"
+    },
+    {
+      "q": "QUIC 内置的加密协议是？",
+      "level": "进阶",
+      "options": [
+        "TLS 1.2",
+        "TLS 1.3",
+        "DTLS",
+        "IPSec"
+      ],
+      "answer": 1,
+      "explain": "QUIC 内置 TLS 1.3，握手与连接建立合并，实现 0-RTT 或 1-RTT。"
+    },
+    {
+      "q": "零信任中的微隔离（Micro-segmentation）主要控制？",
+      "level": "高级",
+      "options": [
+        "南北向流量",
+        "东西向流量",
+        "外部流量",
+        "DNS 流量"
+      ],
+      "answer": 1,
+      "explain": "微隔离主要控制数据中心内部的东西向流量，防止攻击横向移动。"
+    },
+    {
+      "q": "Cilium 作为 K8s CNI，其核心数据平面基于？",
+      "level": "高级",
+      "options": [
+        "iptables",
+        "IPVS",
+        "eBPF",
+        "OVS"
+      ],
+      "answer": 2,
+      "explain": "Cilium 基于 eBPF 实现高性能的网络、安全和可观测性。"
+    },
+    {
+      "q": "VPC 对等连接（Peering）的主要用途是？",
+      "level": "进阶",
+      "options": [
+        "公网访问",
+        "跨 VPC 私有通信",
+        "NAT 转换",
+        "DNS 转发"
+      ],
+      "answer": 1,
+      "explain": "VPC Peering 实现两个 VPC 之间的私有网络互通，流量不经过公网。"
+    },
+    {
+      "q": "XDP 程序可以执行的动作不包括？",
+      "level": "高级",
+      "options": [
+        "XDP_PASS",
+        "XDP_DROP",
+        "XDP_TX",
+        "XDP_PROXY"
+      ],
+      "answer": 3,
+      "explain": "标准 XDP 动作包括 PASS（上送内核）、DROP（丢弃）、TX（从同一网卡发出）、REDIRECT（重定向到其他网卡/CPU），没有 XDP_PROXY。"
+    },
+    {
+      "q": "SASE 将网络和安全融合为？",
+      "level": "高级",
+      "options": [
+        "硬件盒子",
+        "本地化部署",
+        "云服务",
+        "虚拟机镜像"
+      ],
+      "answer": 2,
+      "explain": "SASE 将 SD-WAN 和安全功能（SWG、CASB、ZTNA、FWaaS）融合为统一的云服务交付。"
+    },
+    {
+      "q": "5G MEC（多接入边缘计算）的主要价值是？",
+      "level": "高级",
+      "options": [
+        "降低核心网负载",
+        "降低端到端延迟",
+        "提高带宽",
+        "替代云计算"
+      ],
+      "answer": 1,
+      "explain": "MEC 将计算和存储下沉到网络边缘，显著降低端到端延迟，适合实时应用。"
+    },
+    {
+      "q": "WireGuard 的配置文件通常存放在？",
+      "level": "基础",
+      "options": [
+        "/etc/openvpn/",
+        "/etc/wireguard/",
+        "/etc/ipsec/",
+        "/etc/ssl/"
+      ],
+      "answer": 1,
+      "explain": "WireGuard 配置文件通常位于 /etc/wireguard/<interface>.conf，通过 wg-quick 管理。"
+    },
+    {
+      "q": "以下哪个不是 5G 网络切片的类型？",
+      "level": "高级",
+      "options": [
+        "eMBB",
+        "uRLLC",
+        "mMTC",
+        "VoIP"
+      ],
+      "answer": 3,
+      "explain": "5G 标准定义了 eMBB、uRLLC、mMTC 三类切片场景，VoIP 不是网络切片类型。"
     }
   ],
   "linux": [
@@ -8223,6 +8975,366 @@ const QUESTIONS = {
       ],
       "answer": 2,
       "explain": "pvmove /dev/sdb1 在线将 /dev/sdb1 上的所有数据块迁移到卷组中的其他物理卷，不中断服务。迁移完成后可安全移除该 PV。"
+    },
+    {
+      "q": "eBPF 程序在加载前需要通过什么检查？",
+      "level": "高级",
+      "options": [
+        "编译器优化",
+        "验证器（Verifier）",
+        "签名验证",
+        "病毒扫描"
+      ],
+      "answer": 1,
+      "explain": "eBPF 程序必须通过内核验证器（Verifier）的安全检查，确保不会导致内核崩溃或无限循环。"
+    },
+    {
+      "q": "io_uring 的双环形队列是？",
+      "level": "高级",
+      "options": [
+        "RX/TX",
+        "SQ/CQ",
+        "IN/OUT",
+        "PUSH/POP"
+      ],
+      "answer": 1,
+      "explain": "io_uring 使用 SQ（Submission Queue）提交请求，CQ（Completion Queue）接收完成事件。"
+    },
+    {
+      "q": "Cgroup v2 相比 v1 的主要改进是？",
+      "level": "高级",
+      "options": [
+        "更多控制器",
+        "统一层次结构",
+        "支持更多进程",
+        "更快的 IO"
+      ],
+      "answer": 1,
+      "explain": "Cgroup v2 将 v1 的多个独立控制器层次结构统一为单棵树，解决了进程归属混乱问题。"
+    },
+    {
+      "q": "Linux 中，哪个 namespace 隔离用户和组 ID？",
+      "level": "进阶",
+      "options": [
+        "PID",
+        "User",
+        "UTS",
+        "IPC"
+      ],
+      "answer": 1,
+      "explain": "User namespace 隔离用户和组 ID，支持 UID/GID 映射，是 rootless 容器的基础。"
+    },
+    {
+      "q": "systemd-oomd 的主要作用是？",
+      "level": "高级",
+      "options": [
+        "内存压缩",
+        "用户空间 OOM 处理",
+        "swap 管理",
+        "缓存清理"
+      ],
+      "answer": 1,
+      "explain": "systemd-oomd 是用户空间的 OOM 杀手，基于 cgroup 内存压力监控，比内核 OOM killer 更智能。"
+    },
+    {
+      "q": "ripgrep（rg）相比 grep 的主要优势是？",
+      "level": "进阶",
+      "options": [
+        "支持正则",
+        "默认递归、忽略 .gitignore、极速",
+        "支持二进制",
+        "支持管道"
+      ],
+      "answer": 1,
+      "explain": "ripgrep 默认递归搜索，自动读取 .gitignore，基于 Rust 实现，性能远超传统 grep。"
+    },
+    {
+      "q": "AMD SEV 技术保护的是什么？",
+      "level": "高级",
+      "options": [
+        "静态数据",
+        "传输中数据",
+        "使用中数据（内存加密）",
+        "备份数据"
+      ],
+      "answer": 2,
+      "explain": "AMD SEV（Secure Encrypted Virtualization）对虚拟机内存进行硬件加密，保护使用中数据。"
+    },
+    {
+      "q": "kpatch 基于哪个内核机制实现热补丁？",
+      "level": "高级",
+      "options": [
+        "kprobe",
+        "ftrace/livepatch",
+        "BPF",
+        "kexec"
+      ],
+      "answer": 1,
+      "explain": "kpatch 基于内核的 ftrace 和 livepatch 子系统，通过替换函数指针实现不停机修复。"
+    },
+    {
+      "q": "io_uring 的 IORING_SETUP_SQPOLL 模式的作用是？",
+      "level": "高级",
+      "options": [
+        "设备轮询",
+        "内核线程轮询提交队列",
+        "用户轮询完成队列",
+        "中断驱动"
+      ],
+      "answer": 1,
+      "explain": "SQPOLL 模式让内核线程轮询提交队列，用户态提交无需系统调用，实现零 syscall IO。"
+    },
+    {
+      "q": "PSI（Pressure Stall Information）提供什么信息？",
+      "level": "高级",
+      "options": [
+        "进程状态",
+        "资源压力（CPU/内存/IO）",
+        "网络延迟",
+        "磁盘健康"
+      ],
+      "answer": 1,
+      "explain": "PSI 实时反馈 CPU、内存、IO 的资源压力程度，帮助系统做出智能调度决策。"
+    },
+    {
+      "q": "systemd-homed 的主要功能是？",
+      "level": "进阶",
+      "options": [
+        "系统主页加密",
+        "用户主目录可移植管理",
+        "密码管理",
+        "备份工具"
+      ],
+      "answer": 1,
+      "explain": "systemd-homed 提供用户主目录的可移植管理，支持 LUKS 加密和自动挂载。"
+    },
+    {
+      "q": "bat 命令是 cat 的替代工具，主要特点是？",
+      "level": "基础",
+      "options": [
+        "更快",
+        "语法高亮、Git 集成、行号",
+        "支持压缩",
+        "支持网络"
+      ],
+      "answer": 1,
+      "explain": "bat 提供语法高亮、Git 修改标记、自动分页、行号等功能，是 cat 的现代替代品。"
+    },
+    {
+      "q": "Linux 5.6+ 新增的 Time namespace 用于隔离什么？",
+      "level": "高级",
+      "options": [
+        "时区",
+        "系统启动时间和单调时钟",
+        "NTP 同步",
+        "定时器"
+      ],
+      "answer": 1,
+      "explain": "Time namespace 隔离 boot time 和 monotonic clock，允许容器内看到独立的时间基准。"
+    },
+    {
+      "q": "Cilium 作为 K8s CNI 主要基于？",
+      "level": "高级",
+      "options": [
+        "iptables",
+        "OVS",
+        "eBPF",
+        "VPP"
+      ],
+      "answer": 2,
+      "explain": "Cilium 基于 eBPF 实现 K8s 的网络、安全策略和可观测性，性能远高于 iptables 方案。"
+    },
+    {
+      "q": "nushell 的核心理念是？",
+      "level": "进阶",
+      "options": [
+        "更快",
+        "结构化数据 Shell",
+        "兼容 bash",
+        "更小体积"
+      ],
+      "answer": 1,
+      "explain": "nushell 将一切数据视为结构化表格，支持类 SQL 的筛选、排序、聚合操作。"
+    },
+    {
+      "q": "Intel TDX 提供的是？",
+      "level": "高级",
+      "options": [
+        "进程级 TEE",
+        "机密虚拟机",
+        "磁盘加密",
+        "网络加密"
+      ],
+      "answer": 1,
+      "explain": "Intel TDX（Trust Domain Extensions）提供机密虚拟机，整个 VM 内存加密，对应用透明。"
+    },
+    {
+      "q": "以下哪个工具用于可视化磁盘使用？",
+      "level": "基础",
+      "options": [
+        "df",
+        "du",
+        "dust",
+        "fdisk"
+      ],
+      "answer": 2,
+      "explain": "dust（du + rust）是 du 的现代替代品，提供可视化的目录大小展示。"
+    },
+    {
+      "q": "eBPF 的 CO-RE 全称是？",
+      "level": "高级",
+      "options": [
+        "Core Object Runtime Environment",
+        "Compile Once Run Everywhere",
+        "Common Object Resource Engine",
+        "Concurrent Operation Runtime Extension"
+      ],
+      "answer": 1,
+      "explain": "CO-RE = Compile Once Run Everywhere，通过 BTF 信息实现 eBPF 程序跨内核版本兼容。"
+    },
+    {
+      "q": "systemd UKI（Unified Kernel Image）将什么打包在一起？",
+      "level": "高级",
+      "options": [
+        "内核和模块",
+        "内核、initrd、cmdline",
+        "所有 systemd 服务",
+        "整个根文件系统"
+      ],
+      "answer": 1,
+      "explain": "UKI 将 systemd-stub、kernel、initrd、cmdline 打包为单个 EFI 可执行文件，利于安全启动。"
+    },
+    {
+      "q": "Cgroup v2 中，控制内存限制的文件是？",
+      "level": "进阶",
+      "options": [
+        "memory.limit_in_bytes",
+        "memory.max",
+        "memory.high",
+        "memory.soft_limit_in_bytes"
+      ],
+      "answer": 1,
+      "explain": "Cgroup v2 使用 memory.max 设置硬内存限制，替代 v1 的 memory.limit_in_bytes。"
+    },
+    {
+      "q": "bottom（btm）是以下哪个命令的替代品？",
+      "level": "基础",
+      "options": [
+        "ps",
+        "top",
+        "df",
+        "free"
+      ],
+      "answer": 1,
+      "explain": "bottom（btm）是 top 的现代替代品，提供图形化、可定制、跨平台的系统监控。"
+    },
+    {
+      "q": "AMD SEV-SNP 相比 SEV 增加了什么能力？",
+      "level": "高级",
+      "options": [
+        "更大内存",
+        "防止管理程序篡改内存",
+        "支持更多 VM",
+        "更快加密"
+      ],
+      "answer": 1,
+      "explain": "SEV-SNP（Secure Nested Paging）增加了完整性保护，防止恶意管理程序篡改客户机内存。"
+    },
+    {
+      "q": "unshare 命令的作用是？",
+      "level": "进阶",
+      "options": [
+        "共享 namespace",
+        "创建并进入新的 namespace",
+        "查看 namespace",
+        "删除 namespace"
+      ],
+      "answer": 1,
+      "explain": "unshare 用于创建并进入新的 namespace，是容器技术的底层工具。"
+    },
+    {
+      "q": "以下哪个不是 eBPF 的程序类型？",
+      "level": "高级",
+      "options": [
+        "kprobe",
+        "tracepoint",
+        "iptables",
+        "XDP"
+      ],
+      "answer": 2,
+      "explain": "iptables 是传统 netfilter 框架的工具，不是 eBPF 程序类型。kprobe、tracepoint、XDP 都是 eBPF 类型。"
+    },
+    {
+      "q": "io_uring 支持的 Polling 模式不包括？",
+      "level": "高级",
+      "options": [
+        "IORING_SETUP_IOPOLL",
+        "IORING_SETUP_SQPOLL",
+        "IORING_SETUP_CQPOLL",
+        "IORING_SETUP_IOPOLL 和 IORING_SETUP_SQPOLL 都支持"
+      ],
+      "answer": 2,
+      "explain": "io_uring 支持 IOPOLL（设备轮询）和 SQPOLL（提交队列轮询），没有 CQPOLL 这种模式。"
+    },
+    {
+      "q": "Gramine 在机密计算中的作用是？",
+      "level": "高级",
+      "options": [
+        "生成密钥",
+        "无需修改代码在 SGX 中运行应用",
+        "加密磁盘",
+        "管理 TPM"
+      ],
+      "answer": 1,
+      "explain": "Gramine 是一个 SGX 运行时库 OS，允许未经修改的应用程序在 Intel SGX enclave 中运行。"
+    },
+    {
+      "q": "systemd-run 的作用是？",
+      "level": "进阶",
+      "options": [
+        "重启 systemd",
+        "临时运行一个 systemd 单元",
+        "查看运行中单元",
+        "停止服务"
+      ],
+      "answer": 1,
+      "explain": "systemd-run 用于在运行时临时创建并启动一个 transient（临时）systemd 单元。"
+    },
+    {
+      "q": "Linux 机密计算主要保护哪类数据？",
+      "level": "高级",
+      "options": [
+        "静态数据",
+        "传输中数据",
+        "使用中数据（内存）",
+        "归档数据"
+      ],
+      "answer": 2,
+      "explain": "机密计算通过 TEE 保护使用中数据（Data in Use），弥补静态加密和传输加密的空白。"
+    },
+    {
+      "q": "fd 命令相比 find 的主要优势是？",
+      "level": "基础",
+      "options": [
+        "支持更多条件",
+        "默认忽略 .gitignore、彩色输出、直观语法",
+        "支持网络搜索",
+        "支持正则"
+      ],
+      "answer": 1,
+      "explain": "fd 默认读取 .gitignore，提供彩色输出和更直观的查询语法，是 find 的现代替代品。"
+    },
+    {
+      "q": "Cgroup v2 中，cgroup.subtree_control 的作用是？",
+      "level": "高级",
+      "options": [
+        "显示进程",
+        "启用子 cgroup 的控制器",
+        "设置资源限制",
+        "查看统计"
+      ],
+      "answer": 1,
+      "explain": "cgroup.subtree_control 用于在父 cgroup 中启用要向子树传播的控制器（如 +cpu +memory）。"
     }
   ],
   "frontend": [
@@ -10949,6 +12061,354 @@ const QUESTIONS = {
       ],
       "answer": 1,
       "explain": "zustand 等现代库无 action/reducer 样板代码，基于 hooks 细粒度订阅（只订阅用到的字段，避免不必要重渲染），API 极简。适合中小型项目，大型复杂项目仍可能选 Redux 生态。"
+    },
+    {
+      "q": "Next.js 14 的 App Router 基于什么技术？",
+      "level": "高级",
+      "options": [
+        "React Client Components",
+        "React Server Components",
+        "Vue SSR",
+        "Angular Universal"
+      ],
+      "answer": 1,
+      "explain": "Next.js 14 App Router 基于 React Server Components，允许组件在服务端渲染并直接访问后端资源。"
+    },
+    {
+      "q": "WebAssembly 的运行环境是？",
+      "level": "进阶",
+      "options": [
+        "Node.js 独占",
+        "浏览器 + 服务端（WasmEdge/WASI）",
+        "仅 Linux",
+        "仅 Windows"
+      ],
+      "answer": 1,
+      "explain": "Wasm 可在浏览器中运行，也可通过 WASI 在服务端运行（如 WasmEdge、Wasmtime）。"
+    },
+    {
+      "q": "qiankun 是？",
+      "level": "高级",
+      "options": [
+        "React 框架",
+        "微前端框架",
+        "构建工具",
+        "状态管理库"
+      ],
+      "answer": 1,
+      "explain": "qiankun 是蚂蚁集团开源的微前端框架，基于 single-spa，提供 JS Sandbox 和应用间通信。"
+    },
+    {
+      "q": "Zustand 相比 Redux 的主要优势是？",
+      "level": "高级",
+      "options": [
+        "更多功能",
+        "极简 API、无 Provider、TypeScript 友好",
+        "官方支持",
+        "更大社区"
+      ],
+      "answer": 1,
+      "explain": "Zustand 以极小体积、简单 API、无需 Provider 包裹、优秀的 TS 支持著称，适合中小型项目。"
+    },
+    {
+      "q": "Vite 开发服务器快的原因是？",
+      "level": "进阶",
+      "options": [
+        "更强大的 CPU",
+        "基于 ESM 原生和 esbuild 预构建",
+        "缓存更多",
+        "代码更少"
+      ],
+      "answer": 1,
+      "explain": "Vite 利用浏览器原生 ESM 支持，开发时不对源码打包，依赖用 esbuild 预构建，实现极速冷启动和 HMR。"
+    },
+    {
+      "q": "Turbopack 是用什么语言编写的？",
+      "level": "进阶",
+      "options": [
+        "C++",
+        "Rust",
+        "Go",
+        "Zig"
+      ],
+      "answer": 1,
+      "explain": "Turbopack 是 Rust 编写的增量打包工具，被宣传为 Webpack 的继任者。"
+    },
+    {
+      "q": "Core Web Vitals 中，LCP 指的是？",
+      "level": "进阶",
+      "options": [
+        "最长任务",
+        "最大内容绘制",
+        "累积布局偏移",
+        "首次输入延迟"
+      ],
+      "answer": 1,
+      "explain": "LCP = Largest Contentful Paint，测量视口中最大内容元素的渲染时间，目标 < 2.5s。"
+    },
+    {
+      "q": "Module Federation 首次出现在？",
+      "level": "高级",
+      "options": [
+        "Vite",
+        "Webpack 5",
+        "Rollup",
+        "Parcel"
+      ],
+      "answer": 1,
+      "explain": "Module Federation 是 Webpack 5 的核心特性，允许在运行时动态加载远程模块。"
+    },
+    {
+      "q": "React Server Components 中，'use client' 表示？",
+      "level": "高级",
+      "options": [
+        "服务端组件",
+        "客户端组件",
+        "API 路由",
+        "中间件"
+      ],
+      "answer": 1,
+      "explain": "在 RSC 架构中，'use client' 指令标记组件在客户端渲染，可使用 useState/useEffect 等客户端 API。"
+    },
+    {
+      "q": "Yew 是用什么语言编写的前端框架？",
+      "level": "进阶",
+      "options": [
+        "Go",
+        "Rust",
+        "C++",
+        "TypeScript"
+      ],
+      "answer": 1,
+      "explain": "Yew 是 Rust 编写的现代前端框架，灵感来自 React 和 Elm，编译为 WebAssembly 运行。"
+    },
+    {
+      "q": "Workbox 是 Google 提供的什么工具？",
+      "level": "进阶",
+      "options": [
+        "构建工具",
+        "Service Worker 工具库",
+        "测试框架",
+        "状态管理"
+      ],
+      "answer": 1,
+      "explain": "Workbox 是 Google 开源的 Service Worker 工具库，简化 PWA 的离线缓存和后台同步。"
+    },
+    {
+      "q": "Preact Signals 的响应式粒度是？",
+      "level": "高级",
+      "options": [
+        "组件级",
+        "信号/值级",
+        "应用级",
+        "路由级"
+      ],
+      "answer": 1,
+      "explain": "Signals 提供细粒度响应式，状态变更时直接更新关联的 DOM 节点，无需组件级重新渲染。"
+    },
+    {
+      "q": "Nuxt 3 的服务端引擎是？",
+      "level": "进阶",
+      "options": [
+        "Express",
+        "Nitro",
+        "Fastify",
+        "H3"
+      ],
+      "answer": 1,
+      "explain": "Nuxt 3 使用 Nitro 作为服务端引擎，支持多平台部署（Node、Deno、Cloudflare Workers 等）。"
+    },
+    {
+      "q": "Rsbuild 是基于什么构建的？",
+      "level": "高级",
+      "options": [
+        "Webpack",
+        "Rspack",
+        "Vite",
+        "esbuild"
+      ],
+      "answer": 1,
+      "explain": "Rsbuild 是字节跳动基于 Rspack（Rust 编写的 Webpack 兼容 bundler）封装的开箱即用构建工具。"
+    },
+    {
+      "q": "CLS（Cumulative Layout Shift）优化方法不包括？",
+      "level": "进阶",
+      "options": [
+        "图片指定尺寸",
+        "字体预加载",
+        "延迟加载所有 JS",
+        "避免插入无尺寸内容"
+      ],
+      "answer": 2,
+      "explain": "延迟加载所有 JS 不是 CLS 优化方法，反而可能延迟渲染。CLS 优化关键是预留空间和避免布局突变。"
+    },
+    {
+      "q": "Shadow DOM 主要用于？",
+      "level": "进阶",
+      "options": [
+        "SEO",
+        "样式和 DOM 封装隔离",
+        "性能监控",
+        "网络请求"
+      ],
+      "answer": 1,
+      "explain": "Shadow DOM 提供 DOM 和样式的封装隔离，是 Web Components 的核心技术，也是微前端样式隔离方案之一。"
+    },
+    {
+      "q": "Bun 用什么语言编写？",
+      "level": "进阶",
+      "options": [
+        "Rust",
+        "Zig",
+        "Go",
+        "C++"
+      ],
+      "answer": 1,
+      "explain": "Bun 是 Zig 语言编写的全能 JS 运行时，包含打包器、测试运行器、包管理器。"
+    },
+    {
+      "q": "Next.js 的 Server Actions 允许？",
+      "level": "高级",
+      "options": [
+        "仅服务端调用",
+        "前端直接调用服务端函数",
+        "数据库直连",
+        "仅 API 路由"
+      ],
+      "answer": 1,
+      "explain": "Server Actions 允许在客户端直接调用标记为 'use server' 的异步函数，无需手动编写 API 路由。"
+    },
+    {
+      "q": "Jotai 的状态管理范式是？",
+      "level": "高级",
+      "options": [
+        "集中式 Store",
+        "原子化（Atom）",
+        "代理（Proxy）",
+        "事件总线"
+      ],
+      "answer": 1,
+      "explain": "Jotai 采用原子化状态管理，将状态拆分为原子（atom），通过组合派生原子构建状态图。"
+    },
+    {
+      "q": "WebAssembly Component Model 的目标是？",
+      "level": "高级",
+      "options": [
+        "替代 JavaScript",
+        "跨语言的可组合组件标准",
+        "图形渲染",
+        "网络通信"
+      ],
+      "answer": 1,
+      "explain": "Component Model 是 Wasm 的模块化标准，目标是实现语言无关的可组合组件，支持跨语言复用。"
+    },
+    {
+      "q": "INP（Interaction to Next Paint）取代了？",
+      "level": "进阶",
+      "options": [
+        "LCP",
+        "FID",
+        "CLS",
+        "TTFB"
+      ],
+      "answer": 1,
+      "explain": "INP（Interaction to Next Paint）于 2024 年取代 FID（First Input Delay）成为 Core Web Vitals 交互指标。"
+    },
+    {
+      "q": "Service Worker 的生命周期不包括？",
+      "level": "进阶",
+      "options": [
+        "install",
+        "activate",
+        "fetch",
+        "destroy"
+      ],
+      "answer": 3,
+      "explain": "Service Worker 生命周期包括 install、activate、idle、fetch/message，没有 destroy 阶段（通过 skipWaiting/unregister 更新）。"
+    },
+    {
+      "q": "以下哪个不是 Rust 前端框架？",
+      "level": "进阶",
+      "options": [
+        "Yew",
+        "Leptos",
+        "Dioxus",
+        "Svelte"
+      ],
+      "answer": 3,
+      "explain": "Svelte 是编译型 JavaScript 框架，不是 Rust 框架。Yew、Leptos、Dioxus 都是 Rust 前端框架。"
+    },
+    {
+      "q": "Vite 生产构建使用的打包器是？",
+      "level": "进阶",
+      "options": [
+        "esbuild",
+        "Rollup",
+        "Webpack",
+        "Rspack"
+      ],
+      "answer": 1,
+      "explain": "Vite 开发用 esbuild，生产构建使用 Rollup 进行代码分割和优化打包。"
+    },
+    {
+      "q": "PWA 的 manifest.json 中 display: standalone 表示？",
+      "level": "基础",
+      "options": [
+        "浏览器打开",
+        "独立窗口运行（类似原生应用）",
+        "全屏",
+        "最小化"
+      ],
+      "answer": 1,
+      "explain": "display: standalone 让 PWA 以独立应用形式运行，没有浏览器地址栏，类似原生应用体验。"
+    },
+    {
+      "q": "React Compiler 的主要作用是？",
+      "level": "高级",
+      "options": [
+        "打包优化",
+        "编译时自动记忆化，减少 useMemo/useCallback",
+        "类型检查",
+        "代码压缩"
+      ],
+      "answer": 1,
+      "explain": "React Compiler（原 React Forget）在编译时自动添加记忆化优化，减少手动 useMemo/useCallback 需求。"
+    },
+    {
+      "q": "CSS containment（contain 属性）用于？",
+      "level": "高级",
+      "options": [
+        "居中布局",
+        "隔离渲染子树，减少重排影响范围",
+        "字体加载",
+        "动画优化"
+      ],
+      "answer": 1,
+      "explain": "CSS containment 将元素的渲染子树隔离，其内部变化不会导致外部重排重绘，提升性能。"
+    },
+    {
+      "q": "Nuxt Islands 提供什么能力？",
+      "level": "高级",
+      "options": [
+        "SSR",
+        "组件级选择性 hydration",
+        "SSG",
+        "CSR"
+      ],
+      "answer": 1,
+      "explain": "Nuxt Islands 允许页面中部分组件服务端渲染且不做 hydration，减少客户端 JS 体积。"
+    },
+    {
+      "q": "HTTP 的 modulepreload 用于？",
+      "level": "进阶",
+      "options": [
+        "图片预加载",
+        "JS 模块预加载",
+        "CSS 预加载",
+        "字体预加载"
+      ],
+      "answer": 1,
+      "explain": "<link rel=\"modulepreload\"> 用于预加载 JavaScript 模块及其依赖树，加速 ESM 加载。"
     }
   ],
   "backend": [
@@ -13663,6 +15123,354 @@ const QUESTIONS = {
       ],
       "answer": 1,
       "explain": "SLO 是服务质量目标（如 99.9% 请求成功、P99 < 200ms），是团队内部目标。SLA 是对外合同承诺（含违约赔偿），SLI 是具体测量指标。SLO 应比 SLA 严格。"
+    },
+    {
+      "q": "Istio 的数据平面组件是？",
+      "level": "高级",
+      "options": [
+        "istiod",
+        "Envoy",
+        "Pilot",
+        "Citadel"
+      ],
+      "answer": 1,
+      "explain": "Envoy 是 Istio 的数据平面代理（Sidecar），负责拦截和处理服务间流量。istiod 是控制平面。"
+    },
+    {
+      "q": "Serverless 中的冷启动（Cold Start）指的是？",
+      "level": "高级",
+      "options": [
+        "服务器关机",
+        "函数首次调用时的初始化延迟",
+        "代码编译",
+        "数据库连接"
+      ],
+      "answer": 1,
+      "explain": "冷启动指函数首次调用或长时间未用后再次调用时，需要初始化运行环境导致的延迟。"
+    },
+    {
+      "q": "Kafka 中保证 Exactly-Once 语义需要？",
+      "level": "高级",
+      "options": [
+        "仅幂等生产者",
+        "幂等生产者 + 事务 API",
+        "仅消费者手动提交",
+        "仅 acks=all"
+      ],
+      "answer": 1,
+      "explain": "Kafka Exactly-Once 需要幂等生产者（避免重复发送）和事务 API（跨分区原子提交）。"
+    },
+    {
+      "q": "BFF（Backend for Frontend）模式的主要目的是？",
+      "level": "高级",
+      "options": [
+        "统一数据库",
+        "为不同前端定制和聚合 API",
+        "负载均衡",
+        "缓存加速"
+      ],
+      "answer": 1,
+      "explain": "BFF 为 Web、iOS、Android 等不同前端提供定制化的 API 聚合层，减少前端复杂度。"
+    },
+    {
+      "q": "Saga 分布式事务的补偿机制是？",
+      "level": "高级",
+      "options": [
+        "锁机制",
+        "正向操作失败时执行反向补偿",
+        "两阶段提交",
+        "最终一致性等待"
+      ],
+      "answer": 1,
+      "explain": "Saga 模式通过为每个正向操作定义对应的补偿操作，在失败时按相反顺序执行补偿，达到最终一致。"
+    },
+    {
+      "q": "APISIX 基于什么技术构建？",
+      "level": "高级",
+      "options": [
+        "Java",
+        "OpenResty/Nginx + Lua",
+        "Go",
+        "Node.js"
+      ],
+      "answer": 1,
+      "explain": "Apache APISIX 基于 OpenResty/Nginx + Lua 构建，是国内主流的云原生 API 网关。"
+    },
+    {
+      "q": "Knative 是？",
+      "level": "高级",
+      "options": [
+        "容器编排",
+        "K8s 原生 Serverless 框架",
+        "服务网格",
+        "CI/CD 工具"
+      ],
+      "answer": 1,
+      "explain": "Knative 是 Kubernetes 上的 Serverless 框架，提供 Serving（自动扩缩容）和 Eventing（事件驱动）。"
+    },
+    {
+      "q": "事件溯源（Event Sourcing）的核心思想是？",
+      "level": "高级",
+      "options": [
+        "直接存储最终状态",
+        "存储状态变更事件，状态由事件流重建",
+        "使用缓存",
+        "双写数据库"
+      ],
+      "answer": 1,
+      "explain": "事件溯源不存储当前状态，而是存储所有变更事件，需要时通过重放事件重建状态。"
+    },
+    {
+      "q": "SPIFFE 用于解决什么问题？",
+      "level": "高级",
+      "options": [
+        "配置管理",
+        "工作负载身份标准化",
+        "日志收集",
+        "服务发现"
+      ],
+      "answer": 1,
+      "explain": "SPIFFE 是工作负载身份的标准化框架，解决微服务间安全认证的身份标识问题。"
+    },
+    {
+      "q": "gRPC-gateway 的作用是？",
+      "level": "高级",
+      "options": [
+        "替代 gRPC",
+        "将 gRPC 服务同时暴露为 REST API",
+        "服务网格",
+        "负载均衡"
+      ],
+      "answer": 1,
+      "explain": "gRPC-gateway 是 protoc 插件，根据 HTTP 注解从 gRPC 服务生成反向代理 REST API。"
+    },
+    {
+      "q": "RabbitMQ 主要支持的协议是？",
+      "level": "进阶",
+      "options": [
+        "Kafka 协议",
+        "AMQP",
+        "MQTT",
+        "HTTP"
+      ],
+      "answer": 1,
+      "explain": "RabbitMQ 核心支持 AMQP 0-9-1 协议，也支持 MQTT、STOMP 等。"
+    },
+    {
+      "q": "以下哪个不是 API 网关的常见职责？",
+      "level": "进阶",
+      "options": [
+        "路由",
+        "认证鉴权",
+        "业务逻辑处理",
+        "限流熔断"
+      ],
+      "answer": 2,
+      "explain": "业务逻辑处理应在后端服务中完成，网关负责横切关注点如路由、安全、流量控制。"
+    },
+    {
+      "q": "Pulsar 相比 Kafka 的独特优势是？",
+      "level": "高级",
+      "options": [
+        "更高吞吐",
+        "分层存储 + 多租户 + 地理复制",
+        "更低延迟",
+        "更简单"
+      ],
+      "answer": 1,
+      "explain": "Pulsar 提供分层存储（ offload 到 S3）、原生多租户、地理复制等 Kafka 不具备的特性。"
+    },
+    {
+      "q": "SLSA 框架关注的是？",
+      "level": "高级",
+      "options": [
+        "应用性能",
+        "软件供应链安全",
+        "服务级别协议",
+        "日志分析"
+      ],
+      "answer": 1,
+      "explain": "SLSA（Supply-chain Levels for Software Artifacts）是软件供应链安全框架，防止构建和分发过程中的篡改。"
+    },
+    {
+      "q": "CQRS 模式将什么分离？",
+      "level": "高级",
+      "options": [
+        "读和写",
+        "前端和后端",
+        "开发和运维",
+        "测试和生产"
+      ],
+      "answer": 0,
+      "explain": "CQRS（Command Query Responsibility Segregation）将读模型和写模型分离，可独立优化。"
+    },
+    {
+      "q": "HashiCorp Vault 的动态凭据特性指？",
+      "level": "高级",
+      "options": [
+        "固定密码",
+        "按需生成短期有效的数据库凭据",
+        "SSO 登录",
+        "API Key 管理"
+      ],
+      "answer": 1,
+      "explain": "Vault 可按需为应用生成短期有效的数据库凭据，并自动轮换，避免长期密码泄露风险。"
+    },
+    {
+      "q": "Envoy 的 xDS API 不包括？",
+      "level": "高级",
+      "options": [
+        "LDS（Listener）",
+        "RDS（Route）",
+        "CDS（Cluster）",
+        "BDS（Backend）"
+      ],
+      "answer": 3,
+      "explain": "Envoy xDS API 包括 LDS、RDS、CDS、EDS、SDS 等，没有 BDS。"
+    },
+    {
+      "q": "OpenFaaS 是？",
+      "level": "进阶",
+      "options": [
+        "商业 FaaS",
+        "开源 FaaS 平台",
+        "容器编排",
+        "服务网格"
+      ],
+      "answer": 1,
+      "explain": "OpenFaaS 是开源的 Function as a Service 平台，可在 K8s 或 Docker Swarm 上运行。"
+    },
+    {
+      "q": "JWT 的 JWE 指的是？",
+      "level": "高级",
+      "options": [
+        "JSON Web Encryption",
+        "JSON Web Endpoint",
+        "Java Web Engine",
+        "Joint Web Extension"
+      ],
+      "answer": 0,
+      "explain": "JWE = JSON Web Encryption，对 JWT payload 进行加密，防止敏感信息泄露。"
+    },
+    {
+      "q": "Kong 网关的插件机制基于？",
+      "level": "高级",
+      "options": [
+        "Go",
+        "Lua",
+        "Python",
+        "Java"
+      ],
+      "answer": 1,
+      "explain": "Kong 基于 OpenResty/Nginx，插件使用 Lua 编写，在请求生命周期各阶段执行。"
+    },
+    {
+      "q": "Istio 的 AuthorizationPolicy 作用于？",
+      "level": "高级",
+      "options": [
+        "L3/L4 网络层",
+        "L4/L7 网络层",
+        "仅 L7",
+        "物理层"
+      ],
+      "answer": 1,
+      "explain": "AuthorizationPolicy 可基于源身份、命名空间、IP、JWT 声明等执行 L4/L7 访问控制。"
+    },
+    {
+      "q": "RocketMQ 最初由哪家公司开发？",
+      "level": "高级",
+      "options": [
+        "腾讯",
+        "阿里巴巴",
+        "字节跳动",
+        "美团"
+      ],
+      "answer": 1,
+      "explain": "RocketMQ 最初由阿里巴巴开发，现为 Apache 顶级项目，捐赠给 Apache 基金会。"
+    },
+    {
+      "q": "GraphQL Federation 用于？",
+      "level": "高级",
+      "options": [
+        "单体应用",
+        "将多个服务的 Schema 组合为统一图",
+        "REST 转换",
+        "数据库分片"
+      ],
+      "answer": 1,
+      "explain": "Federation 允许将多个独立服务的 GraphQL Schema 组合为一个统一的超级图（Supergraph）。"
+    },
+    {
+      "q": "以下哪个是服务网格的轻量级替代？",
+      "level": "高级",
+      "options": [
+        "Istio",
+        "Linkerd",
+        "Kong",
+        "Nginx"
+      ],
+      "answer": 1,
+      "explain": "Linkerd 是更轻量的服务网格，Rust 编写，资源占用远低于 Istio，适合中小规模集群。"
+    },
+    {
+      "q": "Serverless 容器的代表产品是？",
+      "level": "进阶",
+      "options": [
+        "EC2",
+        "AWS Fargate",
+        "EKS",
+        "ECS"
+      ],
+      "answer": 1,
+      "explain": "AWS Fargate 是 Serverless 容器计算引擎，无需管理服务器节点，按容器资源使用计费。"
+    },
+    {
+      "q": "Sigstore cosign 用于？",
+      "level": "高级",
+      "options": [
+        "镜像扫描",
+        "容器镜像签名和验证",
+        "漏洞检测",
+        "SBOM 生成"
+      ],
+      "answer": 1,
+      "explain": "cosign 是 Sigstore 项目的工具，用于对容器镜像进行密钥less 或密钥签名和验证。"
+    },
+    {
+      "q": "Kafka 消费者组中，一个分区可被几个消费者消费？",
+      "level": "高级",
+      "options": [
+        "无限",
+        "组内一个",
+        "两个",
+        "与副本数相同"
+      ],
+      "answer": 1,
+      "explain": "Kafka 中一个分区在同一消费者组内只能被一个消费者消费，保证消息顺序和去重。"
+    },
+    {
+      "q": "Temporal 在微服务中的定位是？",
+      "level": "高级",
+      "options": [
+        "API 网关",
+        "持久化工作流编排",
+        "服务网格",
+        "消息队列"
+      ],
+      "answer": 1,
+      "explain": "Temporal（原 Cadence）是持久化工作流编排平台，用于管理 Saga、定时任务、长事务等复杂流程。"
+    },
+    {
+      "q": "ModSecurity 是？",
+      "level": "进阶",
+      "options": [
+        "WAF 引擎",
+        "负载均衡器",
+        "API 网关",
+        "入侵检测系统"
+      ],
+      "answer": 0,
+      "explain": "ModSecurity 是开源 WAF（Web Application Firewall）引擎，支持 OWASP CRS 规则集。"
     }
   ],
   "shell": [
@@ -16905,6 +18713,366 @@ const QUESTIONS = {
       ],
       "answer": 3,
       "explain": "Expect 的核心命令包括 spawn、expect、send、interact 等，fork 不是 Expect 的命令（fork 是系统调用/C 函数）。"
+    },
+    {
+      "q": "fzf 的主要功能是？",
+      "level": "进阶",
+      "options": [
+        "文件搜索",
+        "模糊查找器/交互式过滤",
+        "进程管理",
+        "网络诊断"
+      ],
+      "answer": 1,
+      "explain": "fzf 是通用交互式模糊查找器，可与历史命令、文件、进程等集成。"
+    },
+    {
+      "q": "kubectl debug 的作用是？",
+      "level": "高级",
+      "options": [
+        "删除 Pod",
+        "在 Pod 中启动临时调试容器",
+        "查看日志",
+        "缩放副本"
+      ],
+      "answer": 1,
+      "explain": "kubectl debug 用于在目标 Pod 中启动临时 debug 容器（ephemeral container），便于排查问题。"
+    },
+    {
+      "q": "Terraform 的核心工作流是？",
+      "level": "高级",
+      "options": [
+        "write -> plan -> apply",
+        "build -> test -> deploy",
+        "init -> run -> destroy",
+        "compile -> link -> execute"
+      ],
+      "answer": 0,
+      "explain": "Terraform 标准工作流：编写配置 -> plan（预览变更）-> apply（应用变更）。"
+    },
+    {
+      "q": "GitOps 的核心理念是？",
+      "level": "高级",
+      "options": [
+        "手动部署",
+        "Git 为唯一可信源，自动同步",
+        "瀑布式开发",
+        "无版本控制"
+      ],
+      "answer": 1,
+      "explain": "GitOps 将 Git 仓库作为基础设施和应用的单一可信源，变更自动同步到目标环境。"
+    },
+    {
+      "q": "Podman 相比 Docker 的主要优势是？",
+      "level": "进阶",
+      "options": [
+        "更快的镜像拉取",
+        "Daemonless 和 Rootless",
+        "更多的镜像",
+        "更好的 GUI"
+      ],
+      "answer": 1,
+      "explain": "Podman 无需守护进程（daemonless），支持无 root 运行容器（rootless），更安全。"
+    },
+    {
+      "q": "zoxide 是 cd 的替代品，其特点是？",
+      "level": "进阶",
+      "options": [
+        "更快",
+        "基于访问频率的智能目录跳转",
+        "支持网络路径",
+        "内置编辑器"
+      ],
+      "answer": 1,
+      "explain": "zoxide 学习目录访问习惯，通过 z <name> 模糊跳转到最常访问的匹配目录。"
+    },
+    {
+      "q": "Ansible Playbook 使用什么格式？",
+      "level": "进阶",
+      "options": [
+        "JSON",
+        "YAML",
+        "XML",
+        "TOML"
+      ],
+      "answer": 1,
+      "explain": "Ansible Playbook 使用 YAML 格式定义任务列表，具有幂等性。"
+    },
+    {
+      "q": "ArgoCD 属于哪类工具？",
+      "level": "高级",
+      "options": [
+        "CI 工具",
+        "K8s GitOps 持续交付",
+        "监控工具",
+        "日志工具"
+      ],
+      "answer": 1,
+      "explain": "ArgoCD 是 Kubernetes 原生的 GitOps 持续交付工具，自动将 Git 仓库状态同步到集群。"
+    },
+    {
+      "q": "nerdctl 是 containerd 的什么工具？",
+      "level": "进阶",
+      "options": [
+        "监控工具",
+        "Docker 兼容 CLI",
+        "网络插件",
+        "存储驱动"
+      ],
+      "answer": 1,
+      "explain": "nerdctl 是 containerd 的 Docker 兼容 CLI，提供类似 docker 的命令体验。"
+    },
+    {
+      "q": "Starship 是什么类型的工具？",
+      "level": "基础",
+      "options": [
+        "终端复用器",
+        "跨 Shell 提示符",
+        "Shell 本身",
+        "包管理器"
+      ],
+      "answer": 1,
+      "explain": "Starship 是跨 Shell 的极简提示符，显示 Git 状态、语言版本、执行时间等信息。"
+    },
+    {
+      "q": "BuildKit 的多平台构建需要？",
+      "level": "高级",
+      "options": [
+        "多个物理机",
+        "buildx + QEMU/binfmt",
+        "虚拟机",
+        "容器编排"
+      ],
+      "answer": 1,
+      "explain": "docker buildx 结合 QEMU 用户态模拟（binfmt_misc）可实现单机多架构镜像构建。"
+    },
+    {
+      "q": "direnv 的主要功能是？",
+      "level": "进阶",
+      "options": [
+        "环境变量加密",
+        "进入目录自动加载/离开卸载环境变量",
+        "进程隔离",
+        "网络代理"
+      ],
+      "answer": 1,
+      "explain": "direnv 在进入目录时自动加载 .envrc 中的环境变量，离开目录时自动卸载。"
+    },
+    {
+      "q": "Kata Containers 提供什么级别的隔离？",
+      "level": "高级",
+      "options": [
+        "进程级",
+        "轻量虚拟机级",
+        "物理机级",
+        "命名空间级"
+      ],
+      "answer": 1,
+      "explain": "Kata Containers 为每个容器启动一个轻量级 VM，提供接近虚拟机的强隔离，同时保持容器体验。"
+    },
+    {
+      "q": "以下哪个不是容器运行时？",
+      "level": "进阶",
+      "options": [
+        "runc",
+        "containerd",
+        "crun",
+        "systemd"
+      ],
+      "answer": 3,
+      "explain": "systemd 是初始化系统，不是容器运行时。runc、containerd、crun 都是容器运行时生态组件。"
+    },
+    {
+      "q": "Pulumi 与传统 IaC 工具的主要区别是？",
+      "level": "高级",
+      "options": [
+        "免费",
+        "使用编程语言（TS/Python/Go）定义基础设施",
+        "只支持 AWS",
+        "不需要状态文件"
+      ],
+      "answer": 1,
+      "explain": "Pulumi 允许使用 TypeScript、Python、Go 等通用编程语言定义基础设施，而非专用 DSL。"
+    },
+    {
+      "q": "Flux 是哪个组织的项目？",
+      "level": "进阶",
+      "options": [
+        "CNCF",
+        "Apache",
+        "Linux Foundation",
+        "OpenStack"
+      ],
+      "answer": 0,
+      "explain": "Flux 是 CNCF 毕业项目，Kubernetes 原生的 GitOps 实现。"
+    },
+    {
+      "q": "Trivy 的主要用途是？",
+      "level": "进阶",
+      "options": [
+        "性能测试",
+        "容器镜像安全扫描",
+        "网络抓包",
+        "日志分析"
+      ],
+      "answer": 1,
+      "explain": "Trivy 是 Aqua Security 开源的漏洞扫描器，可扫描容器镜像、文件系统、Git 仓库等。"
+    },
+    {
+      "q": "tmux 的主要功能是？",
+      "level": "基础",
+      "options": [
+        "文本编辑",
+        "终端复用（分屏、会话持久化）",
+        "文件传输",
+        "远程登录"
+      ],
+      "answer": 1,
+      "explain": "tmux 是终端复用器，支持分屏、会话持久化（断开连接后程序继续运行）。"
+    },
+    {
+      "q": "crictl 主要用于调试？",
+      "level": "进阶",
+      "options": [
+        "Docker",
+        "containerd/CRI",
+        "Podman",
+        "systemd"
+      ],
+      "answer": 1,
+      "explain": "crictl 是 CRI（Container Runtime Interface）工具，主要用于 Kubernetes 的 containerd 调试。"
+    },
+    {
+      "q": "Flagger 在 GitOps 中用于实现？",
+      "level": "高级",
+      "options": [
+        "镜像构建",
+        "金丝雀发布",
+        "日志收集",
+        "密钥管理"
+      ],
+      "answer": 1,
+      "explain": "Flagger 是渐进式交付工具，在 GitOps 流程中实现金丝雀、A/B 测试、蓝绿发布。"
+    },
+    {
+      "q": "Mise（原 rtx）是？",
+      "level": "进阶",
+      "options": [
+        "容器运行时",
+        "多语言版本管理器",
+        "IDE",
+        "云服务商"
+      ],
+      "answer": 1,
+      "explain": "Mise 是多语言版本管理器（asdf 的 Rust 重写替代品），管理 Node、Python、Go 等版本。"
+    },
+    {
+      "q": "Podman 的 podman generate systemd 用于？",
+      "level": "高级",
+      "options": [
+        "生成容器镜像",
+        "生成 systemd 服务文件管理容器",
+        "生成 Compose 文件",
+        "生成 Kubernetes YAML"
+      ],
+      "answer": 1,
+      "explain": "podman generate systemd 可为容器生成 systemd 单元文件，实现开机自启和 systemd 管理。"
+    },
+    {
+      "q": "以下哪个不是 Rust 重写的现代 CLI 工具？",
+      "level": "进阶",
+      "options": [
+        "ripgrep",
+        "fd",
+        "htop",
+        "bat"
+      ],
+      "answer": 2,
+      "explain": "htop 是 C 语言编写的（经典 top 替代品），ripgrep、fd、bat 都是 Rust 重写的现代工具。"
+    },
+    {
+      "q": "Atuin 的主要功能是？",
+      "level": "进阶",
+      "options": [
+        "进程监控",
+        "Shell 历史同步和搜索",
+        "网络测速",
+        "磁盘清理"
+      ],
+      "answer": 1,
+      "explain": "Atuin 替换默认 Shell 历史，提供加密同步、模糊搜索、统计等增强功能。"
+    },
+    {
+      "q": "Firecracker 是 AWS 开源的？",
+      "level": "高级",
+      "options": [
+        "容器运行时",
+        "MicroVM 虚拟化",
+        "网络插件",
+        "存储系统"
+      ],
+      "answer": 1,
+      "explain": "Firecracker 是 AWS 开源的 microVM 虚拟化技术，用于 Lambda 和 Fargate，启动极快。"
+    },
+    {
+      "q": "Terraform 状态文件默认名称是？",
+      "level": "进阶",
+      "options": [
+        "terraform.tfstate",
+        "state.json",
+        "main.state",
+        "infra.lock"
+      ],
+      "answer": 0,
+      "explain": "Terraform 默认将状态保存在 terraform.tfstate 文件中，远程状态需配置 backend。"
+    },
+    {
+      "q": "Ansible 的幂等性（Idempotence）是指？",
+      "level": "高级",
+      "options": [
+        "只执行一次",
+        "多次执行结果一致",
+        "自动回滚",
+        "并发执行"
+      ],
+      "answer": 1,
+      "explain": "幂等性意味着无论执行多少次，系统最终状态相同，Ansible 模块设计遵循此原则。"
+    },
+    {
+      "q": "gVisor 的运行时安全模型是？",
+      "level": "高级",
+      "options": [
+        "共享内核",
+        "用户态内核拦截系统调用",
+        "硬件虚拟化",
+        "纯容器"
+      ],
+      "answer": 1,
+      "explain": "gVisor 使用用户态内核（Sentry）拦截并重实现大部分系统调用，提供额外隔离层。"
+    },
+    {
+      "q": "Zellij 相比 tmux 的主要特色是？",
+      "level": "进阶",
+      "options": [
+        "更快",
+        "Rust 编写、插件系统、布局配置",
+        "无需配置",
+        "支持图形"
+      ],
+      "answer": 1,
+      "explain": "Zellij 是 Rust 编写的现代终端复用器，支持插件系统（WASM）、声明式布局配置。"
+    },
+    {
+      "q": "以下哪个命令用于查看 K8s 节点资源使用？",
+      "level": "基础",
+      "options": [
+        "kubectl get nodes",
+        "kubectl top nodes",
+        "kubectl describe nodes",
+        "kubectl logs nodes"
+      ],
+      "answer": 1,
+      "explain": "kubectl top nodes 显示节点的 CPU 和内存使用情况（需要 metrics-server）。"
     }
   ],
   "python": [
@@ -18119,6 +20287,342 @@ const QUESTIONS = {
       ],
       "answer": 1,
       "explain": "property 是数据描述符的封装，实现了 __get__/__set__/__delete__，提供更简洁的属性访问控制语法。"
+    },
+    {
+      "q": "Python 3.12 的类型参数语法允许？",
+      "level": "进阶",
+      "options": [
+        "def func<T>(x: T)",
+        "def func[T](x: T)",
+        "def func{T}(x: T)",
+        "def func(T x)"
+      ],
+      "answer": 1,
+      "explain": "Python 3.12 引入 PEP 695，允许 def func[T](x: T) 语法，无需显式定义 TypeVar。"
+    },
+    {
+      "q": "FastAPI 基于哪个 ASGI 框架？",
+      "level": "进阶",
+      "options": [
+        "Django",
+        "Flask",
+        "Starlette",
+        "Tornado"
+      ],
+      "answer": 2,
+      "explain": "FastAPI 基于 Starlette（ASGI 工具集）和 Pydantic（数据验证）构建。"
+    },
+    {
+      "q": "asyncio.TaskGroup（3.11+）提供什么能力？",
+      "level": "高级",
+      "options": [
+        "线程池",
+        "结构化并发",
+        "进程池",
+        "事件循环替换"
+      ],
+      "answer": 1,
+      "explain": "TaskGroup 实现结构化并发，确保组内所有任务完成或异常时统一处理，类似 Go 的 errgroup。"
+    },
+    {
+      "q": "Pydantic v2 相比 v1 的主要提升是？",
+      "level": "高级",
+      "options": [
+        "更多字段类型",
+        "Rust 核心，5-50 倍性能提升",
+        "更多验证器",
+        "更小体积"
+      ],
+      "answer": 1,
+      "explain": "Pydantic v2 使用 Rust 编写的 pydantic-core，验证速度提升 5-50 倍。"
+    },
+    {
+      "q": "Polars 相比 Pandas 的主要优势是？",
+      "level": "高级",
+      "options": [
+        "更多函数",
+        "Rust + Arrow，更快更省内存，原生多线程",
+        "更易用",
+        "更成熟"
+      ],
+      "answer": 1,
+      "explain": "Polars 基于 Rust 和 Apache Arrow，提供惰性执行、查询优化、原生多线程，性能远超 Pandas。"
+    },
+    {
+      "q": "Python 3.13 实验性的性能特性是？",
+      "level": "进阶",
+      "options": [
+        "GIL 移除",
+        "JIT 编译器",
+        "AOT 编译",
+        "静态类型"
+      ],
+      "answer": 1,
+      "explain": "Python 3.13 引入实验性 JIT 编译器（基于 copy-and-patch），以及 --disable-gil 实验选项。"
+    },
+    {
+      "q": "MLflow 的核心功能不包括？",
+      "level": "高级",
+      "options": [
+        "实验追踪",
+        "模型注册",
+        "特征存储",
+        "模型打包"
+      ],
+      "answer": 2,
+      "explain": "MLflow 提供实验追踪、模型注册、模型打包和部署，特征存储通常由 Feast/Tecton 负责。"
+    },
+    {
+      "q": "FastAPI 的 Depends 用于？",
+      "level": "进阶",
+      "options": [
+        "数据库连接",
+        "依赖注入",
+        "中间件",
+        "后台任务"
+      ],
+      "answer": 1,
+      "explain": "Depends 是 FastAPI 的依赖注入系统，用于管理共享逻辑如数据库会话、认证、权限。"
+    },
+    {
+      "q": "vLLM 加速大模型推理的核心技术是？",
+      "level": "高级",
+      "options": [
+        "量化",
+        "PagedAttention",
+        "FlashAttention",
+        "模型并行"
+      ],
+      "answer": 1,
+      "explain": "vLLM 使用 PagedAttention 管理 KV Cache，类似操作系统虚拟内存，大幅提升推理吞吐。"
+    },
+    {
+      "q": "DVC 的主要定位是？",
+      "level": "高级",
+      "options": [
+        "CI/CD 工具",
+        "数据版本控制（Git for Data）",
+        "模型训练框架",
+        "监控工具"
+      ],
+      "answer": 1,
+      "explain": "DVC（Data Version Control）是数据和模型版本控制工具，与 Git 配合管理大文件和流水线。"
+    },
+    {
+      "q": "Python 的 Protocol 类型（PEP 544）实现的是？",
+      "level": "高级",
+      "options": [
+        "继承",
+        "结构子类型（鸭子类型静态化）",
+        "泛型",
+        "枚举"
+      ],
+      "answer": 1,
+      "explain": "Protocol 实现结构子类型，不需要显式继承，只要实现指定方法即可通过类型检查（静态鸭子类型）。"
+    },
+    {
+      "q": "Ruff 是用什么语言编写的？",
+      "level": "进阶",
+      "options": [
+        "C",
+        "Rust",
+        "Go",
+        "Python"
+      ],
+      "answer": 1,
+      "explain": "Ruff 是 Astral 公司用 Rust 编写的超快 Python linter 和代码格式化工具，兼容 Flake8/Black/isort。"
+    },
+    {
+      "q": "LangChain 中 RAG 的全称是？",
+      "level": "高级",
+      "options": [
+        "Random Access Generation",
+        "Retrieval-Augmented Generation",
+        "Recursive Auto Generation",
+        "Real-time API Gateway"
+      ],
+      "answer": 1,
+      "explain": "RAG = Retrieval-Augmented Generation，检索增强生成，结合向量检索和 LLM 生成回答。"
+    },
+    {
+      "q": "asyncio.Semaphore 的作用是？",
+      "level": "进阶",
+      "options": [
+        "线程同步",
+        "协程并发限流",
+        "进程通信",
+        "事件通知"
+      ],
+      "answer": 1,
+      "explain": "asyncio.Semaphore 用于限制同时运行的协程数量，实现并发限流。"
+    },
+    {
+      "q": "Polars 的 lazy() 和 collect() 分别代表？",
+      "level": "高级",
+      "options": [
+        "读取和写入",
+        "构建查询计划和执行",
+        "过滤和排序",
+        "分组和聚合"
+      ],
+      "answer": 1,
+      "explain": "lazy() 切换到惰性模式构建查询计划，collect() 触发执行并返回结果。"
+    },
+    {
+      "q": "BentoML 的主要用途是？",
+      "level": "高级",
+      "options": [
+        "模型训练",
+        "模型服务和部署",
+        "数据标注",
+        "特征工程"
+      ],
+      "answer": 1,
+      "explain": "BentoML 是模型服务框架，将训练好的模型打包为标准化服务，支持 REST API/gRPC。"
+    },
+    {
+      "q": "Python 3.11 引入的 Self 类型用于？",
+      "level": "进阶",
+      "options": [
+        "单例模式",
+        "返回自身类型（链式调用类型安全）",
+        "线程安全",
+        "内存安全"
+      ],
+      "answer": 1,
+      "explain": "typing.Self 表示类实例的自身类型，用于链式调用的类型标注，如 builder.set_a().set_b()。"
+    },
+    {
+      "q": "Feast 在 MLOps 中的定位是？",
+      "level": "高级",
+      "options": [
+        "模型训练",
+        "特征存储（Feature Store）",
+        "超参调优",
+        "模型监控"
+      ],
+      "answer": 1,
+      "explain": "Feast 是开源特征存储，解决特征在线/离线一致性问题，支持特征注册、版本和 serving。"
+    },
+    {
+      "q": "FastAPI 的 BackgroundTasks 适合？",
+      "level": "进阶",
+      "options": [
+        "CPU 密集型计算",
+        "轻量后台任务（如发邮件）",
+        "数据库事务",
+        "WebSocket"
+      ],
+      "answer": 1,
+      "explain": "BackgroundTasks 适合轻量后台操作，如发送邮件、写日志。CPU 密集型应使用 Celery/ARQ。"
+    },
+    {
+      "q": "Python 3.12 f-string 改进不包括？",
+      "level": "进阶",
+      "options": [
+        "支持反斜杠",
+        "支持任意嵌套",
+        "支持 Unicode 转义",
+        "支持多行 f-string"
+      ],
+      "answer": 3,
+      "explain": "Python 3.12 解除了 f-string 的嵌套限制，支持反斜杠和 Unicode 转义，但多行 f-string 之前就已支持。"
+    },
+    {
+      "q": "Ollama 的主要功能是？",
+      "level": "进阶",
+      "options": [
+        "云端大模型 API",
+        "本地运行大语言模型",
+        "模型微调",
+        "数据标注"
+      ],
+      "answer": 1,
+      "explain": "Ollama 是本地大模型运行工具，简化 LLM 的下载、配置和本地推理。"
+    },
+    {
+      "q": "TypedDict 用于？",
+      "level": "高级",
+      "options": [
+        "类定义",
+        "字典键的类型约束",
+        "列表类型",
+        "函数重载"
+      ],
+      "answer": 1,
+      "explain": "TypedDict 用于给字典的键添加类型注解，确保键名和值类型正确。"
+    },
+    {
+      "q": "mypy --strict 模式会检查？",
+      "level": "高级",
+      "options": [
+        "语法错误",
+        "所有类型注解严格匹配",
+        "导入错误",
+        "性能问题"
+      ],
+      "answer": 1,
+      "explain": "mypy --strict 启用最严格的类型检查，要求完整的类型注解，禁止隐式 Any。"
+    },
+    {
+      "q": "asyncio.run_in_executor 用于？",
+      "level": "高级",
+      "options": [
+        "运行异步代码",
+        "在线程池中运行阻塞代码",
+        "创建新进程",
+        "替换事件循环"
+      ],
+      "answer": 1,
+      "explain": "run_in_executor 将阻塞的同步代码（如 requests、文件 IO）提交到线程池，在异步程序中不阻塞事件循环。"
+    },
+    {
+      "q": "Transformers 库来自哪个组织？",
+      "level": "进阶",
+      "options": [
+        "OpenAI",
+        "Hugging Face",
+        "Google",
+        "Microsoft"
+      ],
+      "answer": 1,
+      "explain": "Hugging Face 的 Transformers 库是最流行的预训练模型库，支持 BERT、GPT、Llama 等。"
+    },
+    {
+      "q": "Python 中 contextvars 的作用是？",
+      "level": "高级",
+      "options": [
+        "全局变量",
+        "协程本地上下文变量",
+        "环境变量",
+        "配置文件"
+      ],
+      "answer": 1,
+      "explain": "contextvars 提供协程安全的上下文本地存储，在 async/await 中替代线程本地存储（threading.local）。"
+    },
+    {
+      "q": "Pydantic 的 BaseModel 主要提供？",
+      "level": "进阶",
+      "options": [
+        "ORM 映射",
+        "数据解析和运行时验证",
+        "Web 路由",
+        "缓存"
+      ],
+      "answer": 1,
+      "explain": "BaseModel 提供基于类型提示的数据解析、验证和序列化，是 FastAPI 的数据层基础。"
+    },
+    {
+      "q": "ARQ 相比 Celery 的主要特点是？",
+      "level": "高级",
+      "options": [
+        "更多功能",
+        "基于 asyncio 的异步任务队列",
+        "支持更多后端",
+        "图形界面"
+      ],
+      "answer": 1,
+      "explain": "ARQ 是 Samuel Colvin（Pydantic 作者）开发的异步任务队列，基于 Redis 和 asyncio，比 Celery 更轻量现代。"
     }
   ],
   "c": [
@@ -22915,6 +25419,366 @@ const QUESTIONS = {
       ],
       "answer": 1,
       "explain": "performance_schema 提供细粒度的事件级监控，包括锁等待、IO 等待、语句执行、内存分配等详细数据，比 SHOW STATUS 的全局聚合更精细。sys 库提供友好视图。"
+    },
+    {
+      "q": "AWS RDS Multi-AZ 的主要作用是？",
+      "level": "高级",
+      "options": [
+        "读写分离",
+        "高可用自动故障切换",
+        "跨地域复制",
+        "自动扩容"
+      ],
+      "answer": 1,
+      "explain": "Multi-AZ 在同一地域的不同可用区部署主备实例，实现高可用和自动故障切换。"
+    },
+    {
+      "q": "ProxySQL 的核心功能不包括？",
+      "level": "高级",
+      "options": [
+        "读写分离",
+        "连接池复用",
+        "分库分表",
+        "查询缓存"
+      ],
+      "answer": 2,
+      "explain": "ProxySQL 支持读写分离、连接池、查询缓存，但不原生支持分库分表（需配合 ShardingSphere）。"
+    },
+    {
+      "q": "MySQL 冷热分离中，pt-archiver 的作用是？",
+      "level": "高级",
+      "options": [
+        "备份全库",
+        "低影响归档历史数据",
+        "索引优化",
+        "用户管理"
+      ],
+      "answer": 1,
+      "explain": "pt-archiver 是 Percona Toolkit 工具，用于低影响地将旧数据从热库归档到冷库。"
+    },
+    {
+      "q": "HNSW 是哪种索引算法？",
+      "level": "高级",
+      "options": [
+        "B+Tree",
+        "LSM-Tree",
+        "近似最近邻图索引",
+        "倒排索引"
+      ],
+      "answer": 2,
+      "explain": "HNSW（Hierarchical Navigable Small World）是高效的近似最近邻图索引算法，广泛用于向量数据库。"
+    },
+    {
+      "q": "MySQL Group Replication 基于什么共识算法？",
+      "level": "高级",
+      "options": [
+        "Raft",
+        "Paxos",
+        "ZAB",
+        "PBFT"
+      ],
+      "answer": 1,
+      "explain": "MGR 基于 Paxos 的组通信引擎（XCom）实现分布式一致性。"
+    },
+    {
+      "q": "Prometheus 监控 MySQL 使用哪个 exporter？",
+      "level": "进阶",
+      "options": [
+        "node_exporter",
+        "mysqld_exporter",
+        "redis_exporter",
+        "blackbox_exporter"
+      ],
+      "answer": 1,
+      "explain": "mysqld_exporter 是官方推荐的 MySQL Prometheus Exporter，采集 MySQL 状态和性能指标。"
+    },
+    {
+      "q": "MyRocks 基于什么存储结构？",
+      "level": "高级",
+      "options": [
+        "B+Tree",
+        "LSM-Tree",
+        "Hash",
+        "Bitmap"
+      ],
+      "answer": 1,
+      "explain": "MyRocks 基于 RocksDB，使用 LSM-Tree 结构，优化写入吞吐和压缩比。"
+    },
+    {
+      "q": "MySQL 9.0 引入的原生 AI 支持数据类型是？",
+      "level": "高级",
+      "options": [
+        "JSON",
+        "VECTOR",
+        "BLOB",
+        "SPATIAL"
+      ],
+      "answer": 1,
+      "explain": "MySQL 9.0 引入 VECTOR 数据类型，支持高维向量存储和距离计算，面向 AI 应用。"
+    },
+    {
+      "q": "InnoDB Cluster 中，MySQL Router 的作用是？",
+      "level": "高级",
+      "options": [
+        "数据同步",
+        "应用透明路由（读写分离/故障转移）",
+        "备份调度",
+        "监控告警"
+      ],
+      "answer": 1,
+      "explain": "MySQL Router 根据元数据自动将应用连接路由到主节点（写）或从节点（读），并处理故障转移。"
+    },
+    {
+      "q": "云数据库 Serverless 的主要优势是？",
+      "level": "进阶",
+      "options": [
+        "永久免费",
+        "自动扩缩容、按量计费",
+        "无限存储",
+        "无需网络"
+      ],
+      "answer": 1,
+      "explain": "Serverless 数据库根据负载自动扩缩容，按实际使用量计费，适合波动负载。"
+    },
+    {
+      "q": "PMM 的 QAN 模块用于？",
+      "level": "进阶",
+      "options": [
+        "查询分析（Query Analytics）",
+        "集群管理",
+        "备份恢复",
+        "用户审计"
+      ],
+      "answer": 0,
+      "explain": "QAN = Query Analytics，PMM 的核心模块，用于分析 SQL 性能、执行计划、统计信息。"
+    },
+    {
+      "q": "Vitess 最初由哪家公司开发？",
+      "level": "高级",
+      "options": [
+        "Google",
+        "YouTube",
+        "Facebook",
+        "Twitter"
+      ],
+      "answer": 1,
+      "explain": "Vitess 最初由 YouTube 开发，用于解决 MySQL 大规模分片问题，现为 CNCF 项目。"
+    },
+    {
+      "q": "MySQL 8.4 默认的认证插件是？",
+      "level": "进阶",
+      "options": [
+        "mysql_native_password",
+        "caching_sha2_password",
+        "sha256_password",
+        "auth_socket"
+      ],
+      "answer": 1,
+      "explain": "MySQL 8.4 默认使用 caching_sha2_password，mysql_native_password 不再默认启用。"
+    },
+    {
+      "q": "RocksDB 的 LSM-Tree 主要优化什么？",
+      "level": "高级",
+      "options": [
+        "随机读",
+        "顺序写",
+        "全表扫描",
+        "排序"
+      ],
+      "answer": 1,
+      "explain": "LSM-Tree 将随机写转换为顺序写，极大提升写入吞吐，适合写密集型负载。"
+    },
+    {
+      "q": "MySQL 克隆插件（Clone Plugin）的作用是？",
+      "level": "高级",
+      "options": [
+        "增量备份",
+        "快速物理复制实例",
+        "逻辑导出",
+        "压缩数据"
+      ],
+      "answer": 1,
+      "explain": "克隆插件可以从源实例快速复制物理数据文件，用于快速构建副本或恢复。"
+    },
+    {
+      "q": "ShardingSphere-Proxy 的主要定位是？",
+      "level": "高级",
+      "options": [
+        "监控工具",
+        "数据库中间件（分库分表/读写分离）",
+        "备份工具",
+        "迁移工具"
+      ],
+      "answer": 1,
+      "explain": "ShardingSphere-Proxy 是数据库中间件，提供分库分表、读写分离、数据加密等能力。"
+    },
+    {
+      "q": "向量数据库相似度检索通常使用？",
+      "level": "高级",
+      "options": [
+        "精确匹配",
+        "近似最近邻（ANN）",
+        "B+Tree 范围查询",
+        "全文检索"
+      ],
+      "answer": 1,
+      "explain": "高维向量检索通常使用近似最近邻（ANN）算法（如 HNSW、IVF），平衡精度和性能。"
+    },
+    {
+      "q": "MySQL Enterprise Monitor 是哪个公司的产品？",
+      "level": "进阶",
+      "options": [
+        "Percona",
+        "Oracle",
+        "MariaDB",
+        "Microsoft"
+      ],
+      "answer": 1,
+      "explain": "MySQL Enterprise Monitor 是 Oracle 官方的商业监控和管理工具。"
+    },
+    {
+      "q": "以下哪个不是 MyRocks 的优点？",
+      "level": "高级",
+      "options": [
+        "高压缩比",
+        "低写入放大",
+        "优秀的随机读性能",
+        "原生 TTL"
+      ],
+      "answer": 2,
+      "explain": "MyRocks 的 LSM-Tree 结构在随机读场景下性能不如 InnoDB 的 B+Tree，可能出现读取放大。"
+    },
+    {
+      "q": "MGR 单主模式下，写操作发送到？",
+      "level": "高级",
+      "options": [
+        "任意节点",
+        "主节点",
+        "所有节点",
+        "随机节点"
+      ],
+      "answer": 1,
+      "explain": "MGR 单主模式下，所有写操作必须通过主节点，从节点只读；多主模式才允许多节点写入。"
+    },
+    {
+      "q": "阿里云 DAS 的核心能力是？",
+      "level": "进阶",
+      "options": [
+        "数据库自治服务（智能诊断/优化）",
+        "数据迁移",
+        "备份存储",
+        "访问控制"
+      ],
+      "answer": 0,
+      "explain": "DAS（Database Autonomy Service）是阿里云的数据库自治服务，提供智能诊断、优化建议、异常检测。"
+    },
+    {
+      "q": "Canal 的主要功能是？",
+      "level": "高级",
+      "options": [
+        "数据库迁移",
+        "MySQL binlog 解析与数据同步",
+        "慢查询分析",
+        "备份恢复"
+      ],
+      "answer": 1,
+      "explain": "Canal 是阿里巴巴开源的 MySQL binlog 解析工具，用于实时数据同步（如同步到 ES、Kafka）。"
+    },
+    {
+      "q": "MySQL 9.0 预览支持的存储程序语言是？",
+      "level": "高级",
+      "options": [
+        "Python",
+        "JavaScript",
+        "Go",
+        "Rust"
+      ],
+      "answer": 1,
+      "explain": "MySQL 9.0 预览引入 JavaScript 存储程序支持，通过 GraalVM 集成。"
+    },
+    {
+      "q": "在 MySQL 可观测性中，三大支柱是？",
+      "level": "进阶",
+      "options": [
+        "CPU/内存/磁盘",
+        "Metrics/Logs/Traces",
+        "QPS/TPS/延迟",
+        "备份/恢复/复制"
+      ],
+      "answer": 1,
+      "explain": "可观测性三大支柱是 Metrics（指标）、Logs（日志）、Traces（链路追踪）。"
+    },
+    {
+      "q": "对象存储归档（如 S3）适合存放？",
+      "level": "进阶",
+      "options": [
+        "热数据",
+        "温数据",
+        "冷数据",
+        "缓存"
+      ],
+      "answer": 2,
+      "explain": "冷数据访问频率极低，适合低成本的对象存储归档，需要时再恢复。"
+    },
+    {
+      "q": "MySQL Router 的读写端口分别是？",
+      "level": "进阶",
+      "options": [
+        "3306/3307",
+        "6446/6447",
+        "3306/3306",
+        "8080/8081"
+      ],
+      "answer": 1,
+      "explain": "MySQL Router 默认 6446 为读写端口（指向主节点），6447 为只读端口（指向从节点）。"
+    },
+    {
+      "q": "OpenTelemetry 在数据库场景用于？",
+      "level": "高级",
+      "options": [
+        "备份",
+        "SQL 执行链路追踪",
+        "索引构建",
+        "权限控制"
+      ],
+      "answer": 1,
+      "explain": "OpenTelemetry 提供标准化的 SQL 执行链路追踪，帮助分析从应用到数据库的全链路延迟。"
+    },
+    {
+      "q": "Kata Containers 在数据库场景提供？",
+      "level": "高级",
+      "options": [
+        "更高性能",
+        "更强的安全隔离",
+        "自动备份",
+        "读写分离"
+      ],
+      "answer": 1,
+      "explain": "Kata Containers 为每个容器提供轻量 VM 隔离，适合多租户数据库场景的安全需求。"
+    },
+    {
+      "q": "以下哪个是 MariaDB 的中间件？",
+      "level": "进阶",
+      "options": [
+        "ProxySQL",
+        "MaxScale",
+        "MySQL Router",
+        "Vitess"
+      ],
+      "answer": 1,
+      "explain": "MaxScale 是 MariaDB 官方的数据库中间件，提供路由、负载均衡、防火墙等功能。"
+    },
+    {
+      "q": "MySQL 8.4 属于什么版本类型？",
+      "level": "进阶",
+      "options": [
+        "Innovation",
+        "LTS",
+        "Preview",
+        "Beta"
+      ],
+      "answer": 1,
+      "explain": "MySQL 8.4 是 LTS（长期支持）版本，提供 8 年的支持周期，适合生产环境。"
     }
   ],
   "sql": [
@@ -24153,6 +27017,354 @@ const QUESTIONS = {
       ],
       "answer": 2,
       "explain": "时间序列表按时间 RANGE 分区（如按月），清理历史数据时 DROP PARTITION 瞬间完成（比 DELETE 快得多），且查询可分区裁剪加速。"
+    },
+    {
+      "q": "Snowflake 的 Zero-copy Clone 主要用于？",
+      "level": "高级",
+      "options": [
+        "数据备份",
+        "瞬间复制表/数据库而不占用额外存储",
+        "数据压缩",
+        "跨地域复制"
+      ],
+      "answer": 1,
+      "explain": "Zero-copy Clone 通过共享底层微分区数据并仅复制元数据，实现瞬间克隆且不占用额外存储（修改前）。"
+    },
+    {
+      "q": "Lakehouse 架构的核心思想是？",
+      "level": "高级",
+      "options": [
+        "纯数据湖",
+        "纯数据仓库",
+        "数据湖低成本存储 + 数仓高性能分析",
+        "仅支持批处理"
+      ],
+      "answer": 2,
+      "explain": "Lakehouse 融合数据湖的低成本灵活存储和数据仓库的高性能分析能力，通过表格式（Delta/Iceberg/Hudi）实现。"
+    },
+    {
+      "q": "pgvector 扩展用于 PostgreSQL 的什么能力？",
+      "level": "高级",
+      "options": [
+        "全文检索",
+        "向量存储与相似度搜索",
+        "时序数据",
+        "图计算"
+      ],
+      "answer": 1,
+      "explain": "pgvector 为 PostgreSQL 添加 VECTOR 类型和近似最近邻索引（HNSW/ivfflat），支持向量检索。"
+    },
+    {
+      "q": "Flink SQL 中的 Watermark 作用是？",
+      "level": "高级",
+      "options": [
+        "数据加密",
+        "容忍乱序并触发窗口计算",
+        "连接 Kafka",
+        "压缩数据"
+      ],
+      "answer": 1,
+      "explain": "Watermark 表示事件时间的进度，允许系统处理乱序数据并决定何时触发窗口计算。"
+    },
+    {
+      "q": "Delta Lake 的 VACUUM 命令用于？",
+      "level": "高级",
+      "options": [
+        "加速查询",
+        "清理旧版本文件",
+        "创建索引",
+        "分区重组"
+      ],
+      "answer": 1,
+      "explain": "VACUUM 清理不再被时间旅行需要的旧版本 Parquet 文件，释放存储空间。"
+    },
+    {
+      "q": "TiDB 的 HTAP 指的是？",
+      "level": "高级",
+      "options": [
+        "高可用事务处理",
+        "混合事务/分析处理",
+        "高性能聚合",
+        "水平扩展"
+      ],
+      "answer": 1,
+      "explain": "HTAP = Hybrid Transactional/Analytical Processing，TiDB 通过 TiKV（行存）和 TiFlash（列存）同时支持事务和分析。"
+    },
+    {
+      "q": "BigQuery 按什么计费？",
+      "level": "进阶",
+      "options": [
+        "存储容量",
+        "计算节点数",
+        "查询扫描的数据量",
+        "查询次数"
+      ],
+      "answer": 2,
+      "explain": "BigQuery 主要按查询扫描的数据量（on-demand pricing）计费，也支持固定容量定价（flat-rate）。"
+    },
+    {
+      "q": "HNSW 索引在向量数据库中的优势是？",
+      "level": "高级",
+      "options": [
+        "精确匹配",
+        "高召回率下的快速近似搜索",
+        "压缩存储",
+        "强一致性"
+      ],
+      "answer": 1,
+      "explain": "HNSW 是多层图索引，在向量检索中提供高召回率和极快的近似最近邻搜索速度。"
+    },
+    {
+      "q": "RisingWave 的核心概念是？",
+      "level": "高级",
+      "options": [
+        "批处理",
+        "流式物化视图",
+        "数据湖",
+        "图数据库"
+      ],
+      "answer": 1,
+      "explain": "RisingWave 是流处理数据库，核心概念是流式物化视图（Streaming Materialized View），持续增量更新。"
+    },
+    {
+      "q": "Neo4j 使用的查询语言是？",
+      "level": "进阶",
+      "options": [
+        "SQL",
+        "Cypher",
+        "Gremlin",
+        "SPARQL"
+      ],
+      "answer": 1,
+      "explain": "Cypher 是 Neo4j 的声明式图查询语言，使用 ASCII 艺术表示节点和关系模式。"
+    },
+    {
+      "q": "数据血缘追踪的主要目的是？",
+      "level": "高级",
+      "options": [
+        "加速查询",
+        "理解数据从哪来、如何变换",
+        "压缩数据",
+        "加密数据"
+      ],
+      "answer": 1,
+      "explain": "数据血缘追踪数据的来源、转换过程和去向，是数据治理和合规审计的核心能力。"
+    },
+    {
+      "q": "Iceberg 的 Time Travel 通过什么实现？",
+      "level": "高级",
+      "options": [
+        "备份文件",
+        "快照（Snapshot）元数据",
+        "binlog",
+        "RAFT 日志"
+      ],
+      "answer": 1,
+      "explain": "Apache Iceberg 通过维护表级别的快照（Snapshot）列表实现时间旅行，每个快照指向一组数据文件。"
+    },
+    {
+      "q": "Elasticsearch 默认的相关性评分算法是？",
+      "level": "进阶",
+      "options": [
+        "TF-IDF",
+        "BM25",
+        "Cosine Similarity",
+        "Dot Product"
+      ],
+      "answer": 1,
+      "explain": "Elasticsearch 5.0+ 默认使用 BM25（Best Match 25）作为文本相关性评分算法。"
+    },
+    {
+      "q": "以下哪个不是流处理窗口类型？",
+      "level": "高级",
+      "options": [
+        "TUMBLE",
+        "HOP",
+        "SESSION",
+        "MERGE"
+      ],
+      "answer": 3,
+      "explain": "Flink SQL 支持 TUMBLE（滚动）、HOP（滑动）、SESSION（会话）、CUMULATE（累积）窗口，没有 MERGE 窗口。"
+    },
+    {
+      "q": "OceanBase 使用的共识协议是？",
+      "level": "高级",
+      "options": [
+        "Raft",
+        "Paxos",
+        "ZAB",
+        "PBFT"
+      ],
+      "answer": 1,
+      "explain": "OceanBase 基于 Paxos 共识协议实现多副本强一致和高可用。"
+    },
+    {
+      "q": "DuckDB 的主要定位是？",
+      "level": "进阶",
+      "options": [
+        "分布式 OLAP",
+        "嵌入式分析数据库",
+        "图数据库",
+        "时序数据库"
+      ],
+      "answer": 1,
+      "explain": "DuckDB 是嵌入式分析型数据库，类似 SQLite 但面向 OLAP，支持复杂查询和 Parquet/Delta 直接读取。"
+    },
+    {
+      "q": "向量化执行引擎一次处理多少行？",
+      "level": "高级",
+      "options": [
+        "1 行",
+        "100 行",
+        "1024/4096 行",
+        "全表"
+      ],
+      "answer": 2,
+      "explain": "向量化引擎（如 DuckDB、ClickHouse）通常一次处理一个 batch（1024 或 4096 行），减少解释器开销。"
+    },
+    {
+      "q": "CockroachDB 的分布式 SQL 使用什么保证一致性？",
+      "level": "高级",
+      "options": [
+        "两阶段提交",
+        "Raft + 租约",
+        "Gossip",
+        "Paxos"
+      ],
+      "answer": 1,
+      "explain": "CockroachDB 使用 Raft 共识协议保证 Range 级别的一致性，结合租约（Lease）优化读取性能。"
+    },
+    {
+      "q": "PostgreSQL 全文检索使用什么索引？",
+      "level": "进阶",
+      "options": [
+        "B-Tree",
+        "GIN",
+        "Hash",
+        "BRIN"
+      ],
+      "answer": 1,
+      "explain": "PostgreSQL 全文检索通常使用 GIN（Generalized Inverted Index）索引加速 tsvector 查询。"
+    },
+    {
+      "q": "Spark AQE（Adaptive Query Execution）在什么时候优化查询？",
+      "level": "高级",
+      "options": [
+        "编译时",
+        "运行时",
+        "提交时",
+        "启动时"
+      ],
+      "answer": 1,
+      "explain": "AQE 在查询运行时根据实际数据统计动态优化执行计划，如调整 Join 策略和合并小分区。"
+    },
+    {
+      "q": "Milvus 是什么类型的数据库？",
+      "level": "进阶",
+      "options": [
+        "时序数据库",
+        "向量数据库",
+        "图数据库",
+        "文档数据库"
+      ],
+      "answer": 1,
+      "explain": "Milvus 是专为 AI 应用设计的开源向量数据库，支持高维向量存储和近似最近邻搜索。"
+    },
+    {
+      "q": "数据质量检查中，空值率计算公式是？",
+      "level": "进阶",
+      "options": [
+        "COUNT(*) / COUNT(col)",
+        "(COUNT(*) - COUNT(col)) / COUNT(*)",
+        "COUNT(col) / COUNT(*)",
+        "SUM(col) / COUNT(*)"
+      ],
+      "answer": 1,
+      "explain": "空值率 = (总行数 - 非空行数) / 总行数，即 (COUNT(*) - COUNT(col)) / COUNT(*)。"
+    },
+    {
+      "q": "TiDB 的 TSO 由哪个组件提供？",
+      "level": "高级",
+      "options": [
+        "TiDB Server",
+        "TiKV",
+        "PD",
+        "TiFlash"
+      ],
+      "answer": 2,
+      "explain": "PD（Placement Driver）负责提供全局单调递增的时间戳（TSO），用于分布式事务排序。"
+    },
+    {
+      "q": "以下哪个是图遍历查询语言的特征？",
+      "level": "高级",
+      "options": [
+        "JOIN 操作",
+        "节点-关系-节点模式匹配",
+        "GROUP BY",
+        "子查询嵌套"
+      ],
+      "answer": 1,
+      "explain": "图查询语言（如 Cypher）的核心是节点-关系-节点模式匹配，例如 (a)-[:KNOWS]->(b)。"
+    },
+    {
+      "q": "MySQL ngram 全文解析器主要用于？",
+      "level": "进阶",
+      "options": [
+        "英文分词",
+        "中文等无空格语言分词",
+        "数字解析",
+        "JSON 检索"
+      ],
+      "answer": 1,
+      "explain": "ngram 解析器按固定长度（默认 2）切分字符，适合中文、日文等无空格分隔的语言全文检索。"
+    },
+    {
+      "q": "数据脱敏中，动态脱敏的特点是？",
+      "level": "高级",
+      "options": [
+        "物理修改数据",
+        "根据用户角色实时返回脱敏结果",
+        "删除敏感列",
+        "加密整表"
+      ],
+      "answer": 1,
+      "explain": "动态脱敏在查询时根据访问者角色和策略实时返回脱敏后的数据，原始数据不改变。"
+    },
+    {
+      "q": "BRIN 索引最适合什么场景？",
+      "level": "高级",
+      "options": [
+        "高基数字段",
+        "时序数据等自然有序数据",
+        "全文检索",
+        "精确匹配"
+      ],
+      "answer": 1,
+      "explain": "BRIN（Block Range INdex）存储每个块的最小/最大值，非常适合时序数据等自然有序的大表。"
+    },
+    {
+      "q": "Canal/Debezium 在数据同步中的作用是？",
+      "level": "高级",
+      "options": [
+        "全量导出",
+        "CDC 捕获变更数据",
+        "压缩数据",
+        "索引构建"
+      ],
+      "answer": 1,
+      "explain": "Canal 和 Debezium 是 CDC（Change Data Capture）工具，实时捕获数据库的变更日志（binlog）并同步到下游。"
+    },
+    {
+      "q": "以下哪个不是数据治理的核心维度？",
+      "level": "高级",
+      "options": [
+        "数据质量",
+        "元数据管理",
+        "数据安全",
+        "数据加密算法设计"
+      ],
+      "answer": 3,
+      "explain": "数据治理核心维度包括数据质量、元数据管理、数据安全、数据标准、生命周期管理等，但不包括具体的加密算法设计（属于安全实施层面）。"
     }
   ]
 };
