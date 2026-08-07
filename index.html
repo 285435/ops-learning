@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>运维学习平台 | Ops Learning</title>
-    <link rel="stylesheet" href="styles.css?v=19">
+    <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -250,11 +250,21 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
+    <!-- 内容更新提示浮窗 -->
+    <div class="update-banner" id="updateBanner">
+        <div class="update-banner-title">✨ 发现内容更新</div>
+        <div class="update-banner-msg" id="updateBannerMsg">有新的知识点和题目已上线，是否立即刷新？</div>
+        <div class="update-banner-actions">
+            <button class="btn-banner btn-banner-refresh" id="updateRefreshBtn">立即刷新</button>
+            <button class="btn-banner btn-banner-later"   id="updateLaterBtn">稍后再说</button>
+        </div>
+    </div>
+
     <footer class="footer">
         <p>运维学习平台 © 2026 | 网络 · Linux · 前端 · 后端 · Shell · Python · C · C++ · Java · MySQL · SQL 学习与练习</p>
     </footer>
 
-    <script src="data.js?v=19"></script>
-    <script src="app.js?v=19"></script>
+    <script src="data.js?v=20"></script>
+    <script src="app.js?v=20"></script>
 </body>
 </html>

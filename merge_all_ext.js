@@ -50,6 +50,10 @@ const extFiles = [
   ['ext4_python.js', 'python'],
   ['ext4_backend.js', 'backend'],
   ['ext4_frontend.js', 'frontend'],
+  // Fifth batch extensions
+  ['ext5_c.js', 'c'],
+  ['ext5_cpp.js', 'cpp'],
+  ['ext5_java.js', 'java'],
 ];
 
 // Parse a single ext file: returns { topics, questions }
@@ -172,3 +176,19 @@ for (const [k, v] of Object.entries(QUESTIONS)) {
   totalQuestions += v.length;
 }
 console.log(`\nGrand total: ${totalTopics} topics, ${totalQuestions} questions`);
+
+// Auto-bump version.json so client-side update banner triggers
+try {
+  const vPath = '/workspace/version.json';
+  let v = { version: 0, timestamp: '', message: '' };
+  if (fs.existsSync(vPath)) {
+    try { v = JSON.parse(fs.readFileSync(vPath, 'utf8')); } catch {}
+  }
+  v.version   = (v.version || 0) + 1;
+  v.timestamp = new Date().toISOString();
+  v.message   = `更新：${totalNewTopics} 个新知识点，${totalNewQuestions} 道新题目。总计 ${totalTopics} 知识点 / ${totalQuestions} 题目。`;
+  fs.writeFileSync(vPath, JSON.stringify(v, null, 2) + '\n');
+  console.log(`\nBumped version -> v${v.version}  (${v.timestamp})`);
+} catch (e) {
+  console.error('version.json update skipped:', e.message);
+}

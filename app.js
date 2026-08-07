@@ -786,11 +786,53 @@ function bindEvents() {
     });
 }
 
+// ============ 内容实时更新（版本检查） ============
+const VERSION_KEY = 'ops_known_version';
+const VERSION_URL = 'version.json?t=';
+
+async function checkForUpdates(silent = true) {
+    try {
+        const res = await fetch(VERSION_URL + Date.now(), { cache: 'no-store' });
+        if (!res.ok) return;
+        const info = await res.json();
+        const known = Store.get(VERSION_KEY, 0);
+        Store.set(VERSION_KEY, info.version || 1);
+        if (!silent && known && info.version > known) {
+            showUpdateBanner(info.message || '');
+        }
+    } catch (e) {
+        // 忽略网络错误（离线、file:// 等）
+    }
+}
+function showUpdateBanner(msg) {
+    const banner = document.getElementById('updateBanner');
+    if (!banner) return;
+    if (msg) {
+        const m = document.getElementById('updateBannerMsg');
+        if (m) m.textContent = msg;
+    }
+    banner.classList.add('show');
+    const refreshBtn = document.getElementById('updateRefreshBtn');
+    const laterBtn   = document.getElementById('updateLaterBtn');
+    if (refreshBtn) refreshBtn.onclick = () => location.reload();
+    if (laterBtn)   laterBtn.onclick   = () => banner.classList.remove('show');
+}
+function startUpdatePolling() {
+    // 启动 10 秒后做首次提示性检查，之后每 5 分钟轮询
+    setTimeout(() => checkForUpdates(false), 10000);
+    setInterval(() => checkForUpdates(false), 5 * 60 * 1000);
+    // 页面从后台切回前台时立即检查
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) checkForUpdates(false);
+    });
+}
+
 // ============ 启动 ============
 function init() {
     bindEvents();
     checkLogin();
     navigate('home');
+    startUpdatePolling();
 }
 
 document.addEventListener('DOMContentLoaded', init);
