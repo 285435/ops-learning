@@ -1,1 +1,35 @@
-DEPLOY_INFO.txt
+# 依赖目录
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 进程管理器
+.pm2/
+logs/
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 临时文件
+tmp/
+temp/
+.cache/
+.trae-html-share-packages/
+
+# 截图文件
+screenshot*.png

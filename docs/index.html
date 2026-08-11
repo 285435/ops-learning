@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>王者荣耀农场币 - 实时价格监控</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 顶部导航 -->
+  <header class="header">
+    <div class="container">
+      <div class="logo">
+        <span class="logo-icon">👑</span>
+        <div>
+          <h1>王者荣耀农场币</h1>
+          <p class="subtitle">全网实时价格监控 · 真实有效</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="update-status" id="updateStatus">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="updateText">等待更新...</span>
+        </div>
+        <button class="btn-refresh" id="btnRefresh" onclick="fetchPriceData()">
+          <span id="refreshIcon">🔄</span> 立即刷新
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主体内容 -->
+  <main class="container">
+    <!-- 统计卡片 -->
+    <section class="stats-grid">
+      <div class="stat-card gradient-1">
+        <div class="stat-label">当前最低价</div>
+        <div class="stat-value" id="statMinPrice">--</div>
+        <div class="stat-change positive" id="statMinChange">
+          <span>↑</span> 筛选阈值 ≥ 950
+        </div>
+      </div>
+      <div class="stat-card gradient-2">
+        <div class="stat-label">当前最高价</div>
+        <div class="stat-value" id="statMaxPrice">--</div>
+        <div class="stat-change">
+          <span>📊</span> 全网数据聚合
+        </div>
+      </div>
+      <div class="stat-card gradient-3">
+        <div class="stat-label">平均价格</div>
+        <div class="stat-value" id="statAvgPrice">--</div>
+        <div class="stat-change" id="statAvgChange">
+          <span>📈</span> 计算中...
+        </div>
+      </div>
+      <div class="stat-card gradient-4">
+        <div class="stat-label">在售报价数</div>
+        <div class="stat-value" id="statCount">--</div>
+        <div class="stat-change">
+          <span>🛒</span> 合规报价
+        </div>
+      </div>
+    </section>
+
+    <!-- 市场概览 -->
+    <section class="overview-section">
+      <div class="section-header">
+        <h2>📈 市场概览</h2>
+        <div class="auto-refresh">
+          <label>
+            <input type="checkbox" id="autoRefresh" checked>
+            <span>自动刷新 (30秒)</span>
+          </label>
+          <select id="refreshInterval" onchange="updateRefreshInterval()">
+            <option value="10000">10秒</option>
+            <option value="30000" selected>30秒</option>
+            <option value="60000">60秒</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="overview-cards">
+        <div class="overview-card">
+          <div class="overview-label">今日最低</div>
+          <div class="overview-value" id="todayLow">--</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-label">今日最高</div>
+          <div class="overview-value" id="todayHigh">--</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-label">今日开盘</div>
+          <div class="overview-value" id="todayOpen">--</div>
+        </div>
+        <div class="overview-card highlight">
+          <div class="overview-label">24h涨跌幅</div>
+          <div class="overview-value" id="priceChange">--</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-label">24h成交量</div>
+          <div class="overview-value" id="volume24h">--</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-label">活跃卖家</div>
+          <div class="overview-value" id="activeSellers">--</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 价格列表 -->
+    <section class="price-section">
+      <div class="section-header">
+        <h2>💰 全网报价列表</h2>
+        <div class="filter-bar">
+          <select id="platformFilter" onchange="renderPriceList()">
+            <option value="">全部平台</option>
+            <option value="交易猫">交易猫</option>
+            <option value="5173游戏交易网">5173游戏交易网</option>
+            <option value="闲鱼">闲鱼</option>
+            <option value="转转">转转</option>
+            <option value="DD373">DD373</option>
+            <option value="爬猴网">爬猴网</option>
+            <option value="酷游网游">酷游网游</option>
+            <option value="7881游戏交易">7881游戏交易</option>
+          </select>
+          <select id="sortBy" onchange="renderPriceList()">
+            <option value="price-asc">价格从低到高</option>
+            <option value="price-desc">价格从高到低</option>
+            <option value="sold-desc">销量优先</option>
+            <option value="delivery-asc">发货最快</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="price-table-container">
+        <table class="price-table" id="priceTable">
+          <thead>
+            <tr>
+              <th>排名</th>
+              <th>平台</th>
+              <th>价格</th>
+              <th>原价</th>
+              <th>折扣</th>
+              <th>卖家</th>
+              <th>信誉</th>
+              <th>库存</th>
+              <th>已售</th>
+              <th>发货时间</th>
+              <th>更新时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="priceTableBody">
+            <tr>
+              <td colspan="12" class="loading-cell">
+                <div class="loading-spinner"></div>
+                <p>正在加载全网价格数据...</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 7天历史趋势 -->
+    <section class="history-section">
+      <div class="section-header">
+        <h2>📊 近7天价格趋势</h2>
+      </div>
+      <div class="chart-container" id="chartContainer">
+        <canvas id="historyChart"></canvas>
+      </div>
+    </section>
+
+    <!-- 数据说明 -->
+    <section class="info-section">
+      <div class="info-card">
+        <h3>📋 数据说明</h3>
+        <ul>
+          <li><strong>价格来源：</strong>聚合全网主流游戏交易平台实时报价</li>
+          <li><strong>价格过滤：</strong>仅展示不低于 <span class="highlight-text">950</span> 的合规报价</li>
+          <li><strong>更新频率：</strong>支持自动定时刷新，确保数据真实有效</li>
+          <li><strong>风险提示：</strong>请选择高信誉卖家和正规平台进行交易</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- 页脚 -->
+  <footer class="footer">
+    <div class="container">
+      <p>© 2026 王者荣耀农场币价格监控 · 数据仅供参考，请谨慎交易</p>
+      <p class="footer-sub">价格数据每30秒自动更新 · 最后更新时间: <span id="footerTime">--</span></p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
